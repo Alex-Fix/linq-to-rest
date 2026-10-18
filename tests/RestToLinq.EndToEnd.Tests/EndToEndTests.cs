@@ -3,19 +3,37 @@ using RestToLinq.Server.IntegrationTests.Shop;
 
 namespace RestToLinq.EndToEnd.Tests;
 
-public sealed class EndToEndTests : IAsyncLifetime
+public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
 {
     private static readonly CancellationToken Token = TestContext.Current.CancellationToken;
-    private ShopHost _host = null!;
+    private ShopHost? _started;
 
-    public async ValueTask InitializeAsync() => _host = await ShopHost.StartAsync();
+    /// <summary>Gets the host, skipping the calling test when the provider isn't available.</summary>
+    private ShopHost Host
+    {
+        get
+        {
+            database.SkipIfUnavailable();
+            return _started!;
+        }
+    }
 
-    public async ValueTask DisposeAsync() => await _host.DisposeAsync();
+    public async ValueTask InitializeAsync() => _started = database.SkipReason is null ? await ShopHost.StartAsync(database) : null;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_started is not null)
+        {
+            await _started.DisposeAsync();
+        }
+
+        GC.SuppressFinalize(this);
+    }
 
     [Fact]
     public async Task Linq_filters_sorts_and_pages_on_the_server()
     {
-        var shop = _host.Client();
+        var shop = Host.Client();
         var minimum = 12m;
         int[] excluded = [3];
 
@@ -35,7 +53,7 @@ public sealed class EndToEndTests : IAsyncLifetime
     [Fact]
     public async Task Projections_compute_on_the_server()
     {
-        var shop = _host.Client();
+        var shop = Host.Client();
 
         var chess = await shop.Products
             .Where(p => p.Id == 1)
@@ -58,7 +76,7 @@ public sealed class EndToEndTests : IAsyncLifetime
     [Fact]
     public async Task Cursor_pages_and_streaming_return_every_visible_row()
     {
-        var shop = _host.Client();
+        var shop = Host.Client();
         var seen = new List<int>();
         var page = await shop.Products.OrderBy(p => p.Price).Take(2).ToCursorPageAsync(includeTotalCount: true, Token);
         Assert.Equal(5, page.TotalCount);
@@ -83,7 +101,7 @@ public sealed class EndToEndTests : IAsyncLifetime
     [Fact]
     public async Task Count_any_first_and_single()
     {
-        var shop = _host.Client();
+        var shop = Host.Client();
 
         Assert.Equal(5, await shop.Products.CountAsync(Token));
         Assert.Equal(3, await shop.Products.CountAsync(p => p.Category!.Name == "Games", Token));
@@ -96,7 +114,7 @@ public sealed class EndToEndTests : IAsyncLifetime
     [Fact]
     public async Task Query_modify_save_and_query_again()
     {
-        var shop = _host.Client();
+        var shop = Host.Client();
         var chess = await shop.Products.Include(p => p.Category).FirstAsync(p => p.Id == 1, Token);
         var oldVersion = chess.Version;
         chess.Price = 25;
@@ -106,14 +124,14 @@ public sealed class EndToEndTests : IAsyncLifetime
 
         Assert.NotEqual(oldVersion, chess.Version);
         Assert.Equal(("Books", 1), (chess.CategoryName, chess.CategoryId));
-        var fresh = await _host.Client().Products.FirstAsync(p => p.Id == 1, Token);
+        var fresh = await Host.Client().Products.FirstAsync(p => p.Id == 1, Token);
         Assert.Equal((25m, "Books", chess.Version), (fresh.Price, fresh.CategoryName, fresh.Version));
     }
 
     [Fact]
     public async Task New_dtos_get_generated_keys_and_their_references()
     {
-        var shop = _host.Client();
+        var shop = Host.Client();
         var category = new CategoryDto { Name = "Puzzles" };
         var cube = new ProductDto { Name = "Cube", Price = 9.5m, Status = ProductStatus.Active, Category = category };
         shop.Categories.Add(category);
@@ -123,26 +141,26 @@ public sealed class EndToEndTests : IAsyncLifetime
 
         Assert.True(category.Id > 0);
         Assert.Equal(category.Id, cube.CategoryId);
-        var loaded = await _host.Client().Products.Include(p => p.Category).SingleAsync(p => p.Id == cube.Id, Token);
+        var loaded = await Host.Client().Products.Include(p => p.Category).SingleAsync(p => p.Id == cube.Id, Token);
         Assert.Equal(("Cube", "Puzzles", new DateTime(2026, 10, 18, 12, 0, 0)), (loaded.Name, loaded.Category!.Name, loaded.CreatedAt));
     }
 
     [Fact]
     public async Task Removed_dtos_are_deleted()
     {
-        var shop = _host.Client();
+        var shop = Host.Client();
         shop.Products.Remove(await shop.Products.FirstAsync(p => p.Id == 2, Token));
 
         await shop.SaveChangesAsync(Token);
 
-        Assert.False(await _host.Client().Products.AnyAsync(p => p.Id == 2, Token));
+        Assert.False(await Host.Client().Products.AnyAsync(p => p.Id == 2, Token));
     }
 
     [Fact]
     public async Task Concurrent_edit_is_rejected_and_can_be_retried_after_reloading()
     {
-        var first = _host.Client();
-        var second = _host.Client();
+        var first = Host.Client();
+        var second = Host.Client();
         var mine = await first.Products.FirstAsync(p => p.Id == 3, Token);
         var theirs = await second.Products.FirstAsync(p => p.Id == 3, Token);
         theirs.Price = 31;
@@ -152,17 +170,17 @@ public sealed class EndToEndTests : IAsyncLifetime
         var error = await Assert.ThrowsAsync<RestConcurrencyException>(() => first.SaveChangesAsync(Token));
 
         Assert.Same(mine, Assert.Single(error.Entities));
-        var retry = _host.Client();
+        var retry = Host.Client();
         var reloaded = await retry.Products.FirstAsync(p => p.Id == 3, Token);
         reloaded.Price = 32;
         await retry.SaveChangesAsync(Token);
-        Assert.Equal(32m, (await _host.Client().Products.FirstAsync(p => p.Id == 3, Token)).Price);
+        Assert.Equal(32m, (await Host.Client().Products.FirstAsync(p => p.Id == 3, Token)).Price);
     }
 
     [Fact]
     public async Task Rejected_query_surfaces_as_a_typed_exception()
     {
-        var error = await Assert.ThrowsAsync<RestQueryException>(() => _host.Client().Products.Take(21).ToListAsync(Token));
+        var error = await Assert.ThrowsAsync<RestQueryException>(() => Host.Client().Products.Take(21).ToListAsync(Token));
 
         Assert.Equal((400, "limit_exceeded", "pageSize", "/page/take"), (error.Status, error.Code, error.Limit, error.Location));
     }
@@ -170,19 +188,19 @@ public sealed class EndToEndTests : IAsyncLifetime
     [Fact]
     public async Task Rows_of_another_tenant_are_not_found()
     {
-        var otherTenant = _host.Client(tenant: 2);
+        var otherTenant = Host.Client(tenant: 2);
         otherTenant.Products.Update(new ProductDto { Id = 1, Name = "Mine now", Version = new Guid("00000001-0000-0000-0000-000000000000") });
 
         var error = await Assert.ThrowsAsync<RestSaveException>(() => otherTenant.SaveChangesAsync(Token));
 
         Assert.Equal((404, "not_found"), (error.Status, error.Code));
-        Assert.Equal("Chess", (await _host.Client().Products.FirstAsync(p => p.Id == 1, Token)).Name);
+        Assert.Equal("Chess", (await Host.Client().Products.FirstAsync(p => p.Id == 1, Token)).Name);
     }
 
     [Fact]
     public async Task Denied_writes_are_forbidden()
     {
-        var readOnly = _host.Client(readOnly: true);
+        var readOnly = Host.Client(readOnly: true);
         readOnly.Products.Add(new ProductDto { Name = "Nope" });
 
         var error = await Assert.ThrowsAsync<RestSaveException>(() => readOnly.SaveChangesAsync(Token));
@@ -190,3 +208,7 @@ public sealed class EndToEndTests : IAsyncLifetime
         Assert.Equal((403, "forbidden"), (error.Status, error.Code));
     }
 }
+
+public sealed class SqliteEndToEndTests() : EndToEndTests(new SqliteDatabase());
+
+public sealed class PostgresEndToEndTests(PostgresContainer postgres) : EndToEndTests(new PostgresDatabase(postgres));

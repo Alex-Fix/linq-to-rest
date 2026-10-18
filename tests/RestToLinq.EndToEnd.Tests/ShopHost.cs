@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using RestToLinq.Client;
 using RestToLinq.Modeling;
@@ -22,21 +20,20 @@ public sealed class ShopHost : IAsyncDisposable
 {
     private static readonly DtoModel Model = ShopModel.Create();
     private readonly WebApplication _app;
-    private readonly SqliteConnection _connection;
+    private readonly IAsyncDisposable? _database;
 
-    private ShopHost(WebApplication app, SqliteConnection connection)
+    private ShopHost(WebApplication app, IAsyncDisposable? database)
     {
         _app = app;
-        _connection = connection;
+        _database = database;
     }
 
-    public static async Task<ShopHost> StartAsync()
+    public static async Task<ShopHost> StartAsync(ShopDatabase database)
     {
-        var connection = new SqliteConnection("DataSource=:memory:");
-        await connection.OpenAsync();
+        var lease = await database.CreateAsync();
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Services.AddDbContext<ShopDbContext>(options => options.UseSqlite(connection));
+        builder.Services.AddDbContext<ShopDbContext>(lease.Configure);
         builder.Services.AddRestToLinq(Model, options => options
             .UseDbContext<ShopDbContext>()
             .AddMappingsFromAssembly(typeof(ShopHost).Assembly)
@@ -52,7 +49,7 @@ public sealed class ShopHost : IAsyncDisposable
             ShopData.Seed(db);
         }
 
-        return new ShopHost(app, connection);
+        return new ShopHost(app, lease.Owned);
     }
 
     /// <summary>A new unit of work for a tenant.</summary>
@@ -72,6 +69,9 @@ public sealed class ShopHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _app.DisposeAsync();
-        await _connection.DisposeAsync();
+        if (_database is not null)
+        {
+            await _database.DisposeAsync();
+        }
     }
 }
