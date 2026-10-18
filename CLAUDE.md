@@ -24,8 +24,9 @@ src/
   RestToLinq.Abstractions/      IDto, model builder, query AST + JSON contract, batch/cursor contracts (BCL only)
   RestToLinq.Client/            RestDataContext, DtoSet<T>, RestQueryProvider, change tracker (BCL only)
   RestToLinq.Server/            DTO→entity mapping, AST → Expression, batch executor, policies, endpoints (EF Core)
-samples/                        Shop.Contracts, Shop.Api (EF Core SQLite), Shop.Console (client) — not packable
+samples/                        Shop.Contracts, Shop.Api (EF Core SQLite, API key), Shop.Console (client) — not packable
 tests/                          xUnit v3, one project per package + Server.IntegrationTests (SQLite) + EndToEnd.Tests
+                                (EndToEnd links the integration tests' Shop/*.cs)
 docs/plans/                     approved design docs (written by the `brainstorming` skill)
 artifacts/                      gitignored: all build output (no per-project bin/obj)
 ```

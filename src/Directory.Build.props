@@ -7,7 +7,12 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>$(MSBuildProjectName)</PackageId>
     <RepositoryUrl>https://github.com/Alex-Fix/rest-to-linq</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="$(MSBuildProjectName).UnitTests" />

@@ -1,5 +1,5 @@
 # RestToLinq v1 — design
-Status: approved · Date: 2026-10-18
+Status: approved, implemented (see Implementation notes) · Date: 2026-10-18
 
 ## Problem
 
@@ -361,7 +361,43 @@ Wire contract versioned with `"v": 1`; unknown versions → `unsupported_version
 | `RestToLinq.Server.IntegrationTests` | every node / operator on EF Core SQLite: results equal LINQ-to-Objects on the same data and no client evaluation; offset + cursor paging; batch transactions, refs, concurrency; policies |
 | `RestToLinq.EndToEnd.Tests` | `WebApplicationFactory` server + real client: query → modify → save → re-query; error mapping |
 
+## Implementation notes
+
+Where the implementation differs from the sections above, this list wins.
+
+1. **Shapes use an explicit `{"new": {...}}` node.** A plain object in a select position is ambiguous: a field
+   named `count` would read as the `count` operator. `"select"` can also be a single expression (`{"member":"name"}`).
+2. **Policy filters are predicates.** `Filter` returns `Expression<Func<TEntity, bool>>?` instead of transforming an
+   `IQueryable`, so it composes into navigations (hidden reference targets read as `null`), collection lambdas,
+   includes, counts, cursors and the rows updates and deletes load. All hooks (`Filter`, `CanAsync`, `OnInsert`,
+   `OnUpdate`) are `protected`: consumers override them, only the server calls them.
+3. **Filters don't reach inside projections.** A computed member such as `CategoryName = p.Category.Name` reads the
+   navigation directly, so the category policy doesn't hide it. Mapping authors keep computed members within what
+   the set may show.
+4. **More error codes.** Besides the list above: `invalid_query`, `invalid_batch`, `not_found` (404), `forbidden` (403),
+   `conflict` (409, a constraint violation on save) and `unsupported_media_type` (415). Problem `type` is
+   `urn:resttolinq:error:<code>`. An error on an operator points at its node (`/filter`); its arguments are
+   `/filter/gt/0` and so on.
+5. **Reading and binding.** The body size is checked before parsing; `JsonDocument` bounds the JSON depth and the
+   reader enforces nodes, depth, lambda nesting, `in` lists, path depth and cursor length while building the tree.
+   Type checking and expression building are one pass over the tree, still finished before anything executes.
+6. **Collection lambdas** all accept an optional `where` (the client folds `Where(...)` chains into it); `min`, `max`
+   and `avg` of an empty collection are `null`.
+7. **Batches.** Concurrency tokens are compared before saving (so a no-op update or a delete still fails on a stale
+   token) and again by EF Core as original values. A foreign key written by value must point at a row the caller
+   can see (404 otherwise). The concurrency token must be configured as one in the EF Core model.
+8. **Client.** Paging (`After`/`Skip`/`Take`) may come before or after `Select`; filtering, includes and sorting come
+   before it. Beyond the listed members, the client translates the `Count` property, `string.Equals` (ignore-case
+   compares lowercased), `string.CompareOrdinal`, `char` arguments and the C# 14 span overload of `array.Contains`.
+   `RestQueryProvider` is internal. Exceptions expose `Location` (analyzer rule CA1720 rules out `Pointer`) and
+   `Entities`.
+9. **Testing.** End-to-end tests host the server with the ASP.NET Core test server directly instead of
+   `WebApplicationFactory`, and share the integration tests' shop through linked source files. Integration tests
+   capture the executed SQL to prove projections run in the database.
+
 ## Open questions
+
+- License (none chosen yet; packages are built without one).
 
 - PostgreSQL in CI (Testcontainers) to catch null-ordering / collation differences — when?
 - `POST /{set}/$query` fallback for environments that block QUERY — demand-driven, post-v1.

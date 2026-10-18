@@ -30,8 +30,9 @@ database suffer. Design: `docs/plans/2026-10-18-resttolinq-v1-design.md` → "Se
 ## Rules
 
 ### JSON reading (server)
-- Enforce body size before reading; depth, node count, lambda nesting, `in` length and path depth **while** reading
-  (`Utf8JsonReader`), so a hostile body never becomes a giant object graph.
+- Enforce body size before parsing (and while streaming the body, without trusting Content-Length); bound the JSON
+  depth in `JsonDocumentOptions`; enforce node count, depth, lambda nesting, `in` length and path depth while
+  building the tree, so a hostile body never becomes a large object graph.
 - Exactly one key per node object; unknown keys, ops, versions or wrong arity → 400. Never ignore input.
 
 ### Type checking and member resolution
@@ -46,6 +47,9 @@ database suffer. Design: `docs/plans/2026-10-18-resttolinq-v1-design.md` → "Se
   parameterisation). No `Compile()`, `DynamicInvoke`, dynamic LINQ or scripting on the request path.
 - DTO member accesses are substituted with their mapped entity expressions; only nodes with a translation test exist.
 - Always apply the policy `Filter` first, then client filter, sort, page (default page size when absent), projection.
+- Navigation policies guard what the client reaches through member paths, includes and lambdas, but not the
+  mapping's own computed members (`CategoryName = p.Category.Name`): review computed members against the policies of
+  the sets they read from.
 
 ### Writes (`$batch`)
 - `values` may contain only writable members (bound directly in the default projection). Key, concurrency token,

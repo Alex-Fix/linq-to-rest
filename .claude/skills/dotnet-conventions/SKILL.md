@@ -36,8 +36,12 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — pa
 - Server expression building: `System.Linq.Expressions` nodes only, from the type-checked AST. Resolve members via
   `DtoModel` / mappings, never `Type.GetProperty(clientString)`. No `Expression.Compile()` on the request path.
   The client may compile captured-variable subtrees (developer code).
-- JSON: System.Text.Json with source-generated `JsonSerializerContext` for contract types; AST reading is a
-  hand-written `Utf8JsonReader` loop so limits are enforced while reading. camelCase on the wire.
+- JSON: System.Text.Json with a strict source-generated `JsonSerializerContext` for batch contracts; the query tree is
+  read from a size-capped `JsonDocument` by a hand-written reader that enforces the limits while building nodes.
+  Wire values go through `JsonValues` (strict, enums by name). camelCase on the wire.
+- Inspections: test, sample and src fixtures/public API have `.Global` inspections turned off in `.editorconfig`;
+  anything else gets fixed. Suppress a single deliberate case with `// ReSharper disable once <Id> — <why>`
+  (get the id from `--format=Sarif`).
 - Async: every I/O API is async with a `CancellationToken`; no sync-over-async. `ConfigureAwait(false)` in `src/`.
 - Options: immutable options objects with safe defaults (max depth, max nodes, max page size); validate at
   configuration time.
@@ -47,8 +51,11 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — pa
 - Time: inject `TimeProvider` if anything needs "now"; tests use `FakeTimeProvider`.
 
 ## Samples (`samples/`)
-- `Shop.Contracts` (DTOs + configuration), `Shop.Api` (EF Core SQLite + mappings + a policy), `Shop.Console`
-  (client: query, cursor paging, save). Not packable. Keep them simple — they're documentation, and people copy them.
+- `Shop.Contracts` (DTOs + configuration), `Shop.Api` (EF Core SQLite, API-key auth, tenant policies,
+  `RequireAuthorization`), `Shop.Console` (client: query, cursor paging, save). `samples/Directory.Build.props` makes
+  them non-packable. Keep them simple — they're documentation, and people copy them.
+- Run: `dotnet run --project samples/Shop.Api --urls http://localhost:5080` (Development, key `dev-acme-key`), then
+  `dotnet run --project samples/Shop.Console`.
 
 ## Tests (`tests/`)
 - `tests/Directory.Build.props` adds xUnit v3, `OutputType=Exe`, `IsPackable=false`, global `using Xunit`.
@@ -56,8 +63,10 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — pa
 - One test project per package: `RestToLinq.<Package>.UnitTests` (Client uses a stub `HttpMessageHandler`).
 - `RestToLinq.Server.IntegrationTests`: every AST node / operator executed on EF Core SQLite — assert results equal
   LINQ-to-Objects over the same data **and** that nothing evaluated on the client. LINQ-to-Objects alone isn't proof.
-- `RestToLinq.EndToEnd.Tests`: `WebApplicationFactory` server + the real client (query → modify → save → re-query,
-  status codes, ProblemDetails, typed client exceptions).
+- `RestToLinq.EndToEnd.Tests`: the server on the ASP.NET Core test server (`UseTestServer`) + the real client (query →
+  modify → save → re-query, status codes, ProblemDetails, typed client exceptions). It links the integration tests'
+  `Shop/*.cs` (entities, DTOs, mappings, policies, seed) instead of copying them.
+- To prove an expression runs in SQL, assert on `ShopServer.Sql` (every executed command), not just on results.
 - Every limit gets a test at and just past its boundary.
 
 ## Commands
