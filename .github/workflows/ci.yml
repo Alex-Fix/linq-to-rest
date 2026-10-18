@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      # The runners have Docker: missing PostgreSQL is a failure here, not a skip.
+      RESTTOLINQ_REQUIRE_POSTGRES: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: |
+          dotnet tool restore
+          dotnet restore RestToLinq.slnx
+
+      - name: Build (warnings are errors)
+        run: dotnet build RestToLinq.slnx -c Release --no-restore
+
+      - name: Format
+        run: dotnet format RestToLinq.slnx --verify-no-changes --no-restore
+
+      - name: Inspections
+        run: |
+          dotnet jb inspectcode RestToLinq.slnx --no-build --properties:Configuration=Release \
+            --format=Sarif --output=artifacts/inspect.sarif
+          count=$(jq '[.runs[].results[]] | length' artifacts/inspect.sarif)
+          if [ "$count" -gt 0 ]; then
+            jq -r '.runs[].results[] | "\(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine) \(.ruleId) \(.message.text)"' artifacts/inspect.sarif
+            echo "::error::$count ReSharper inspection finding(s)"
+            exit 1
+          fi
+
+      - name: Vulnerable packages
+        run: |
+          dotnet list RestToLinq.slnx package --vulnerable --include-transitive | tee artifacts/vulnerable.txt
+          if grep -q "has the following vulnerable packages" artifacts/vulnerable.txt; then
+            echo "::error::Vulnerable packages found"
+            exit 1
+          fi
+
+      - name: Test (SQLite and PostgreSQL)
+        run: dotnet test --solution RestToLinq.slnx -c Release --no-build
+
+      - name: Upload inspection report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: inspections
+          path: artifacts/inspect.sarif
+          if-no-files-found: ignore
