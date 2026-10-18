@@ -3,6 +3,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using RestToLinq.Modeling;
 using RestToLinq.Server.Policies;
+using RestToLinq.Server.Query;
 
 namespace RestToLinq.Server.Mapping;
 
@@ -24,6 +25,8 @@ internal abstract class SetMapping(DtoType dtoType, Type entityType)
     public IReadOnlyDictionary<DtoNavigation, NavigationMapping> Navigations { get; set; } = new Dictionary<DtoNavigation, NavigationMapping>();
 
     public abstract IQueryable Query(DbContext db);
+
+    public abstract Task<QueryResult> ExecuteAsync(DbContext db, QueryPlan plan, CancellationToken cancellationToken);
 }
 
 internal sealed class SetMapping<TEntity>(DtoType dtoType, Func<DbContext, IQueryable<TEntity>> source)
@@ -31,6 +34,68 @@ internal sealed class SetMapping<TEntity>(DtoType dtoType, Func<DbContext, IQuer
     where TEntity : class
 {
     public override IQueryable<TEntity> Query(DbContext db) => source(db);
+
+    public override async Task<QueryResult> ExecuteAsync(DbContext db, QueryPlan plan, CancellationToken cancellationToken)
+    {
+        var query = Query(db);
+        if (plan.PolicyFilter is Expression<Func<TEntity, bool>> policyFilter)
+        {
+            query = query.Where(policyFilter);
+        }
+
+        if (plan.Filter is Expression<Func<TEntity, bool>> filter)
+        {
+            query = query.Where(filter);
+        }
+
+        long? total = plan.Count ? await query.LongCountAsync(cancellationToken).ConfigureAwait(false) : null;
+        if (plan.Keyset is Expression<Func<TEntity, bool>> keyset)
+        {
+            query = query.Where(keyset);
+        }
+
+        for (var index = 0; index < plan.Sorts.Count; index++)
+        {
+            var sort = plan.Sorts[index];
+            var method = (index == 0, sort.Descending) switch
+            {
+                (true, false) => nameof(Queryable.OrderBy),
+                (true, true) => nameof(Queryable.OrderByDescending),
+                (false, false) => nameof(Queryable.ThenBy),
+                (false, true) => nameof(Queryable.ThenByDescending),
+            };
+            query = query.Provider.CreateQuery<TEntity>(
+                Expression.Call(typeof(Queryable), method, [typeof(TEntity), sort.Key.ReturnType], query.Expression, Expression.Quote(sort.Key)));
+        }
+
+        if (plan is { Mode: Protocol.PageMode.Offset, Skip: > 0 })
+        {
+            query = query.Skip(plan.Skip);
+        }
+
+        if (plan.Take == 0)
+        {
+            return new QueryResult([], null, total);
+        }
+
+        // Cursor pages fetch one extra row to know whether another page follows.
+        var cursor = plan.Mode == Protocol.PageMode.Cursor;
+        var rows = await query
+            .Take(cursor ? plan.Take + 1 : plan.Take)
+            .Select((Expression<Func<TEntity, object?[]>>)plan.Projection)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        string? next = null;
+        if (cursor && rows.Count > plan.Take)
+        {
+            rows.RemoveAt(rows.Count - 1);
+            var last = rows[^1];
+            next = Protocol.Cursor.Encode(plan.SortHash!, [.. plan.CursorIndexes.Select(index => last[index])]);
+        }
+
+        return new QueryResult(rows, next, total);
+    }
 }
 
 /// <summary>A DTO navigation mapped to an entity navigation.</summary>

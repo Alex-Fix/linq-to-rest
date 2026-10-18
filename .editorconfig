@@ -32,6 +32,7 @@ resharper_class_never_instantiated_global_highlighting = none
 resharper_member_can_be_private_global_highlighting = none
 resharper_collection_never_updated_global_highlighting = none
 resharper_property_can_be_made_init_only_global_highlighting = none
+resharper_unused_type_global_highlighting = none
 
 # Tests: underscores make test names readable sentences (Unknown_property_is_rejected).
 [tests/**.cs]
