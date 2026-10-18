@@ -79,6 +79,30 @@ public sealed class JsonValuesTests
         Assert.Equal("/values/ids/1", error.Location);
     }
 
+    [Theory]
+    [InlineData("\"2026-10-18T13:44:00Z\"", DateTimeKind.Utc, 13)]
+    [InlineData("\"2026-10-18T13:44:00+02:00\"", DateTimeKind.Utc, 11)]
+    [InlineData("\"2026-10-18T13:44:00-05:00\"", DateTimeKind.Utc, 18)]
+    [InlineData("\"2026-10-18T13:44:00\"", DateTimeKind.Unspecified, 13)]
+    public void Date_times_with_an_offset_read_as_utc_instants(string json, DateTimeKind kind, int hour)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        var value = (DateTime)JsonValues.Read(document.RootElement, typeof(DateTime), "/x")!;
+
+        Assert.Equal((kind, hour, 44), (value.Kind, value.Hour, value.Minute));
+    }
+
+    [Fact]
+    public void Utc_date_times_round_trip()
+    {
+        var value = new DateTime(2026, 10, 18, 13, 44, 5, DateTimeKind.Utc);
+
+        var read = (DateTime)JsonValues.Read(JsonValues.ToElement(value), typeof(DateTime), "/x")!;
+
+        Assert.Equal((value, DateTimeKind.Utc), (read, read.Kind));
+    }
+
     [Fact]
     public void Flags_enums_read_combined_names()
     {
