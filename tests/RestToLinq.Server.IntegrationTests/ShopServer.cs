@@ -4,8 +4,6 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using RestToLinq.Server.Hosting;
@@ -17,13 +15,13 @@ namespace RestToLinq.Server.IntegrationTests;
 public sealed class ShopServer : IAsyncDisposable
 {
     private readonly WebApplication _app;
-    private readonly SqliteConnection _connection;
+    private readonly IAsyncDisposable? _database;
 
-    private ShopServer(WebApplication app, SqliteConnection connection, ConcurrentQueue<string> sql)
+    private ShopServer(WebApplication app, IAsyncDisposable? database, ConcurrentQueue<string> sql)
     {
         Sql = sql;
         _app = app;
-        _connection = connection;
+        _database = database;
         Client = app.GetTestClient();
     }
 
@@ -34,16 +32,25 @@ public sealed class ShopServer : IAsyncDisposable
 
     public IServiceProvider Services => _app.Services;
 
-    public static async Task<ShopServer> StartAsync(Action<RestToLinqServerBuilder>? configure = null, Action<WebApplication>? pipeline = null)
+    public static async Task<ShopServer> StartAsync(
+        ShopDatabase database,
+        Action<RestToLinqServerBuilder>? configure = null,
+        Action<WebApplication>? pipeline = null,
+        IInterceptor? interceptor = null)
     {
-        var connection = new SqliteConnection("DataSource=:memory:");
-        await connection.OpenAsync();
+        var lease = await database.CreateAsync();
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         var sql = new ConcurrentQueue<string>();
-        builder.Services.AddDbContext<ShopDbContext>(options => options
-            .UseSqlite(connection)
-            .LogTo(sql.Enqueue, [RelationalEventId.CommandExecuted]));
+        builder.Services.AddDbContext<ShopDbContext>(options =>
+        {
+            lease.Configure(options);
+            options.LogTo(sql.Enqueue, [RelationalEventId.CommandExecuted]);
+            if (interceptor is not null)
+            {
+                options.AddInterceptors(interceptor);
+            }
+        });
         builder.Services.AddRestToLinq(ShopModel.Create(), options =>
         {
             options.UseDbContext<ShopDbContext>().AddMappingsFromAssembly(typeof(ShopServer).Assembly);
@@ -62,7 +69,7 @@ public sealed class ShopServer : IAsyncDisposable
             ShopData.Seed(db);
         }
 
-        return new ShopServer(app, connection, sql);
+        return new ShopServer(app, lease.Owned, sql);
     }
 
     public Task<HttpResponseMessage> QueryAsync(string set, string json, string contentType = "application/json") =>
@@ -90,16 +97,44 @@ public sealed class ShopServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _app.DisposeAsync();
-        await _connection.DisposeAsync();
+        if (_database is not null)
+        {
+            await _database.DisposeAsync();
+        }
     }
 }
 
-/// <summary>One read-only shop server shared by a test class.</summary>
-public sealed class ShopFixture : IAsyncLifetime
+/// <summary>One read-only shop server shared by a test class, on one provider.</summary>
+public abstract class ShopFixture(ShopDatabase database) : IAsyncLifetime
 {
-    public ShopServer Server { get; private set; } = null!;
+    private ShopServer? _server;
 
-    public async ValueTask InitializeAsync() => Server = await ShopServer.StartAsync();
+    public ShopDatabase Database { get; } = database;
 
-    public async ValueTask DisposeAsync() => await Server.DisposeAsync();
+    /// <summary>Gets the server, skipping the calling test when the provider isn't available.</summary>
+    public ShopServer Server
+    {
+        get
+        {
+            Database.SkipIfUnavailable();
+            return _server!;
+        }
+    }
+
+    // A skip thrown while a fixture initializes would count as a failure, so tests skip lazily through Server.
+    public async ValueTask InitializeAsync() => _server = Database.SkipReason is null ? await ShopServer.StartAsync(Database) : null;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_server is not null)
+        {
+            await _server.DisposeAsync();
+        }
+
+        GC.SuppressFinalize(this);
+    }
 }
+
+public sealed class SqliteShopFixture() : ShopFixture(new SqliteDatabase());
+
+public sealed class PostgresShopFixture(PostgresContainer postgres) : ShopFixture(new PostgresDatabase(postgres));

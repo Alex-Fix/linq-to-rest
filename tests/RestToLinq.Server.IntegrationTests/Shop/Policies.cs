@@ -28,7 +28,7 @@ public sealed class ProductPolicy : DtoSetPolicy<ProductDto, Product>
     protected override void OnInsert(Product entity, PolicyContext context)
     {
         entity.TenantId = Tenant.Of(context);
-        entity.CreatedAt = new DateTime(2026, 10, 18, 12, 0, 0);
+        entity.CreatedAt = new DateTime(2026, 10, 18, 12, 0, 0, DateTimeKind.Utc);
         entity.Version = Guid.NewGuid();
     }
 

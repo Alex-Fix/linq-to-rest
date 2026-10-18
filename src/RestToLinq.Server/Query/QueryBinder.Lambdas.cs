@@ -31,7 +31,7 @@ internal sealed partial class QueryBinder
                         var parameter = Expression.Parameter(collection.ElementType, NextParameterName());
                         var elementRow = new Row(parameter);
                         var element = DefaultShape(new EntityBound(parameter, collection.ElementMapping, null, isNullable: false), elementRow, null);
-                        return new CollectionShape(row.Add(RowsList(collection.Source, elementRow)), element);
+                        return new CollectionShape(row.Add(RowsList(collection.Source, elementRow, collection.ElementMapping)), element);
                 }
 
                 break;
@@ -69,7 +69,7 @@ internal sealed partial class QueryBinder
         var parameter = Expression.Parameter(map.Target.EntityType, NextParameterName());
         var elementRow = new Row(parameter);
         var element = DefaultShape(new EntityBound(parameter, map.Target, null, isNullable: false), elementRow, children);
-        return new CollectionShape(row.Add(RowsList(CollectionSource(entity, map), elementRow)), element);
+        return new CollectionShape(row.Add(RowsList(CollectionSource(entity, map), elementRow, map.Target)), element);
     }
 
     private CollectionShape Map(LambdaNode node, Scope scope, Row row)
@@ -77,7 +77,8 @@ internal sealed partial class QueryBinder
         var (source, parameter, inner) = OpenLambda(node, scope, MemberUse.Select);
         var elementRow = new Row(parameter!);
         var element = Select(node.Body!, inner, elementRow);
-        return new CollectionShape(row.Add(RowsList(source, elementRow)), element);
+        var elementMapping = inner.Variables[node.Variable!] is EntityBound entity ? entity.Mapping : null;
+        return new CollectionShape(row.Add(RowsList(source, elementRow, elementMapping)), element);
     }
 
     private MethodCallExpression Aggregate(LambdaNode node, Scope scope, MemberUse use)

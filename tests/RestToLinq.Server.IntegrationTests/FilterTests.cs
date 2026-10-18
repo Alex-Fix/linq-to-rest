@@ -1,6 +1,6 @@
 namespace RestToLinq.Server.IntegrationTests;
 
-public sealed class FilterTests(ShopFixture shop) : IClassFixture<ShopFixture>
+public abstract class FilterTests(ShopFixture shop)
 {
     public static readonly TheoryData<string, int[]> Filters = new()
     {
@@ -108,3 +108,7 @@ public sealed class FilterTests(ShopFixture shop) : IClassFixture<ShopFixture>
         JsonAssert.Problem(problem, code, location);
     }
 }
+
+public sealed class SqliteFilterTests(SqliteShopFixture shop) : FilterTests(shop), IClassFixture<SqliteShopFixture>;
+
+public sealed class PostgresFilterTests(PostgresShopFixture shop) : FilterTests(shop), IClassFixture<PostgresShopFixture>;

@@ -7,15 +7,33 @@ using RestToLinq.Server.IntegrationTests.Shop;
 
 namespace RestToLinq.Server.IntegrationTests;
 
-public sealed class BatchTests : IAsyncLifetime
+public abstract class BatchTests(ShopDatabase database) : IAsyncLifetime
 {
     private const string ChessToken = "00000001-0000-0000-0000-000000000000";
-    private ShopServer _server = null!;
+    private ShopServer? _started;
 
     public async ValueTask InitializeAsync() =>
-        _server = await ShopServer.StartAsync(options => options.AddPolicy<ProductPolicy>().AddPolicy<CategoryPolicy>().Limits(limits => limits.MaxBatchOperations = 5));
+        _started = database.SkipReason is null ? await ShopServer.StartAsync(database, options => options.AddPolicy<ProductPolicy>().AddPolicy<CategoryPolicy>().Limits(limits => limits.MaxBatchOperations = 5)) : null;
 
-    public async ValueTask DisposeAsync() => await _server.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        if (_started is not null)
+        {
+            await _started.DisposeAsync();
+        }
+
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Gets the server, skipping the calling test when the provider isn't available.</summary>
+    private ShopServer Server
+    {
+        get
+        {
+            database.SkipIfUnavailable();
+            return _started!;
+        }
+    }
 
     [Fact]
     public async Task Inserts_reference_each_other_and_come_back_through_the_projection()
@@ -32,7 +50,7 @@ public sealed class BatchTests : IAsyncLifetime
         Assert.Equal("Puzzles", category.GetProperty("name").GetString());
         Assert.Equal(category.GetProperty("id").GetInt32(), product.GetProperty("categoryId").GetInt32());
         Assert.Equal("Puzzles", product.GetProperty("categoryName").GetString());
-        Assert.Equal("2026-10-18T12:00:00", product.GetProperty("createdAt").GetString());
+        Assert.Equal("2026-10-18T12:00:00Z", product.GetProperty("createdAt").GetString());
         Assert.True(product.GetProperty("isFeatured").GetBoolean());
         Assert.NotEqual(Guid.Empty, product.GetProperty("version").GetGuid());
 
@@ -86,7 +104,7 @@ public sealed class BatchTests : IAsyncLifetime
 
         JsonAssert.Problem(problem, "concurrency_conflict", "");
         Assert.Equal("u", problem.GetProperty("operationId").GetString());
-        using var scope = _server.Services.CreateScope();
+        using var scope = Server.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ShopDbContext>();
         Assert.False(await db.Categories.AnyAsync(c => c.Name == "Never", TestContext.Current.CancellationToken));
         Assert.Equal(20m, (await FindAsync(1))!.Price);
@@ -147,7 +165,7 @@ public sealed class BatchTests : IAsyncLifetime
         using var request = Request("""{"v":1,"operations":[{"id":"x","op":"insert","set":"products","values":{"name":"Saw"}}]}""");
         request.Headers.Add("X-Read-Only", "1");
 
-        using var response = await _server.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        using var response = await Server.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -164,7 +182,7 @@ public sealed class BatchTests : IAsyncLifetime
 
     private async Task<Product?> FindAsync(int id)
     {
-        using var scope = _server.Services.CreateScope();
+        using var scope = Server.Services.CreateScope();
         return await scope.ServiceProvider.GetRequiredService<ShopDbContext>().Products.AsNoTracking()
             .SingleOrDefaultAsync(p => p.Id == id, TestContext.Current.CancellationToken);
     }
@@ -172,7 +190,7 @@ public sealed class BatchTests : IAsyncLifetime
     private async Task<JsonElement> BatchOkAsync(string json)
     {
         using var request = Request(json);
-        using var response = await _server.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        using var response = await Server.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.True(response.StatusCode == HttpStatusCode.OK, $"{(int)response.StatusCode}: {body}");
         return JsonDocument.Parse(body).RootElement;
@@ -181,7 +199,7 @@ public sealed class BatchTests : IAsyncLifetime
     private async Task<JsonElement> BatchProblemAsync(string json, HttpStatusCode status = HttpStatusCode.BadRequest)
     {
         using var request = Request(json);
-        using var response = await _server.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        using var response = await Server.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.True(response.StatusCode == status, $"{(int)response.StatusCode}: {body}");
         return JsonDocument.Parse(body).RootElement;
@@ -194,3 +212,7 @@ public sealed class BatchTests : IAsyncLifetime
         return request;
     }
 }
+
+public sealed class SqliteBatchTests() : BatchTests(new SqliteDatabase());
+
+public sealed class PostgresBatchTests(PostgresContainer postgres) : BatchTests(new PostgresDatabase(postgres));
