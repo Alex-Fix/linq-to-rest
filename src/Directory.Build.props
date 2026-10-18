@@ -8,6 +8,9 @@
     <PackageId>$(MSBuildProjectName)</PackageId>
     <RepositoryUrl>https://github.com/Alex-Fix/rest-to-linq</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Authors>Alex Papish</Authors>
+    <Copyright>Copyright (c) 2026 Alex Papish</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

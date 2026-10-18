@@ -147,12 +147,34 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
 
     public static Expression Presence(EntityBound entity) => entity.Guard ?? NotNull(entity.Expression);
 
-    public static Expression RowsList(Expression source, Row elementRow)
+    /// <summary>
+    /// Projects each element to its row. DTO elements are ordered by their key: without an order, databases return
+    /// collection elements in any order (PostgreSQL does), so the same query could answer differently.
+    /// </summary>
+    public static Expression RowsList(Expression source, Row elementRow, SetMapping? elementMapping)
     {
         var selector = elementRow.ToLambda();
         var elementType = elementRow.Parameter.Type;
+        if (elementMapping is not null)
+        {
+            source = OrderByKey(source, elementType, elementMapping);
+        }
+
         var select = Expression.Call(typeof(Enumerable), nameof(Enumerable.Select), [elementType, typeof(object[])], source, selector);
         return Expression.Call(typeof(Enumerable), nameof(Enumerable.ToList), [typeof(object[])], select);
+    }
+
+    private static Expression OrderByKey(Expression source, Type elementType, SetMapping mapping)
+    {
+        var element = Expression.Parameter(elementType, "k");
+        for (var index = 0; index < mapping.DtoType.Key.Count; index++)
+        {
+            var key = Expression.Lambda(ExpressionHelpers.Inline(mapping.Bindings[mapping.DtoType.Key[index]], element), element);
+            var method = index == 0 ? nameof(Enumerable.OrderBy) : nameof(Enumerable.ThenBy);
+            source = Expression.Call(typeof(Enumerable), method, [elementType, key.ReturnType], source, key);
+        }
+
+        return source;
     }
 
     public static RequestException UnknownMember(QueryNode node) => RequestException.Invalid(ErrorCodes.UnknownMember, node.Location);

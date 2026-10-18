@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace RestToLinq.Server.IntegrationTests;
 
-public sealed class PagingTests(ShopFixture shop) : IClassFixture<ShopFixture>
+public abstract class PagingTests(ShopFixture shop)
 {
     [Fact]
     public async Task Offset_pages_follow_the_sort_with_the_key_as_tiebreaker()
@@ -126,3 +126,7 @@ public sealed class PagingTests(ShopFixture shop) : IClassFixture<ShopFixture>
         Assert.Equal(HttpStatusCode.BadRequest, (HttpStatusCode)problem.GetProperty("status").GetInt32());
     }
 }
+
+public sealed class SqlitePagingTests(SqliteShopFixture shop) : PagingTests(shop), IClassFixture<SqliteShopFixture>;
+
+public sealed class PostgresPagingTests(PostgresShopFixture shop) : PagingTests(shop), IClassFixture<PostgresShopFixture>;

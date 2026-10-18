@@ -7,7 +7,17 @@ using Shop.Api;
 using Shop.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDbContext<ShopDbContext>(options => options.UseSqlite(builder.Configuration.GetConnectionString("Shop")));
+builder.Services.AddDbContext<ShopDbContext>(options =>
+{
+    // PostgreSQL by default (docker compose -f samples/docker-compose.yml up -d); --Database:Provider=Sqlite runs without Docker.
+    var provider = builder.Configuration["Database:Provider"];
+    _ = provider switch
+    {
+        "Postgres" => options.UseNpgsql(ConnectionString("ShopPostgres")),
+        "Sqlite" => options.UseSqlite(ConnectionString("ShopSqlite")),
+        _ => throw new InvalidOperationException("Set Database:Provider to Postgres or Sqlite."),
+    };
+});
 builder.Services.AddAuthentication(ApiKeyAuthentication.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthentication>(ApiKeyAuthentication.SchemeName, null);
 builder.Services.AddAuthorization();
@@ -47,3 +57,7 @@ if (app.Environment.IsDevelopment())
 }
 
 await app.RunAsync();
+
+string ConnectionString(string name) =>
+    builder.Configuration.GetConnectionString(name)
+    ?? throw new InvalidOperationException($"Configure ConnectionStrings:{name} (appsettings.Development.json has a local one).");

@@ -68,6 +68,13 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — pa
   `Shop/*.cs` (entities, DTOs, mappings, policies, seed) instead of copying them.
 - To prove an expression runs in SQL, assert on `ShopServer.Sql` (every executed command), not just on results.
 - Every limit gets a test at and just past its boundary.
+- Provider coverage: integration and end-to-end test classes are `abstract` and take a `ShopFixture` / `ShopDatabase`;
+  each gets two one-line subclasses, `Sqlite<Name>` and `Postgres<Name>`, using `SqliteShopFixture` /
+  `PostgresShopFixture` or `SqliteDatabase` / `PostgresDatabase(PostgresContainer)`. A new test class needs both
+  subclasses. Never start or skip a provider inside a fixture's `InitializeAsync`; reach the server through the lazy
+  `Server` property, which skips when PostgreSQL isn't available.
+- Results that differ between providers are a library bug (for example, unordered collections) unless the database
+  defines them differently (collation, null ordering). Then the test uses values both providers agree on.
 
 ## Commands
 - Test: `dotnet test --solution RestToLinq.slnx` (Microsoft Testing Platform via `global.json`); one project:

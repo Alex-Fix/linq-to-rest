@@ -1,6 +1,6 @@
 namespace RestToLinq.Server.IntegrationTests;
 
-public sealed class SelectTests(ShopFixture shop) : IClassFixture<ShopFixture>
+public abstract class SelectTests(ShopFixture shop)
 {
     [Fact]
     public async Task Default_shape_is_the_full_dto_without_navigations()
@@ -10,7 +10,7 @@ public sealed class SelectTests(ShopFixture shop) : IClassFixture<ShopFixture>
         var items = result.GetProperty("items");
         JsonAssert.Equal("""
             {"id":1,"name":"Chess","description":"Wooden board","price":20,"status":"Active",
-             "version":"00000001-0000-0000-0000-000000000000","createdAt":"2026-01-10T09:30:00","releasedOn":"2025-12-01",
+             "version":"00000001-0000-0000-0000-000000000000","createdAt":"2026-01-10T09:30:00Z","releasedOn":"2025-12-01",
              "rating":4.5,"isFeatured":true,"categoryId":2,"tags":["classic","sale"],"categoryName":"Games"}
             """, items[0]);
         Assert.Equal("Notebook", items[1].GetProperty("name").GetString());
@@ -69,7 +69,7 @@ public sealed class SelectTests(ShopFixture shop) : IClassFixture<ShopFixture>
     [Fact]
     public async Task Select_expressions_run_in_sql()
     {
-        await using var server = await ShopServer.StartAsync();
+        await using var server = await ShopServer.StartAsync(shop.Database);
         server.Sql.Clear();
 
         await server.QueryOkAsync("products", """
@@ -81,10 +81,11 @@ public sealed class SelectTests(ShopFixture shop) : IClassFixture<ShopFixture>
             """);
 
         var sql = Assert.Single(server.Sql);
-        Assert.Contains("SUM(", sql, StringComparison.Ordinal);
+        // Providers spell functions differently (SUM / sum), so only the function matters.
+        Assert.Contains("SUM(", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("||", sql, StringComparison.Ordinal);
-        Assert.Contains("upper(", sql, StringComparison.Ordinal);
-        Assert.Contains("COUNT(", sql, StringComparison.Ordinal);
+        Assert.Contains("upper(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("COUNT(", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -124,3 +125,7 @@ public sealed class SelectTests(ShopFixture shop) : IClassFixture<ShopFixture>
         JsonAssert.Problem(problem, code, location);
     }
 }
+
+public sealed class SqliteSelectTests(SqliteShopFixture shop) : SelectTests(shop), IClassFixture<SqliteShopFixture>;
+
+public sealed class PostgresSelectTests(PostgresShopFixture shop) : SelectTests(shop), IClassFixture<PostgresShopFixture>;

@@ -34,7 +34,9 @@ artifacts/                      gitignored: all build output (no per-project bin
 ## Commands
 
 - Test: `dotnet test --solution RestToLinq.slnx` (Microsoft Testing Platform via `global.json`, so pass
-  `--solution`/`--project` explicitly)
+  `--solution`/`--project` explicitly). Integration and end-to-end tests run on SQLite and PostgreSQL; PostgreSQL needs
+  Docker (Testcontainers) and is skipped without it, so check the `skipped` count. `RESTTOLINQ_REQUIRE_POSTGRES=1`
+  (set in CI) makes a missing PostgreSQL fail instead.
 - Format check: `dotnet format RestToLinq.slnx --verify-no-changes`
 - Rider/ReSharper inspections: `dotnet tool restore` once, then
   `dotnet jb inspectcode RestToLinq.slnx --format=Text --output=- --no-build` (~15s+; drop `--no-build` if not

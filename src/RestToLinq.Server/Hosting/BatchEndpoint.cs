@@ -21,7 +21,7 @@ internal static class BatchEndpoint
             var batch = BatchJson.Read(body, server.Limits);
             var db = (DbContext)context.RequestServices.GetRequiredService(server.ContextType);
             var policies = new RequestPolicies(new PolicyContext(context));
-            var response = await new BatchExecutor(server, db, policies).ExecuteAsync(batch, context.RequestAborted).ConfigureAwait(false);
+            var response = await ProviderRejections.GuardAsync(context, "$batch", () => new BatchExecutor(server, db, policies).ExecuteAsync(batch, context.RequestAborted)).ConfigureAwait(false);
             context.Response.ContentType = "application/json";
             await context.Response.Body.WriteAsync(BatchJson.WriteResponse(response), context.RequestAborted).ConfigureAwait(false);
         }

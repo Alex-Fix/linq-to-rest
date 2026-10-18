@@ -8,7 +8,8 @@ namespace RestToLinq.Protocol;
 
 /// <summary>
 /// Encodes and decodes scalar and primitive-collection values exactly as they appear on the wire: numbers as JSON
-/// numbers, enums by name, dates in ISO 8601, <see cref="TimeSpan"/> in the constant ("c") format, binary as base64.
+/// numbers, enums by name, dates in ISO 8601 (a <see cref="DateTime"/> with an offset is read as its UTC instant),
+/// <see cref="TimeSpan"/> in the constant ("c") format, binary as base64.
 /// </summary>
 public static class JsonValues
 {
@@ -152,7 +153,7 @@ public static class JsonValues
     {
         if (type == typeof(string)) { return element.GetString(); }
         if (type == typeof(Guid)) { return element.TryGetGuid(out var v) ? v : null; }
-        if (type == typeof(DateTime)) { return element.TryGetDateTime(out var v) ? v : null; }
+        if (type == typeof(DateTime)) { return ReadDateTime(element); }
         if (type == typeof(DateTimeOffset)) { return element.TryGetDateTimeOffset(out var v) ? v : null; }
         if (type == typeof(byte[])) { return element.TryGetBytesFromBase64(out var v) ? v : null; }
 
@@ -173,6 +174,21 @@ public static class JsonValues
         }
 
         return type.IsEnum ? ReadEnum(text, type) : null;
+    }
+
+    /// <summary>
+    /// An offset (<c>Z</c>, <c>+02:00</c>) means an instant, read as UTC; no offset means a plain local timestamp
+    /// (<see cref="DateTimeKind.Unspecified"/>). Never the server's local time zone.
+    /// </summary>
+    private static DateTime? ReadDateTime(JsonElement element)
+    {
+        if (!element.TryGetDateTime(out var value))
+        {
+            return null;
+        }
+
+        // System.Text.Json converts numeric offsets to the server's local time; use the instant instead.
+        return value.Kind == DateTimeKind.Local && element.TryGetDateTimeOffset(out var instant) ? instant.UtcDateTime : value;
     }
 
     private static object? ReadEnum(string text, Type type)

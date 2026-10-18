@@ -1,9 +1,11 @@
 using System.Buffers;
 using System.Linq.Expressions;
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using RestToLinq.Protocol;
+using RestToLinq.Server.Hosting;
 using RestToLinq.Server.Mapping;
 using RestToLinq.Server.Policies;
 using RestToLinq.Server.Query;
@@ -45,6 +47,11 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
             {
                 var entities = exception.Entries.Select(entry => entry.Entity).ToHashSet();
                 throw Concurrency([.. _applied.Values.Where(applied => entities.Contains(applied.Entity)).Select(applied => applied.Operation.Id)]);
+            }
+            catch (DbUpdateException exception) when (exception.InnerException is { } rejected && ProviderRejections.IsRejection(rejected))
+            {
+                // The provider refused a value; report it like other provider rejections (400), not as a conflict.
+                ExceptionDispatchInfo.Throw(rejected);
             }
             catch (DbUpdateException)
             {

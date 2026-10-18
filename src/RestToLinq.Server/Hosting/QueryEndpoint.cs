@@ -28,7 +28,7 @@ internal static partial class QueryEndpoint
 
             var plan = QueryCompiler.Compile(server, mapping, request, policies);
             var db = (DbContext)context.RequestServices.GetRequiredService(server.ContextType);
-            var result = await mapping.ExecuteAsync(db, plan, context.RequestAborted).ConfigureAwait(false);
+            var result = await ProviderRejections.GuardAsync(context, mapping.DtoType.SetName, () => mapping.ExecuteAsync(db, plan, context.RequestAborted)).ConfigureAwait(false);
             await WriteAsync(context.Response, plan.Shape, result).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is ProtocolException or RequestException)

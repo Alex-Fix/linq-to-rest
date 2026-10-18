@@ -402,9 +402,9 @@ Where the implementation differs from the sections above, this list wins.
 
 ## Open questions
 
-- License (none chosen yet; packages are built without one).
+- ~~License~~ — MIT.
 
-- PostgreSQL in CI (Testcontainers) to catch null-ordering / collation differences — when?
+- ~~PostgreSQL in CI (Testcontainers)~~ — done, see `2026-10-18-postgresql-design.md`.
 - `POST /{set}/$query` fallback for environments that block QUERY — demand-driven, post-v1.
 - OpenAPI description of QUERY endpoints (tooling support is thin).
 - Split `RestToLinq.Server` into EF Core and ASP.NET Core packages, or keep one?

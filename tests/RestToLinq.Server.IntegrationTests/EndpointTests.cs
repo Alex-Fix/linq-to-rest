@@ -1,11 +1,13 @@
+using System.Data.Common;
 using System.Net;
 using System.Text;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace RestToLinq.Server.IntegrationTests;
 
-public sealed class EndpointTests(ShopFixture shop) : IClassFixture<ShopFixture>
+public abstract class EndpointTests(ShopFixture shop)
 {
     [Fact]
     public async Task Unknown_set_is_not_found()
@@ -51,7 +53,7 @@ public sealed class EndpointTests(ShopFixture shop) : IClassFixture<ShopFixture>
     [Fact]
     public async Task Body_limit_is_enforced_without_content_length()
     {
-        await using var server = await ShopServer.StartAsync(options => options.Limits(limits => limits.MaxBodyBytes = 16));
+        await using var server = await ShopServer.StartAsync(shop.Database, options => options.Limits(limits => limits.MaxBodyBytes = 16));
         using var content = new StreamContent(new MemoryStream("""{"v":1,"count":true}"""u8.ToArray()));
         content.Headers.ContentType = new("application/json");
 
@@ -59,6 +61,30 @@ public sealed class EndpointTests(ShopFixture shop) : IClassFixture<ShopFixture>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("bodySize", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Provider_rejecting_a_value_is_a_bad_request_not_a_server_error()
+    {
+        await using var server = await ShopServer.StartAsync(shop.Database, interceptor: new RejectingProvider());
+        using var batch = new HttpRequestMessage(HttpMethod.Post, "/api/$batch");
+        batch.Content = new StringContent("""{"v":1,"operations":[{"id":"o0","op":"insert","set":"categories","values":{"name":"X"}}]}""", Encoding.UTF8, "application/json");
+
+        var query = await server.QueryProblemAsync("products", """{"v":1,"filter":{"gt":[{"member":"createdAt"},"2026-01-01T00:00:00"]}}""");
+        using var saved = await server.Client.SendAsync(batch, TestContext.Current.CancellationToken);
+
+        JsonAssert.Problem(query, "type_mismatch", "");
+        Assert.Equal(HttpStatusCode.BadRequest, saved.StatusCode);
+        Assert.Contains("type_mismatch", await saved.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+    }
+
+    /// <summary>Stands in for a provider refusing a parameter value, as Npgsql does for an offset-less timestamptz.</summary>
+    private sealed class RejectingProvider : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default) =>
+            command.CommandText.Contains("CreatedAt", StringComparison.Ordinal) || command.CommandText.StartsWith("INSERT", StringComparison.Ordinal)
+                ? throw new ArgumentException("Cannot write DateTime with Kind=Unspecified.")
+                : base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
     }
 
     [Fact]
@@ -91,7 +117,7 @@ public sealed class EndpointTests(ShopFixture shop) : IClassFixture<ShopFixture>
     [Fact]
     public async Task Post_endpoints_are_described_for_openapi_and_query_is_not()
     {
-        await using var server = await ShopServer.StartAsync(options => options.Services.AddEndpointsApiExplorer());
+        await using var server = await ShopServer.StartAsync(shop.Database, options => options.Services.AddEndpointsApiExplorer());
 
         var descriptions = server.Services.GetRequiredService<IApiDescriptionGroupCollectionProvider>()
             .ApiDescriptionGroups.Items.SelectMany(group => group.Items).ToList();
@@ -102,3 +128,7 @@ public sealed class EndpointTests(ShopFixture shop) : IClassFixture<ShopFixture>
         Assert.Contains(batch.SupportedResponseTypes, r => r.StatusCode == 412);
     }
 }
+
+public sealed class SqliteEndpointTests(SqliteShopFixture shop) : EndpointTests(shop), IClassFixture<SqliteShopFixture>;
+
+public sealed class PostgresEndpointTests(PostgresShopFixture shop) : EndpointTests(shop), IClassFixture<PostgresShopFixture>;

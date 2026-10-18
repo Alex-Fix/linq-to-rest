@@ -6,23 +6,46 @@ using RestToLinq.Server.IntegrationTests.Shop;
 
 namespace RestToLinq.Server.IntegrationTests;
 
-public sealed class PolicyTests : IAsyncLifetime
+public abstract class PolicyTests(ShopDatabase database) : IAsyncLifetime
 {
-    private ShopServer _server = null!;
+    private ShopServer? _started;
 
     public async ValueTask InitializeAsync()
     {
-        _server = await ShopServer.StartAsync(options => options.AddPolicy<ProductPolicy>().AddPolicy<CategoryPolicy>());
+        if (database.SkipReason is not null)
+        {
+            return;
+        }
+
+        _started = await ShopServer.StartAsync(database, options => options.AddPolicy<ProductPolicy>().AddPolicy<CategoryPolicy>());
 
         // Cross-tenant links: tenant 1's Notebook sits in tenant 2's Tools; tenant 2's Puzzle sits in tenant 1's Games.
-        using var scope = _server.Services.CreateScope();
+        using var scope = _started.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ShopDbContext>();
         (await db.Products.FindAsync([5], TestContext.Current.CancellationToken))!.CategoryId = 3;
         (await db.Products.FindAsync([6], TestContext.Current.CancellationToken))!.TenantId = 2;
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    public async ValueTask DisposeAsync() => await _server.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        if (_started is not null)
+        {
+            await _started.DisposeAsync();
+        }
+
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Gets the server, skipping the calling test when the provider isn't available.</summary>
+    private ShopServer Server
+    {
+        get
+        {
+            database.SkipIfUnavailable();
+            return _started!;
+        }
+    }
 
     [Fact]
     public async Task Rows_outside_the_filter_are_invisible_and_uncounted()
@@ -83,7 +106,7 @@ public sealed class PolicyTests : IAsyncLifetime
         using var request = Request("products", """{"v":1}""", tenant: 1);
         request.Headers.Add("X-No-Read", "1");
 
-        using var response = await _server.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        using var response = await Server.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Contains("\"forbidden\"", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
@@ -92,7 +115,7 @@ public sealed class PolicyTests : IAsyncLifetime
     private async Task<JsonElement> QueryAsync(string set, string json, int tenant)
     {
         using var request = Request(set, json, tenant);
-        using var response = await _server.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        using var response = await Server.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.True(response.IsSuccessStatusCode, body);
         return JsonDocument.Parse(body).RootElement;
@@ -105,3 +128,7 @@ public sealed class PolicyTests : IAsyncLifetime
         return request;
     }
 }
+
+public sealed class SqlitePolicyTests() : PolicyTests(new SqliteDatabase());
+
+public sealed class PostgresPolicyTests(PostgresContainer postgres) : PolicyTests(new PostgresDatabase(postgres));
