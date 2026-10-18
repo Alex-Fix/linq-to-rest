@@ -10,17 +10,17 @@ config during brainstorming. The output is a design doc.
 
 ## 1. Understand the context first (silently)
 Before asking anything, read what's relevant so you don't ask what the repo already answers:
-- `CLAUDE.md`, `docs/plans/` (earlier designs)
+- `CLAUDE.md`, `docs/plans/` (earlier designs, especially `2026-10-18-resttolinq-v1-design.md`)
 - The code the feature would touch, and `git log --oneline -15`
 
 ## 2. Clarify — one question at a time
 - Ask **one** question per message. Wait for the answer before the next.
 - Prefer multiple choice (use AskUserQuestion with 2–4 options, recommended option first) over open questions.
-- Focus on: who it's for (API author vs API consumer), the core use case, the exact query-string syntax, what
-  "done" looks like, and what's explicitly out of scope.
+- Focus on: who it's for (API author vs client developer), the core use case, client LINQ and wire (JSON tree /
+  `$batch`) shape, what "done" looks like, and what's explicitly out of scope.
 - Stop asking once you could explain the feature back in two sentences. Usually 3–6 questions.
-- If an answer touches a concept the user may not know (expression trees, client evaluation, OData `$filter`
-  semantics), explain it plainly in 2–4 lines.
+- If an answer touches a concept the user may not know (expression trees, client evaluation, keyset
+  pagination, unit of work), explain it plainly in 2–4 lines.
 
 ## 3. Check against RestToLinq's hard constraints
 Every idea gets checked against these before approaches are proposed. Name any conflict out loud.
@@ -28,27 +28,27 @@ Every idea gets checked against these before approaches are proposed. Name any c
 | Constraint | Ask |
 |---|---|
 | **Translatable** | Does the generated expression translate on EF Core (SQL Server, PostgreSQL, SQLite)? Any provider-specific gaps? Would anything fall back to in-memory evaluation? |
-| **Untrusted input** | Can a client use it to reach unexposed properties, blow up nesting/node count, force a full scan or huge result? Which limit bounds it? (→ `security` skill) |
+| **Untrusted input** | Can a client use it to reach members outside the DTO, bypass a policy filter, write a non-writable member, blow up nesting/node count, force a full scan or huge result/batch? Which limit bounds it? (→ `security` skill) |
 | **No dynamic code** | Can it be built from `Expression` nodes alone — no string-built LINQ, `Compile()`, reflection over arbitrary members? |
-| **Syntax** | Is the query syntax unambiguous, URL-safe, and consistent with existing operators? Does it clash with an OData/JSON:API-like convention users will expect? |
+| **Wire contract** | Does it fit the closed JSON node list / `$batch` format (one-key nodes, member paths, `"v"`)? New node or breaking change? Can the client LINQ provider express it, and does it fail locally when it can't? |
 | **Public API** | New public types/members? Breaking change for existing package users? Configurable or opinionated default? |
-| **Dependencies** | Does the core package stay dependency-light? Should this live in the ASP.NET Core integration package instead? |
+| **Dependencies** | Do Abstractions/Client stay BCL-only? Which package owns it (Abstractions / Client / Server)? |
 | **Errors** | What does the client get for invalid input — ProblemDetails with a constant message, never echoing raw input? |
 
 ## 4. Propose 2–3 approaches
-For each: one-paragraph summary, what changes (core / ASP.NET Core integration / sample), trade-offs,
+For each: one-paragraph summary, what changes (Abstractions / Client / Server / samples), trade-offs,
 rough size (S/M/L), and the constraint risks from step 3. **Lead with your recommendation and say why.**
 Let the user pick or mix. Don't list options you wouldn't actually recommend just to reach three.
 
 ## 5. Present the design in small sections
 Walk through the chosen approach in chunks of ~200–300 words, checking after each: "Does this look right so far?"
 Cover what applies:
-- Query syntax with examples (valid and invalid)
-- Parsing (grammar, tokens, AST) and translation (expression shape produced)
+- Client LINQ usage and the JSON / `$batch` it produces (valid and invalid examples)
+- AST / type checking and server translation (expression shape produced)
 - Configuration surface (allow-lists, limits, per-type options) and defaults
 - Public API additions
 - Error handling (what the client sees)
-- Testing (parser unit tests, translation tests against a real EF Core provider, sample API functional tests)
+- Testing (unit tests per package, SQLite translation tests, end-to-end client + server tests)
 - Docs/README and sample updates
 
 Go back to earlier steps whenever something doesn't fit. YAGNI: cut anything not needed for the core use case.

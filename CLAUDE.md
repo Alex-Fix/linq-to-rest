@@ -4,18 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-RestToLinq: a .NET library that turns REST query parameters (filter, sort, paging, field selection) into LINQ
-expression trees applied to `IQueryable<T>`, so they run in the database (EF Core) rather than in memory. Also
-ships a sample ASP.NET Core API that demonstrates it. Every query string comes from an untrusted client — see
-the `security` skill.
+RestToLinq covers both ends of a .NET REST API. Design: `docs/plans/2026-10-18-resttolinq-v1-design.md` — read it
+before changing behaviour or the wire contract.
+
+- **Client:** a `RestDataContext` of `DtoSet<T>` (our own `IQueryable<T>` / `IQueryProvider` — never EF's)
+  translates LINQ into a JSON expression tree sent with HTTP **QUERY**; full unit of work (change tracking,
+  identity map) saved as one atomic `POST /$batch`.
+- **Server:** validates the tree against the shared DTO model and translates it onto EF Core entities, each DTO
+  being the default projection of an entity; applies batches in one transaction.
+- **Shared:** DTOs (`IDto`) configured EF-style (`IDtoTypeConfiguration<T>`), used by both ends.
+
+Every query body and batch reaching the server is untrusted — see the `security` skill.
 
 ## Layout (target — create projects here, don't invent new top-level dirs)
 
 ```
 RestToLinq.slnx                 solution (+ global.json, Directory.Build.props, Directory.Packages.props)
-src/                            packable libraries (core parser/translator; ASP.NET Core integration)
-samples/                        sample API (not packable)
-tests/                          xUnit v3, shared settings in tests/Directory.Build.props
+src/
+  RestToLinq.Abstractions/      IDto, model builder, query AST + JSON contract, batch/cursor contracts (BCL only)
+  RestToLinq.Client/            RestDataContext, DtoSet<T>, RestQueryProvider, change tracker (BCL only)
+  RestToLinq.Server/            DTO→entity mapping, AST → Expression, batch executor, policies, endpoints (EF Core)
+samples/                        Shop.Contracts, Shop.Api (EF Core SQLite), Shop.Console (client) — not packable
+tests/                          xUnit v3, one project per package + Server.IntegrationTests (SQLite) + EndToEnd.Tests
 docs/plans/                     approved design docs (written by the `brainstorming` skill)
 artifacts/                      gitignored: all build output (no per-project bin/obj)
 ```
@@ -32,16 +42,17 @@ artifacts/                      gitignored: all build output (no per-project bin
 
 ## Rules
 
-1. **Translatable expressions only.** Generated expressions must be translatable by EF Core (no
-   `Invoke`/compiled delegates, no client-only methods). Anything that would silently fall back to in-memory
-   evaluation is a bug. Verify translation with integration tests against a real provider, not LINQ-to-Objects only.
-2. **No dynamic code.** Never build queries with string concatenation, `System.Linq.Dynamic.Core`, Roslyn
-   scripting or `Expression.Compile()` on the request path — build `Expression` trees directly.
-3. **Allow-list, bounded.** Only explicitly exposed properties are filterable/sortable/selectable; query length,
-   nesting depth, node count and page size have limits with safe defaults.
-4. **Public API is a contract.** Packable `src/` projects are versioned NuGet packages — breaking changes need
-   explicit approval.
-5. **Free and open.** Free/open-source dependencies only; core library keeps dependencies minimal.
+1. **Translatable expressions only.** Server-built expressions must translate on EF Core; anything that would fall
+   back to client evaluation is a bug. Prove it with SQLite integration tests, not LINQ-to-Objects alone.
+2. **Closed AST, no dynamic code on the server.** The server only accepts the documented node list and builds
+   `Expression` nodes itself — never deserialized .NET expressions, `System.Linq.Dynamic.Core`, Roslyn scripting or
+   `Expression.Compile()` on the request path. (The client may compile/evaluate captured variables: that's the
+   developer's own code.)
+3. **DTO is the boundary.** Entities are never serialized. Sorting is opt-in per member; writes only go through
+   members bound directly in the default projection. Every size is limited (body, depth, nodes, page, batch…).
+4. **Wire contract and public API are versioned.** The JSON contract carries `"v"`; breaking changes to it or to
+   packable `src/` APIs need explicit approval and a design-doc update.
+5. **Free and open.** Free/open-source dependencies only; Abstractions and Client stay BCL-only.
 
 ## Conventions
 
