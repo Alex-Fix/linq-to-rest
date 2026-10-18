@@ -100,5 +100,6 @@ public sealed class GoldenTests
 
     private static string Normalize(string json) => JsonNode.Parse(json)!.ToJsonString();
 
+    // Only used locally to regenerate the files: CI builds map [CallerFilePath] to /_/.
     private static string GoldenDirectory([CallerFilePath] string path = "") => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path)!, "..", "golden"));
 }

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using RestToLinq.Modeling;
 using RestToLinq.TestContracts;
 
@@ -103,8 +102,8 @@ public sealed class GeneratorTests
         return (code, output.ToString(), errors.ToString());
     }
 
-    private static string TypeScriptTestModel([CallerFilePath] string path = "") =>
-        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path)!, "..", "..", "clients", "typescript", "test", "shop.generated.ts"));
+    // Copied next to the tests: CI builds map source paths to /_/, so [CallerFilePath] can't find the repository.
+    private static string TypeScriptTestModel() => Path.Combine(AppContext.BaseDirectory, "typescript", "shop.generated.ts");
 
     public sealed class KindsDto : IDto
     {
