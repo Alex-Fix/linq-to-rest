@@ -1,0 +1,45 @@
+{
+  "name": "resttolinq",
+  "version": "0.1.0",
+  "description": "Typed queries and a unit of work for RestToLinq APIs: filters, sorting, projections, cursor pages and atomic saves over HTTP QUERY and $batch.",
+  "license": "MIT",
+  "author": "Alex Papish",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alex-Fix/rest-to-linq.git",
+    "directory": "clients/typescript"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "check": "npm run format && npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^4.1.12"
+  }
+}

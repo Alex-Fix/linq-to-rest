@@ -24,6 +24,7 @@ src/
   RestToLinq.Abstractions/      IDto, model builder, query AST + JSON contract, batch/cursor contracts (BCL only)
   RestToLinq.Client/            RestDataContext, DtoSet<T>, RestQueryProvider, change tracker (BCL only)
   RestToLinq.Server/            DTO→entity mapping, AST → Expression, batch executor, policies, endpoints (EF Core)
+clients/typescript/              npm package "resttolinq": TypeScript client (same wire protocol, golden-tested)
 samples/                        Shop.Contracts, Shop.Api (EF Core SQLite, API key), Shop.Console (client) — not packable
 tests/                          xUnit v3, one project per package + Server.IntegrationTests (SQLite) + EndToEnd.Tests
                                 (EndToEnd links the integration tests' Shop/*.cs)
@@ -42,6 +43,9 @@ artifacts/                      gitignored: all build output (no per-project bin
   `dotnet jb inspectcode RestToLinq.slnx --format=Text --output=- --no-build` (~15s+; drop `--no-build` if not
   just built; `--include="src/Foo/**"` to narrow)
 - Add a project: `dotnet sln RestToLinq.slnx add --solution-folder src <path>` (or `samples` / `tests`)
+- TypeScript client (`cd clients/typescript`): `npm ci`, then `npm run check` (Prettier, ESLint strict type-checked,
+  `tsc`, Vitest incl. type tests, build). Request bodies must match `tests/golden/*.json`, which the .NET client
+  tests also assert (`RESTTOLINQ_UPDATE_GOLDEN=1` regenerates them from the .NET client).
 
 ## Rules
 

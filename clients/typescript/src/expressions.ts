@@ -1,0 +1,525 @@
+import type { MemberModel, Model, SetModel } from "./model.js";
+import { findSet } from "./model.js";
+import { literal, type QueryNode } from "./nodes.js";
+import type { Translator } from "./translator.js";
+
+/** Builds a node once a request is translated. Lambdas only run then, so variables get the .NET client's names. */
+export type Build = (t: Translator) => QueryNode;
+
+/** @internal */
+export const BUILD: unique symbol = Symbol("resttolinq.build");
+
+/** Anything that turns into a query node. */
+export interface Buildable {
+  readonly [BUILD]: Build;
+}
+
+export function isBuildable(value: unknown): value is Buildable {
+  return typeof value === "object" && value !== null && BUILD in value;
+}
+
+/** Marks members clients may sort by (generated from `IsSortable()` and keys). */
+export interface Sortable {
+  /** Type-only: generated proxy types add it to sortable members. */
+  readonly __sortable: true;
+}
+
+/** A numeric expression, nullable or not. */
+export type AnyNumberExpr = NumberExpr | NumberExpr<number | null>;
+
+/** A value usable where an expression of type `T` is expected: a plain value or an expression. */
+export type Operand<T> =
+  NonNullable<T> | (null extends T ? null : never) | Expr<NonNullable<T>> | Expr<NonNullable<T> | null>;
+
+export function node(t: Translator, value: unknown): QueryNode {
+  return isBuildable(value) ? value[BUILD](t) : literal(value);
+}
+
+function call(op: string, ...operands: unknown[]): Build {
+  return (t) => ({ [op]: operands.map((operand) => node(t, operand)) });
+}
+
+/** An expression of type `T` (`null` included for nullable members). */
+export class Expr<T> implements Buildable {
+  declare readonly __value: T;
+  readonly [BUILD]: Build;
+
+  constructor(build: Build) {
+    this[BUILD] = build;
+  }
+
+  eq(other: Operand<T>): BoolExpr {
+    return new BoolExpr(call("eq", this, other));
+  }
+
+  ne(other: Operand<T>): BoolExpr {
+    return new BoolExpr(call("ne", this, other));
+  }
+
+  /** `value in [..]`, sent as one list parameter. */
+  in(values: readonly NonNullable<T>[]): BoolExpr {
+    return new BoolExpr((t) => ({ in: [this[BUILD](t), values.map(literal)] }));
+  }
+}
+
+/** A boolean expression; `and`/`or` chains flatten like C#'s `&&`/`||`. */
+export class BoolExpr extends Expr<boolean> {
+  constructor(
+    build: Build,
+    private readonly junction?: { readonly op: "and" | "or"; readonly parts: readonly Operand<boolean>[] },
+  ) {
+    super(build);
+  }
+
+  and(...others: Operand<boolean>[]): BoolExpr {
+    return this.join("and", others);
+  }
+
+  or(...others: Operand<boolean>[]): BoolExpr {
+    return this.join("or", others);
+  }
+
+  not(): BoolExpr {
+    return new BoolExpr(call("not", this));
+  }
+
+  private join(op: "and" | "or", others: Operand<boolean>[]): BoolExpr {
+    const parts = [this, ...others].flatMap((part) =>
+      part instanceof BoolExpr && part.junction?.op === op ? part.junction.parts : [part],
+    );
+    return new BoolExpr(call(op, ...parts), { op, parts });
+  }
+}
+
+/** An expression with an order: comparisons beyond equality. */
+export class OrderedExpr<T> extends Expr<T> {
+  gt(other: Operand<T>): BoolExpr {
+    return new BoolExpr(call("gt", this, other));
+  }
+
+  ge(other: Operand<T>): BoolExpr {
+    return new BoolExpr(call("ge", this, other));
+  }
+
+  lt(other: Operand<T>): BoolExpr {
+    return new BoolExpr(call("lt", this, other));
+  }
+
+  le(other: Operand<T>): BoolExpr {
+    return new BoolExpr(call("le", this, other));
+  }
+}
+
+export class NumberExpr<T extends number | null = number> extends OrderedExpr<T> {
+  add(other: Operand<number>): NumberExpr<T> {
+    return new NumberExpr(call("add", this, other));
+  }
+
+  sub(other: Operand<number>): NumberExpr<T> {
+    return new NumberExpr(call("sub", this, other));
+  }
+
+  mul(other: Operand<number>): NumberExpr<T> {
+    return new NumberExpr(call("mul", this, other));
+  }
+
+  div(other: Operand<number>): NumberExpr<T> {
+    return new NumberExpr(call("div", this, other));
+  }
+
+  mod(other: Operand<number>): NumberExpr<T> {
+    return new NumberExpr(call("mod", this, other));
+  }
+
+  neg(): NumberExpr<T> {
+    return new NumberExpr(call("neg", this));
+  }
+
+  coalesce(fallback: Operand<number>): NumberExpr {
+    return new NumberExpr(call("coalesce", this, fallback));
+  }
+}
+
+/** A string expression; `concat` chains flatten like C#'s string `+`. */
+export class StringExpr<T extends string | null = string> extends OrderedExpr<T> {
+  constructor(
+    build: Build,
+    private readonly parts?: readonly unknown[],
+  ) {
+    super(build);
+  }
+
+  contains(value: Operand<string>): BoolExpr {
+    return new BoolExpr(call("contains", this, value));
+  }
+
+  startsWith(value: Operand<string>): BoolExpr {
+    return new BoolExpr(call("startsWith", this, value));
+  }
+
+  endsWith(value: Operand<string>): BoolExpr {
+    return new BoolExpr(call("endsWith", this, value));
+  }
+
+  /** Case-insensitive equality: both sides lowercased, like `string.Equals(a, b, OrdinalIgnoreCase)`. */
+  equalsIgnoreCase(value: Operand<string>): BoolExpr {
+    return new BoolExpr((t) => ({ eq: [{ toLower: [node(t, this)] }, { toLower: [node(t, value)] }] }));
+  }
+
+  toLower(): StringExpr<T> {
+    return new StringExpr(call("toLower", this));
+  }
+
+  toUpper(): StringExpr<T> {
+    return new StringExpr(call("toUpper", this));
+  }
+
+  trim(): StringExpr<T> {
+    return new StringExpr(call("trim", this));
+  }
+
+  length(): NumberExpr {
+    return new NumberExpr(call("length", this));
+  }
+
+  /** Concatenates strings, numbers and other values (converted to text on the server). */
+  concat(...values: unknown[]): StringExpr {
+    const parts = [...(this.parts ?? [this]), ...values];
+    return new StringExpr(call("concat", ...parts), parts);
+  }
+
+  coalesce(fallback: Operand<string>): StringExpr {
+    return new StringExpr(call("coalesce", this, fallback));
+  }
+}
+
+/** A `DateTime` or `DateTimeOffset` (ISO 8601 strings). */
+export class DateTimeExpr<T extends string | null = string> extends OrderedExpr<T> {
+  year(): NumberExpr {
+    return new NumberExpr(call("year", this));
+  }
+
+  month(): NumberExpr {
+    return new NumberExpr(call("month", this));
+  }
+
+  day(): NumberExpr {
+    return new NumberExpr(call("day", this));
+  }
+
+  hour(): NumberExpr {
+    return new NumberExpr(call("hour", this));
+  }
+
+  minute(): NumberExpr {
+    return new NumberExpr(call("minute", this));
+  }
+
+  /** The date at midnight. */
+  date(): DateTimeExpr<T> {
+    return new DateTimeExpr(call("date", this));
+  }
+
+  coalesce(fallback: Operand<string>): DateTimeExpr {
+    return new DateTimeExpr(call("coalesce", this, fallback));
+  }
+}
+
+/** A `DateOnly` (`yyyy-MM-dd`). */
+export class DateOnlyExpr<T extends string | null = string> extends OrderedExpr<T> {
+  year(): NumberExpr {
+    return new NumberExpr(call("year", this));
+  }
+
+  month(): NumberExpr {
+    return new NumberExpr(call("month", this));
+  }
+
+  day(): NumberExpr {
+    return new NumberExpr(call("day", this));
+  }
+}
+
+/** A `TimeOnly` (`HH:mm:ss`). */
+export class TimeOnlyExpr<T extends string | null = string> extends OrderedExpr<T> {
+  hour(): NumberExpr {
+    return new NumberExpr(call("hour", this));
+  }
+
+  minute(): NumberExpr {
+    return new NumberExpr(call("minute", this));
+  }
+}
+
+/** `test ? whenTrue : whenFalse`. */
+export function cond(test: Operand<boolean>, whenTrue: Operand<string>, whenFalse: Operand<string>): StringExpr;
+export function cond(test: Operand<boolean>, whenTrue: Operand<number>, whenFalse: Operand<number>): NumberExpr;
+export function cond(test: Operand<boolean>, whenTrue: Operand<boolean>, whenFalse: Operand<boolean>): BoolExpr;
+export function cond(test: Operand<boolean>, whenTrue: unknown, whenFalse: unknown): Expr<unknown> {
+  const build = call("if", test, whenTrue, whenFalse);
+  if (typeof whenTrue === "string" || whenTrue instanceof StringExpr) {
+    return new StringExpr(build);
+  }
+
+  return typeof whenTrue === "boolean" || whenTrue instanceof BoolExpr ? new BoolExpr(build) : new NumberExpr(build);
+}
+
+/** A DTO as seen by a lambda. Generated proxy interfaces extend it. */
+export interface EntityProxy<D> extends Buildable {
+  readonly __dto?: D;
+}
+
+type Selector<P, R> = (element: P) => R;
+
+/** The parts every collection lambda shares. */
+abstract class CollectionBase<P> implements Buildable {
+  readonly [BUILD]: Build;
+
+  protected constructor(
+    protected readonly source: string,
+    protected readonly element: (variable: string) => P,
+    protected readonly filters: readonly Selector<P, Operand<boolean>>[],
+  ) {
+    this[BUILD] = () => ({ member: source });
+  }
+
+  any(predicate?: Selector<P, Operand<boolean>>): BoolExpr {
+    return new BoolExpr((t) => this.lambda(t, "any", predicate, true));
+  }
+
+  all(predicate: Selector<P, Operand<boolean>>): BoolExpr {
+    return new BoolExpr((t) => this.lambda(t, "all", predicate, true));
+  }
+
+  count(predicate?: Selector<P, Operand<boolean>>): NumberExpr {
+    return new NumberExpr((t) => this.lambda(t, "count", predicate, true));
+  }
+
+  /** Projects each element (only in `select`). */
+  select<S>(selector: Selector<P, S>): MapExpr<S> {
+    return new MapExpr<S>((t) => this.lambda(t, "map", selector, false, true));
+  }
+
+  /**
+   * Builds `{op: {source, var, where, body}}` like the .NET client: the variable is allocated first, then the
+   * filters run, then the body. Any/count without a body use the filter as their body.
+   */
+  protected lambda(
+    t: Translator,
+    op: string,
+    body: Selector<P, unknown> | undefined,
+    predicate: boolean,
+    shape = false,
+  ): QueryNode {
+    const variable = t.allocate();
+    const element = this.element(variable);
+    const filters = this.filters.map((filter) => t.within("filter", () => node(t, filter(element))));
+    let where: QueryNode | undefined =
+      filters.length === 0 ? undefined : filters.length === 1 ? filters[0] : { and: filters };
+    let built: QueryNode | undefined;
+    if (body !== undefined) {
+      built = predicate
+        ? t.within("filter", () => node(t, body(element)))
+        : shape
+          ? selectNode(t, body(element))
+          : node(t, body(element));
+    }
+
+    if ((op === "any" || op === "count") && built === undefined && where !== undefined) {
+      [built, where] = [where, undefined];
+    }
+
+    const lambda: Record<string, unknown> = { source: { member: this.source } };
+    if (built !== undefined || where !== undefined) {
+      lambda.var = variable;
+    }
+
+    if (where !== undefined) {
+      lambda.where = where;
+    }
+
+    if (built !== undefined) {
+      lambda.body = built;
+    }
+
+    return { [op]: lambda };
+  }
+}
+
+/** A collection navigation: lambdas over DTO elements. */
+export class CollectionExpr<P extends EntityProxy<unknown>, D = NonNullable<P["__dto"]>> extends CollectionBase<P> {
+  declare readonly __element: D;
+
+  /** @internal */
+  constructor(
+    source: string,
+    element: (variable: string) => P,
+    filters: readonly Selector<P, Operand<boolean>>[] = [],
+  ) {
+    super(source, element, filters);
+  }
+
+  where(predicate: Selector<P, Operand<boolean>>): CollectionExpr<P, D> {
+    return new CollectionExpr<P, D>(this.source, this.element, [...this.filters, predicate]);
+  }
+
+  sum(selector: Selector<P, AnyNumberExpr>): NumberExpr {
+    return new NumberExpr((t) => this.lambda(t, "sum", selector, false));
+  }
+
+  avg(selector: Selector<P, AnyNumberExpr>): NumberExpr<number | null> {
+    return new NumberExpr((t) => this.lambda(t, "avg", selector, false));
+  }
+
+  min<E extends OrderedExpr<unknown>>(selector: Selector<P, E>): E {
+    return this.extreme("min", selector);
+  }
+
+  max<E extends OrderedExpr<unknown>>(selector: Selector<P, E>): E {
+    return this.extreme("max", selector);
+  }
+
+  private extreme<E extends OrderedExpr<unknown>>(op: string, selector: Selector<P, E>): E {
+    const build: Build = (t) => this.lambda(t, op, selector, false);
+    return sameKind(selector(this.element("_")), build) as E;
+  }
+}
+
+/** A primitive collection (`string[]`, `number[]`…): lambdas over scalar elements. */
+export class PrimitiveCollectionExpr<E extends Expr<unknown>> extends CollectionBase<E> {
+  /** @internal */
+  constructor(
+    source: string,
+    element: (variable: string) => E,
+    filters: readonly Selector<E, Operand<boolean>>[] = [],
+  ) {
+    super(source, element, filters);
+  }
+
+  where(predicate: Selector<E, Operand<boolean>>): PrimitiveCollectionExpr<E> {
+    return new PrimitiveCollectionExpr<E>(this.source, this.element, [...this.filters, predicate]);
+  }
+
+  sum(selector?: Selector<E, AnyNumberExpr>): NumberExpr {
+    return new NumberExpr((t) => this.lambda(t, "sum", selector, false));
+  }
+
+  avg(selector?: Selector<E, AnyNumberExpr>): NumberExpr<number | null> {
+    return new NumberExpr((t) => this.lambda(t, "avg", selector, false));
+  }
+
+  min(): E {
+    return sameKind(this.element("_"), (t) => this.lambda(t, "min", undefined, false)) as E;
+  }
+
+  max(): E {
+    return sameKind(this.element("_"), (t) => this.lambda(t, "max", undefined, false)) as E;
+  }
+}
+
+/** A projected collection (`select` over a collection). */
+export class MapExpr<S> implements Buildable {
+  declare readonly __mapped: S;
+  readonly [BUILD]: Build;
+
+  constructor(build: Build) {
+    this[BUILD] = build;
+  }
+}
+
+function sameKind(prototype: unknown, build: Build): Expr<unknown> {
+  if (prototype instanceof StringExpr) return new StringExpr(build);
+  if (prototype instanceof DateTimeExpr) return new DateTimeExpr(build);
+  if (prototype instanceof DateOnlyExpr) return new DateOnlyExpr(build);
+  if (prototype instanceof TimeOnlyExpr) return new TimeOnlyExpr(build);
+  if (prototype instanceof NumberExpr) return new NumberExpr(build);
+  return new OrderedExpr(build);
+}
+
+/** The select node of a projection value: shapes become `{"new": …}`, everything else its own node. */
+export function selectNode(t: Translator, value: unknown): QueryNode {
+  if (isBuildable(value)) {
+    return value[BUILD](t);
+  }
+
+  if (typeof value === "object" && value !== null && !Array.isArray(value) && !(value instanceof Date)) {
+    const fields: Record<string, QueryNode> = {};
+    for (const [name, field] of Object.entries(value)) {
+      fields[name] = selectNode(t, field);
+    }
+
+    return { new: fields };
+  }
+
+  return literal(value);
+}
+
+function scalar(member: MemberModel, build: Build): Expr<unknown> {
+  switch (member.kind) {
+    case "number":
+      return new NumberExpr(build);
+    case "string":
+      return new StringExpr(build);
+    case "boolean":
+      return new BoolExpr(build);
+    case "datetime":
+    case "datetimeoffset":
+      return new DateTimeExpr(build);
+    case "dateonly":
+      return new DateOnlyExpr(build);
+    case "timeonly":
+      return new TimeOnlyExpr(build);
+    case "enum":
+    case "timespan":
+      return new OrderedExpr(build);
+    case "guid":
+    case "binary":
+      return new Expr(build);
+  }
+}
+
+function memberBuild(set: SetModel, member: MemberModel, path: string): Build {
+  return (t) => {
+    if (t.use === "filter" && !member.filterable) {
+      throw new Error(`${set.name}.${member.name} can't be filtered (IsNotFilterable in the DTO model).`);
+    }
+
+    return { member: path };
+  };
+}
+
+/** Creates the proxy a lambda receives for one DTO, rooted at `base` (a navigation path or lambda variable). */
+export function entityProxy(model: Model, set: SetModel, base: string | null): EntityProxy<unknown> {
+  const proxy = {} as Record<PropertyKey, unknown>;
+  const path = (name: string): string => (base === null ? name : `${base}/${name}`);
+  Object.defineProperty(proxy, BUILD, {
+    value: (() => (base === null ? ROOT : { member: base })) satisfies Build,
+  });
+  for (const member of set.members) {
+    Object.defineProperty(proxy, member.name, {
+      enumerable: true,
+      get: () =>
+        member.collection
+          ? new PrimitiveCollectionExpr(path(member.name), (variable) =>
+              scalar({ ...member, collection: false }, () => ({ var: variable })),
+            )
+          : scalar(member, memberBuild(set, member, path(member.name))),
+    });
+  }
+
+  for (const navigation of set.navigations) {
+    const target = findSet(model, navigation.target);
+    Object.defineProperty(proxy, navigation.name, {
+      enumerable: true,
+      get: () =>
+        navigation.collection
+          ? new CollectionExpr(path(navigation.name), (variable) => entityProxy(model, target, variable))
+          : entityProxy(model, target, path(navigation.name)),
+    });
+  }
+
+  return proxy as unknown as EntityProxy<unknown>;
+}
+
+/** What the root proxy builds into: `select(p => p)` means the full DTO. */
+export const ROOT: QueryNode = Object.freeze({ root: true });

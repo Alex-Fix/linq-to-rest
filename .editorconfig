@@ -41,6 +41,10 @@ resharper_unused_type_global_highlighting = none
 [tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none
 
+# TypeScript is formatted by Prettier (clients/typescript/.prettierrc.json).
+[*.{ts,js,json}]
+indent_size = 2
+
 [*.{sln,slnx}]
 indent_style = tab
 
