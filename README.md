@@ -33,6 +33,8 @@ Design and rationale: [`docs/plans/2026-10-18-resttolinq-v1-design.md`](docs/pla
 | `RestToLinq.Abstractions` | `IDto`, the EF-style DTO model builder, query tree and wire contracts | BCL only |
 | `RestToLinq.Client` | `RestDataContext`, `DtoSet<T>`, LINQ provider, change tracking | `Microsoft.Extensions.Http` |
 | `RestToLinq.Server` | DTO → entity mappings, query and batch execution, policies, endpoints | EF Core, ASP.NET Core |
+| `RestToLinq.TypeScript` | `resttolinq-ts` .NET tool: generates the TypeScript model from your contracts | — |
+| npm `resttolinq` | TypeScript client: typed queries and unit of work (see [its README](clients/typescript/README.md)) | none |
 
 Targets .NET 10 (`HttpMethod.Query` and `HttpMethods.Query` are built in).
 
@@ -150,6 +152,25 @@ Queries never run synchronously. Full-DTO results are tracked (identity map); pr
 and call `SaveChangesAsync`: inserts get their generated keys, every saved DTO gets its new concurrency token and
 computed members. Failures throw `RestSaveException` / `RestConcurrencyException` and leave the tracked state as it was.
 
+### 4. TypeScript client
+
+```sh
+dotnet resttolinq-ts --assembly Shop.Contracts.dll --name Shop --out web/src/shop.generated.ts
+```
+
+```ts
+const shop = createShop({ baseUrl: "https://shop.example/api/" });
+const games = await shop.products
+  .where((p) => p.category.name.eq("Games").and(p.price.lt(25)))
+  .orderBy((p) => p.price)
+  .select((p) => ({ name: p.name, total: p.lines.sum((l) => l.quantity.mul(l.unitPrice)) }))
+  .take(10)
+  .toList();
+```
+
+Same protocol, same rules, same unit of work: both clients write identical request bodies, checked against the shared
+golden files in `tests/golden/`. Details in [clients/typescript/README.md](clients/typescript/README.md).
+
 ## Wire protocol
 
 `QUERY /api/products` (`application/json`):
@@ -257,6 +278,8 @@ docker compose -f samples/docker-compose.yml up -d                   # PostgreSQ
 dotnet run --project samples/Shop.Api --urls http://localhost:5080   # Development: API key dev-acme-key, Scalar at /scalar/v1
 dotnet run --project samples/Shop.Api --urls http://localhost:5080 -- --Database:Provider=Sqlite   # without Docker
 dotnet run --project samples/Shop.Console
+(cd clients/typescript && npm ci && npm run check && npm run test:e2e)   # TypeScript client
+(cd samples/shop-ts && npm install && npm start)                         # TypeScript sample (API running)
 ```
 
 The PostgreSQL tests start a throwaway container with Testcontainers, so they need Docker. Without it they are

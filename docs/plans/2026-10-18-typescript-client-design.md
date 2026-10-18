@@ -1,5 +1,5 @@
 # TypeScript client — design
-Status: approved · Date: 2026-10-18
+Status: approved, implemented (see Implementation notes) · Date: 2026-10-18
 
 ## Problem
 
@@ -147,6 +147,26 @@ const cheap = await shop.products
   .NET client tests and the TS tests.
 - Generator (.NET): snapshot of the output for a test contracts assembly; `--check`.
 - End to end: the TS client generated from `Shop.Contracts` against `Shop.Api` on SQLite.
+
+## Implementation notes
+
+1. **Golden comparison** is on parsed JSON with key order (`JSON.stringify(JSON.parse(…))` in TypeScript,
+   `JsonNode.ToJsonString()` in .NET), not raw bytes: the .NET writer escapes characters such as `+` and `'` that
+   JavaScript doesn't, which the server reads identically.
+2. **Generating the golden files found a .NET client bug:** an enum array's `Contains` binds (C# 14) to the span
+   overload with a null comparer, which the translator rejected. Fixed, with a regression test.
+3. **Inserts:** the .NET client sends every writable member, the TypeScript client those present on the object. The
+   golden batch sets every writable member, so both match; `CreatedAt` in the test contracts became read-only
+   (server-owned), as in the sample.
+4. **API additions:** `StringExpr.equalsIgnoreCase` (the .NET client's `string.Equals(…, OrdinalIgnoreCase)`, which
+   analyzers require there); `count()` without a predicate allocates a variable like .NET's `Enumerable.Count()`.
+5. **Generated file:** the header has no versions (deterministic across tool releases); generated files are excluded
+   from Prettier and ESLint. The hand-written test model was replaced by the generator's output and is now its
+   snapshot.
+6. **Test contracts** moved to `tests/RestToLinq.TestContracts`; `tests/Directory.Build.props` only makes `*Tests`
+   projects xUnit executables.
+7. **The sample** runs as TypeScript directly (`node main.ts`, Node ≥ 22.18); the end-to-end tests start
+   `Shop.Api` from a Vitest global setup rather than a separate CI script.
 
 ## Open questions
 

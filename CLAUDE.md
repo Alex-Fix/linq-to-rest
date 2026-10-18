@@ -44,8 +44,12 @@ artifacts/                      gitignored: all build output (no per-project bin
   just built; `--include="src/Foo/**"` to narrow)
 - Add a project: `dotnet sln RestToLinq.slnx add --solution-folder src <path>` (or `samples` / `tests`)
 - TypeScript client (`cd clients/typescript`): `npm ci`, then `npm run check` (Prettier, ESLint strict type-checked,
-  `tsc`, Vitest incl. type tests, build). Request bodies must match `tests/golden/*.json`, which the .NET client
-  tests also assert (`RESTTOLINQ_UPDATE_GOLDEN=1` regenerates them from the .NET client).
+  `tsc`, Vitest incl. type tests, build) and `npm run test:e2e` (starts `samples/Shop.Api` on SQLite). Request bodies
+  must match `tests/golden/*.json`, which the .NET client tests also assert (`RESTTOLINQ_UPDATE_GOLDEN=1` regenerates
+  them from the .NET client). Conventions: `typescript-client` skill.
+- Generated TypeScript models (never edit by hand): `dotnet run --project src/RestToLinq.TypeScript -- --assembly
+  <Contracts.dll> --name Shop [--import ../src/index.js] --out <file>`; CI runs it with `--check` for
+  `clients/typescript/test`, `clients/typescript/test-e2e` and `samples/shop-ts`.
 
 ## Rules
 
