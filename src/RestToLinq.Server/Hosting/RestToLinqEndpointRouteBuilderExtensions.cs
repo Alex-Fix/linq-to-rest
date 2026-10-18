@@ -10,7 +10,7 @@ public static class RestToLinqEndpointRouteBuilderExtensions
     private static readonly string[] QueryMethod = [HttpMethods.Query];
 
     /// <summary>
-    /// Maps <c>QUERY {prefix}/{set}</c>. Returns the route group, so standard endpoint conventions such as
+    /// Maps <c>QUERY {prefix}/{set}</c> and <c>POST {prefix}/$batch</c>. Returns the route group, so standard endpoint conventions such as
     /// <c>RequireAuthorization()</c> apply to every RestToLinq endpoint.
     /// </summary>
     /// <param name="endpoints">The endpoint route builder.</param>
@@ -21,6 +21,7 @@ public static class RestToLinqEndpointRouteBuilderExtensions
         ArgumentNullException.ThrowIfNull(endpoints);
         var group = endpoints.MapGroup(prefix);
         group.MapMethods("{set}", QueryMethod, QueryEndpoint.HandleAsync);
+        group.MapPost("$batch", BatchEndpoint.HandleAsync);
         return group;
     }
 }

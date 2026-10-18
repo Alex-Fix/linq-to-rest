@@ -1,0 +1,276 @@
+using System.Buffers;
+using System.Linq.Expressions;
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using RestToLinq.Protocol;
+using RestToLinq.Server.Mapping;
+using RestToLinq.Server.Policies;
+using RestToLinq.Server.Query;
+
+namespace RestToLinq.Server.Batch;
+
+/// <summary>
+/// Applies a batch in one transaction: validates every operation against the model, writes only through the direct
+/// member bindings of the default projection, saves once, re-reads changed rows through the projection, and rolls
+/// everything back on any failure.
+/// </summary>
+internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPolicies policies)
+{
+    private readonly Dictionary<string, Applied> _applied = new(StringComparer.Ordinal);
+
+    public async Task<BatchResponse> ExecuteAsync(BatchRequest batch, CancellationToken cancellationToken)
+    {
+        var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using (transaction.ConfigureAwait(false))
+        {
+            for (var index = 0; index < batch.Operations.Count; index++)
+            {
+                var operation = batch.Operations[index];
+                try
+                {
+                    await ApplyAsync(operation, $"/operations/{index}", cancellationToken).ConfigureAwait(false);
+                }
+                catch (ProtocolException exception)
+                {
+                    throw RequestException.From(exception, [operation.Id]);
+                }
+            }
+
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (DbUpdateConcurrencyException exception)
+            {
+                var entities = exception.Entries.Select(entry => entry.Entity).ToHashSet();
+                throw Concurrency([.. _applied.Values.Where(applied => entities.Contains(applied.Entity)).Select(applied => applied.Operation.Id)]);
+            }
+            catch (DbUpdateException)
+            {
+                throw new RequestException(StatusCodes.Status409Conflict, ErrorCodes.Conflict, "");
+            }
+
+            var results = new List<BatchResult>(batch.Operations.Count);
+            foreach (var operation in batch.Operations)
+            {
+                var applied = _applied[operation.Id];
+                var value = operation.Op == BatchOperationKind.Delete ? null : await ReadBackAsync(applied, cancellationToken).ConfigureAwait(false);
+                results.Add(new BatchResult { Id = operation.Id, Value = value });
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return new BatchResponse { Results = results };
+        }
+    }
+
+    private async Task ApplyAsync(BatchOperation operation, string location, CancellationToken cancellationToken)
+    {
+        var mapping = server.FindSet(operation.Set) ?? throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/set", operation);
+        var kind = operation.Op switch
+        {
+            BatchOperationKind.Insert => DtoOperation.Insert,
+            BatchOperationKind.Update => DtoOperation.Update,
+            _ => DtoOperation.Delete,
+        };
+        if (!await policies.CanAsync(mapping, kind).ConfigureAwait(false))
+        {
+            throw Failure(StatusCodes.Status403Forbidden, ErrorCodes.Forbidden, location, operation);
+        }
+
+        object entity;
+        if (kind == DtoOperation.Insert)
+        {
+            if (operation.Key is not null || operation.Token is not null)
+            {
+                throw Invalid(ErrorCodes.InvalidBatch, location, operation);
+            }
+
+            entity = Activator.CreateInstance(mapping.EntityType)
+                ?? throw new InvalidOperationException($"{mapping.EntityType.Name} needs a public parameterless constructor for inserts.");
+            ApplyValues(mapping, entity, operation, location);
+            await ApplyReferencesAsync(mapping, entity, operation, location, cancellationToken).ConfigureAwait(false);
+            policies.Get(mapping)?.OnInsert(entity, policies.Context);
+            db.Add(entity);
+        }
+        else
+        {
+            if (kind == DtoOperation.Delete && (operation.Values is not null || operation.Refs is not null))
+            {
+                throw Invalid(ErrorCodes.InvalidBatch, location, operation);
+            }
+
+            entity = await LoadAsync(mapping, operation, location, cancellationToken).ConfigureAwait(false);
+            CheckToken(mapping, entity, operation, location);
+            if (kind == DtoOperation.Delete)
+            {
+                db.Remove(entity);
+            }
+            else
+            {
+                ApplyValues(mapping, entity, operation, location);
+                await ApplyReferencesAsync(mapping, entity, operation, location, cancellationToken).ConfigureAwait(false);
+                policies.Get(mapping)?.OnUpdate(entity, policies.Context);
+            }
+        }
+
+        _applied.Add(operation.Id, new Applied(operation, mapping, entity));
+    }
+
+    private async Task<object> LoadAsync(SetMapping mapping, BatchOperation operation, string location, CancellationToken cancellationToken)
+    {
+        var key = mapping.DtoType.Key;
+        if (operation.Key is null || operation.Key.Count != key.Count)
+        {
+            throw Invalid(ErrorCodes.InvalidBatch, $"{location}/key", operation);
+        }
+
+        var values = key.Select(property => operation.Key.TryGetValue(property.WireName, out var value)
+                ? JsonValues.Read(value, property.ClrType, $"{location}/key")
+                : throw Invalid(ErrorCodes.InvalidBatch, $"{location}/key", operation))
+            .ToList();
+        var entity = await mapping.FindAsync(db, policies.Filter(mapping), values, cancellationToken).ConfigureAwait(false)
+            ?? throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, location, operation);
+
+        // A FromSource with AsNoTracking returns detached rows; attaching makes the changes count.
+        if (db.Entry(entity).State == EntityState.Detached)
+        {
+            db.Attach(entity);
+        }
+
+        return entity;
+    }
+
+    private void CheckToken(SetMapping mapping, object entity, BatchOperation operation, string location)
+    {
+        if (mapping.DtoType.ConcurrencyToken is not { } token)
+        {
+            if (operation.Token is not null)
+            {
+                throw Invalid(ErrorCodes.InvalidBatch, $"{location}/token", operation);
+            }
+
+            return;
+        }
+
+        if (operation.Token is not { } element)
+        {
+            throw Invalid(ErrorCodes.InvalidBatch, $"{location}/token", operation);
+        }
+
+        var expected = JsonValues.Read(element, token.ClrType, $"{location}/token");
+        var property = db.Entry(entity).Property(mapping.EntityProperties[token].Name);
+        if (!property.Metadata.IsConcurrencyToken)
+        {
+            throw new InvalidOperationException($"{mapping.EntityType.Name}.{property.Metadata.Name} is the concurrency token of {mapping.DtoType} but isn't one in the EF Core model. Configure it with IsConcurrencyToken() or IsRowVersion().");
+        }
+
+        if (!TokensEqual(property.CurrentValue, expected))
+        {
+            throw Concurrency([operation.Id]);
+        }
+
+        // Covers a change between this read and the save.
+        property.OriginalValue = expected;
+    }
+
+    private static void ApplyValues(SetMapping mapping, object entity, BatchOperation operation, string location)
+    {
+        foreach (var (name, element) in operation.Values ?? new Dictionary<string, JsonElement>())
+        {
+            var property = mapping.DtoType.FindProperty(name) ?? throw Invalid(ErrorCodes.UnknownMember, $"{location}/values", operation);
+            if (!property.IsWritable)
+            {
+                throw Invalid(ErrorCodes.NotWritable, $"{location}/values", operation);
+            }
+
+            var value = JsonValues.Read(element, property.ClrType, $"{location}/values");
+            if (value is null && !property.IsNullable)
+            {
+                throw Invalid(ErrorCodes.TypeMismatch, $"{location}/values", operation);
+            }
+
+            mapping.EntityProperties[property].SetValue(entity, value);
+        }
+    }
+
+    private async Task ApplyReferencesAsync(SetMapping mapping, object entity, BatchOperation operation, string location, CancellationToken cancellationToken)
+    {
+        foreach (var (name, target) in operation.Refs ?? new Dictionary<string, string>())
+        {
+            var navigation = mapping.DtoType.Navigations.FirstOrDefault(navigation => navigation.ForeignKey?.WireName == name);
+            var map = navigation is null ? null : mapping.Navigations[navigation];
+            if (map?.EntityProperty is null || operation.Values?.ContainsKey(name) == true
+                || !_applied.TryGetValue(target, out var referenced) || referenced.Operation.Op != BatchOperationKind.Insert || referenced.Mapping != map.Target)
+            {
+                throw Invalid(ErrorCodes.InvalidBatch, $"{location}/refs", operation);
+            }
+
+            map.EntityProperty.SetValue(entity, referenced.Entity);
+        }
+
+        // A foreign key written by value must point at a row the caller can see.
+        foreach (var navigation in mapping.DtoType.Navigations)
+        {
+            if (navigation.ForeignKey is not { } foreignKey || operation.Values?.TryGetValue(foreignKey.WireName, out var element) != true
+                || JsonValues.Read(element, foreignKey.ClrType, $"{location}/values") is not { } value)
+            {
+                continue;
+            }
+
+            var target = mapping.Navigations[navigation].Target;
+            if (await target.FindAsync(db, policies.Filter(target), [value], cancellationToken).ConfigureAwait(false) is null)
+            {
+                throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values", operation);
+            }
+        }
+    }
+
+    private async Task<JsonElement?> ReadBackAsync(Applied applied, CancellationToken cancellationToken)
+    {
+        var mapping = applied.Mapping;
+        var key = mapping.DtoType.Key.Select(property => mapping.EntityProperties[property].GetValue(applied.Entity)).ToList();
+        var root = Expression.Parameter(mapping.EntityType, "e");
+        var row = new Row(root);
+        var shape = new QueryBinder(server, policies).DefaultShape(new EntityBound(root, mapping, null, isNullable: false), row, null);
+        var plan = new QueryPlan
+        {
+            PolicyFilter = policies.Filter(mapping),
+            Filter = mapping.KeyPredicate(key),
+            Sorts = [],
+            Projection = row.ToLambda(),
+            Shape = shape,
+            Mode = PageMode.Offset,
+            Take = 1,
+        };
+
+        var result = await mapping.ExecuteAsync(db, plan, cancellationToken).ConfigureAwait(false);
+        if (result.Rows.Count == 0)
+        {
+            return null;
+        }
+
+        var buffer = new ArrayBufferWriter<byte>();
+        await using (var writer = new Utf8JsonWriter(buffer))
+        {
+            shape.Write(writer, result.Rows[0]);
+        }
+
+        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        return document.RootElement.Clone();
+    }
+
+    private static bool TokensEqual(object? current, object? expected) =>
+        current is byte[] left && expected is byte[] right ? left.AsSpan().SequenceEqual(right) : Equals(current, expected);
+
+    private static RequestException Invalid(string code, string location, BatchOperation operation) =>
+        Failure(StatusCodes.Status400BadRequest, code, location, operation);
+
+    private static RequestException Failure(int status, string code, string location, BatchOperation operation) =>
+        new(status, code, location, operationIds: [operation.Id]);
+
+    private static RequestException Concurrency(IReadOnlyList<string> operationIds) =>
+        new(StatusCodes.Status412PreconditionFailed, ErrorCodes.ConcurrencyConflict, "", operationIds: operationIds);
+
+    private sealed record Applied(BatchOperation Operation, SetMapping Mapping, object Entity);
+}

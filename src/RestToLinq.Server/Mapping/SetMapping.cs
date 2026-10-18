@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using RestToLinq.Modeling;
+using RestToLinq.Server.Internal;
 using RestToLinq.Server.Policies;
 using RestToLinq.Server.Query;
 
@@ -24,7 +25,22 @@ internal abstract class SetMapping(DtoType dtoType, Type entityType)
 
     public IReadOnlyDictionary<DtoNavigation, NavigationMapping> Navigations { get; set; } = new Dictionary<DtoNavigation, NavigationMapping>();
 
-    public abstract IQueryable Query(DbContext db);
+    /// <summary>Loads the tracked entity with the given key values, if it passes the policy filter.</summary>
+    public abstract Task<object?> FindAsync(DbContext db, LambdaExpression? policyFilter, IReadOnlyList<object?> key, CancellationToken cancellationToken);
+
+    /// <summary><c>e =&gt; e.Key1 == v1 &amp;&amp; …</c> over the mapped key members.</summary>
+    public LambdaExpression KeyPredicate(IReadOnlyList<object?> key)
+    {
+        var entity = Expression.Parameter(EntityType, "e");
+        Expression? predicate = null;
+        for (var index = 0; index < DtoType.Key.Count; index++)
+        {
+            var member = ExpressionHelpers.Inline(Bindings[DtoType.Key[index]], entity);
+            predicate = ExpressionHelpers.AndAlso(predicate, Expression.Equal(member, ExpressionHelpers.Parameter(key[index], member.Type)));
+        }
+
+        return Expression.Lambda(predicate!, entity);
+    }
 
     public abstract Task<QueryResult> ExecuteAsync(DbContext db, QueryPlan plan, CancellationToken cancellationToken);
 }
@@ -33,7 +49,18 @@ internal sealed class SetMapping<TEntity>(DtoType dtoType, Func<DbContext, IQuer
     : SetMapping(dtoType, typeof(TEntity))
     where TEntity : class
 {
-    public override IQueryable<TEntity> Query(DbContext db) => source(db);
+    private IQueryable<TEntity> Query(DbContext db) => source(db);
+
+    public override async Task<object?> FindAsync(DbContext db, LambdaExpression? policyFilter, IReadOnlyList<object?> key, CancellationToken cancellationToken)
+    {
+        var query = Query(db);
+        if (policyFilter is Expression<Func<TEntity, bool>> filter)
+        {
+            query = query.Where(filter);
+        }
+
+        return await query.Where((Expression<Func<TEntity, bool>>)KeyPredicate(key)).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     public override async Task<QueryResult> ExecuteAsync(DbContext db, QueryPlan plan, CancellationToken cancellationToken)
     {

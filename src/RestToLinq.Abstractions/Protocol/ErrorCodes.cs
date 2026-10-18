@@ -51,6 +51,9 @@ public static class ErrorCodes
     /// <summary>A policy denied the operation.</summary>
     public const string Forbidden = "forbidden";
 
+    /// <summary>The batch violates a database constraint (for example a unique index).</summary>
+    public const string Conflict = "conflict";
+
     /// <summary>A row changed since it was read; the <c>operationIds</c> member lists the affected operations.</summary>
     public const string ConcurrencyConflict = "concurrency_conflict";
 
