@@ -1,0 +1,49 @@
+{
+  "v": 1,
+  "operations": [
+    {
+      "id": "o0",
+      "op": "insert",
+      "set": "categories",
+      "values": {
+        "name": "Puzzles"
+      }
+    },
+    {
+      "id": "o1",
+      "op": "insert",
+      "set": "products",
+      "values": {
+        "name": "Cube",
+        "description": null,
+        "price": 9.5,
+        "status": "Active",
+        "releasedOn": null
+      },
+      "refs": {
+        "categoryId": "o0"
+      }
+    },
+    {
+      "id": "o2",
+      "op": "update",
+      "set": "products",
+      "key": {
+        "id": 1
+      },
+      "values": {
+        "price": 21
+      },
+      "token": "00000001-0000-0000-0000-000000000000"
+    },
+    {
+      "id": "o3",
+      "op": "delete",
+      "set": "products",
+      "key": {
+        "id": 2
+      },
+      "token": "00000002-0000-0000-0000-000000000000"
+    }
+  ]
+}

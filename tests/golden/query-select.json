@@ -1,0 +1,80 @@
+{
+  "v": 1,
+  "select": {
+    "new": {
+      "id": {
+        "member": "id"
+      },
+      "total": {
+        "sum": {
+          "source": {
+            "member": "lines"
+          },
+          "var": "v0",
+          "body": {
+            "mul": [
+              {
+                "member": "v0/quantity"
+              },
+              {
+                "member": "v0/unitPrice"
+              }
+            ]
+          }
+        }
+      },
+      "label": {
+        "concat": [
+          {
+            "member": "name"
+          },
+          " (",
+          {
+            "member": "categoryName"
+          },
+          ")"
+        ]
+      },
+      "skus": {
+        "map": {
+          "source": {
+            "member": "lines"
+          },
+          "var": "v1",
+          "where": {
+            "gt": [
+              {
+                "member": "v1/quantity"
+              },
+              1
+            ]
+          },
+          "body": {
+            "member": "v1/sku"
+          }
+        }
+      },
+      "category": {
+        "member": "category"
+      },
+      "expensive": {
+        "if": [
+          {
+            "gt": [
+              {
+                "member": "price"
+              },
+              18
+            ]
+          },
+          "yes",
+          "no"
+        ]
+      }
+    }
+  },
+  "page": {
+    "mode": "offset",
+    "take": 20
+  }
+}

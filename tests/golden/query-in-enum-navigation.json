@@ -1,0 +1,41 @@
+{
+  "v": 1,
+  "filter": {
+    "and": [
+      {
+        "in": [
+          {
+            "member": "status"
+          },
+          [
+            "Draft"
+          ]
+        ]
+      },
+      {
+        "eq": [
+          {
+            "member": "category/name"
+          },
+          "Games"
+        ]
+      },
+      {
+        "not": [
+          {
+            "eq": [
+              {
+                "member": "id"
+              },
+              3
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "page": {
+    "mode": "offset",
+    "take": 10
+  }
+}

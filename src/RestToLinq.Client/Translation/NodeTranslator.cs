@@ -194,10 +194,14 @@ internal sealed class NodeTranslator(DtoType root)
             return EnumerableCall(call);
         }
 
-        // list.Contains(d.X) on a captured collection, or the span overload C# 14 binds arrays to.
-        if (method.Name == nameof(Enumerable.Contains) && call.Arguments.Count is 1 or 2)
+        // list.Contains(d.X) on a captured collection, or the span overload C# 14 binds arrays to. For types that aren't
+        // IEquatable<T> (enums) it picks the overload with a comparer, passed as null.
+        var arguments = call.Arguments.Count == 3 && StripConvert(call.Arguments[2]) is ConstantExpression { Value: null }
+            ? call.Arguments.Take(2).ToList()
+            : [.. call.Arguments];
+        if (method.Name == nameof(Enumerable.Contains) && arguments.Count is 1 or 2)
         {
-            var list = call.Object ?? call.Arguments[0];
+            var list = call.Object ?? arguments[0];
             if (list is MethodCallExpression { Method.Name: "op_Implicit", Arguments: [var inner] })
             {
                 list = inner;
@@ -205,14 +209,14 @@ internal sealed class NodeTranslator(DtoType root)
 
             if (StripConvert(list) is ConstantExpression { Value: IEnumerable items })
             {
-                return In(call.Arguments[^1], items);
+                return In(arguments[^1], items);
             }
 
             // d.Tags.Contains(x) on a primitive collection of the DTO.
-            if (call.Object is not null && call.Arguments.Count == 1)
+            if (call.Object is not null && arguments.Count == 1)
             {
                 var (contains, element, where) = Source(call.Object, null);
-                return new LambdaNode(QueryOperators.Any, contains, element, new CallNode(QueryOperators.Eq, [new VarNode(element!), Translate(call.Arguments[0])]), where);
+                return new LambdaNode(QueryOperators.Any, contains, element, new CallNode(QueryOperators.Eq, [new VarNode(element!), Translate(arguments[0])]), where);
             }
         }
 

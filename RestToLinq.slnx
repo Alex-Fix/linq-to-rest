@@ -26,5 +26,6 @@
 		<Project Path="tests/RestToLinq.EndToEnd.Tests/RestToLinq.EndToEnd.Tests.csproj" />
 		<Project Path="tests/RestToLinq.Server.IntegrationTests/RestToLinq.Server.IntegrationTests.csproj" />
 		<Project Path="tests/RestToLinq.Server.UnitTests/RestToLinq.Server.UnitTests.csproj" />
+		<Project Path="tests/RestToLinq.TestContracts/RestToLinq.TestContracts.csproj" />
 	</Folder>
 </Solution>

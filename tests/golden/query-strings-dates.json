@@ -1,0 +1,72 @@
+{
+  "v": 1,
+  "filter": {
+    "and": [
+      {
+        "eq": [
+          {
+            "toLower": [
+              {
+                "member": "name"
+              }
+            ]
+          },
+          {
+            "toLower": [
+              "go"
+            ]
+          }
+        ]
+      },
+      {
+        "gt": [
+          {
+            "length": [
+              {
+                "member": "name"
+              }
+            ]
+          },
+          1
+        ]
+      },
+      {
+        "eq": [
+          {
+            "year": [
+              {
+                "member": "createdAt"
+              }
+            ]
+          },
+          2026
+        ]
+      },
+      {
+        "ne": [
+          {
+            "member": "releasedOn"
+          },
+          null
+        ]
+      },
+      {
+        "ne": [
+          {
+            "coalesce": [
+              {
+                "member": "description"
+              },
+              ""
+            ]
+          },
+          "x"
+        ]
+      }
+    ]
+  },
+  "page": {
+    "mode": "offset",
+    "take": 10
+  }
+}

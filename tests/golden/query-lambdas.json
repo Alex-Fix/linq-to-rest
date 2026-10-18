@@ -1,0 +1,70 @@
+{
+  "v": 1,
+  "filter": {
+    "and": [
+      {
+        "any": {
+          "source": {
+            "member": "tags"
+          },
+          "var": "v0",
+          "body": {
+            "eq": [
+              {
+                "var": "v0"
+              },
+              "sale"
+            ]
+          }
+        }
+      },
+      {
+        "gt": [
+          {
+            "sum": {
+              "source": {
+                "member": "lines"
+              },
+              "var": "v1",
+              "where": {
+                "gt": [
+                  {
+                    "member": "v1/quantity"
+                  },
+                  1
+                ]
+              },
+              "body": {
+                "mul": [
+                  {
+                    "member": "v1/quantity"
+                  },
+                  {
+                    "member": "v1/unitPrice"
+                  }
+                ]
+              }
+            }
+          },
+          50
+        ]
+      },
+      {
+        "gt": [
+          {
+            "count": {
+              "source": {
+                "member": "lines"
+              }
+            }
+          },
+          1
+        ]
+      }
+    ]
+  },
+  "page": {
+    "mode": "offset",
+    "take": 10
+  }
+}
