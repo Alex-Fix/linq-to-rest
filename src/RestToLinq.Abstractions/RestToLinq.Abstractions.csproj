@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared DTO model, query tree and wire contracts for RestToLinq clients and servers.</Description>
+  </PropertyGroup>
+</Project>
