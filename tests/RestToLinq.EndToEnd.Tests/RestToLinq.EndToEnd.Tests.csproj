@@ -1,7 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The same shop (entities, DTOs, configurations, mappings, policies, seed) as the server integration tests. -->
+    <Compile Include="..\RestToLinq.Server.IntegrationTests\Shop\*.cs" LinkBase="Shop" />
   </ItemGroup>
 
   <ItemGroup>
