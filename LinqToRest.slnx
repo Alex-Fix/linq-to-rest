@@ -7,6 +7,10 @@
 		<File Path="dotnet-tools.json" />
 		<File Path="global.json" />
 	</Folder>
+	<Folder Name="/benchmarks/">
+		<File Path="benchmarks/Directory.Build.props" />
+		<Project Path="benchmarks/LinqToRest.Benchmarks/LinqToRest.Benchmarks.csproj" />
+	</Folder>
 	<Folder Name="/samples/">
 		<File Path="samples/Directory.Build.props" />
 		<Project Path="samples/Shop.Api/Shop.Api.csproj" />

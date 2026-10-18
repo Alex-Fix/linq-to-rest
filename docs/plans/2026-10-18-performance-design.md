@@ -3,15 +3,15 @@ Status: approved · Date: 2026-10-18
 
 ## Problem
 
-Nothing measures RestToLinq's cost. Every request on the server parses a JSON tree, binds it, runs EF Core and
+Nothing measures LinqToRest's cost. Every request on the server parses a JSON tree, binds it, runs EF Core and
 writes rows; every client translates queries, materializes results and diffs tracked DTOs. Without numbers there's no
-way to know RestToLinq's overhead over hand-written EF Core LINQ, which paths dominate, or whether a change regresses
+way to know LinqToRest's overhead over hand-written EF Core LINQ, which paths dominate, or whether a change regresses
 them.
 
 ## Goals / Non-goals
 
 **Goals**
-- BenchmarkDotNet suites for every `src/` project (Abstractions, Client, Server, the `resttolinq-ts` generator) and
+- BenchmarkDotNet suites for every `src/` project (Abstractions, Client, Server, the `linqtorest-ts` generator) and
   Vitest benchmarks for the TypeScript client.
 - Make all of them as fast and allocation-light as measurements justify, one benchmarked optimization per commit.
 - Keep the JSON contract; public APIs may change (packages aren't published yet).
@@ -41,10 +41,10 @@ gain with all tests green.
 
 ## Design
 
-### .NET suites (`benchmarks/RestToLinq.Benchmarks`)
+### .NET suites (`benchmarks/LinqToRest.Benchmarks`)
 
 Console app, BenchmarkDotNet 0.15.8, `[MemoryDiagnoser]`, Release only, not packable; reuses
-`RestToLinq.TestContracts` and the integration tests' shop (linked files); internal APIs via `InternalsVisibleTo`.
+`LinqToRest.TestContracts` and the integration tests' shop (linked files); internal APIs via `InternalsVisibleTo`.
 
 | Class | Operation | Inputs |
 |---|---|---|
