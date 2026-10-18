@@ -77,6 +77,8 @@ database suffer. Design: `docs/plans/2026-10-18-resttolinq-v1-design.md` → "Se
 - `MapRestToLinq` returns a `RouteGroupBuilder`; samples show `RequireAuthorization()` and a tenant policy — people
   copy samples. No secrets in git; connection strings via user-secrets or environment variables.
 - README documents QUERY-specific concerns: proxy/WAF allow-listing of the method and CORS preflight.
+- `POST /{set}/$query` is the same handler as QUERY. Keep requiring `application/json` on every endpoint: it forces a
+  CORS preflight, so cross-site form posts can't reach the POST endpoints.
 
 ## Review checklist
 - [ ] New AST node / operator: in the closed list, type-checked, limited, and covered by a SQLite translation test?

@@ -1,4 +1,7 @@
 using System.Net;
+using System.Text;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace RestToLinq.Server.IntegrationTests;
 
@@ -56,5 +59,46 @@ public sealed class EndpointTests(ShopFixture shop) : IClassFixture<ShopFixture>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("bodySize", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Post_query_alias_answers_like_query()
+    {
+        const string json = """{"v":1,"filter":{"gt":[{"member":"price"},15]},"select":{"member":"name"},"page":{"mode":"offset","take":5}}""";
+        var viaQuery = await shop.Server.QueryOkAsync("products", json);
+
+        using var response = await shop.Server.Client.PostAsync(
+            new Uri("/api/products/$query", UriKind.Relative), new StringContent(json, Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(viaQuery.GetRawText(), body);
+    }
+
+    [Fact]
+    public async Task Post_query_alias_enforces_the_same_rules()
+    {
+        using var response = await shop.Server.Client.PostAsync(
+            new Uri("/api/products/$query", UriKind.Relative), new StringContent("""{"v":1,"orderBy":[{"member":"name"}]}""", Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        using var form = await shop.Server.Client.PostAsync(
+            new Uri("/api/products/$query", UriKind.Relative), new StringContent("v=1", Encoding.UTF8, "application/x-www-form-urlencoded"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("not_sortable", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, form.StatusCode);
+    }
+
+    [Fact]
+    public async Task Post_endpoints_are_described_for_openapi_and_query_is_not()
+    {
+        await using var server = await ShopServer.StartAsync(options => options.Services.AddEndpointsApiExplorer());
+
+        var descriptions = server.Services.GetRequiredService<IApiDescriptionGroupCollectionProvider>()
+            .ApiDescriptionGroups.Items.SelectMany(group => group.Items).ToList();
+
+        Assert.Equal(["POST api/$batch", "POST api/{set}/$query"], descriptions.Select(d => $"{d.HttpMethod} {d.RelativePath}").Order(StringComparer.Ordinal));
+        var batch = descriptions.Single(d => d.RelativePath == "api/$batch");
+        Assert.Equal(typeof(Protocol.BatchRequest), Assert.Single(batch.ParameterDescriptions, p => p.Source.Id == "Body").Type);
+        Assert.Contains(batch.SupportedResponseTypes, r => r.StatusCode == 412);
     }
 }

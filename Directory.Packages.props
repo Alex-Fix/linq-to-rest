@@ -10,6 +10,11 @@
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.13" />
   </ItemGroup>
 
+  <ItemGroup Label="Samples">
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.18.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Tests">
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.13" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />

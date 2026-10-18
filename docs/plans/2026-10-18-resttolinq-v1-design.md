@@ -391,7 +391,12 @@ Where the implementation differs from the sections above, this list wins.
    compares lowercased), `string.CompareOrdinal`, `char` arguments and the C# 14 span overload of `array.Contains`.
    `RestQueryProvider` is internal. Exceptions expose `Location` (analyzer rule CA1720 rules out `Pointer`) and
    `Entities`.
-9. **Testing.** End-to-end tests host the server with the ASP.NET Core test server directly instead of
+9. **`POST /{set}/$query` alias (added after v1 review).** ASP.NET Core 10's OpenAPI generator (Microsoft.OpenApi 2.x,
+   OpenAPI 3.1) can't describe QUERY, and Microsoft.OpenApi 3.x (which supports OpenAPI 3.2's `query` operation) is
+   incompatible with it. So the server also accepts the same body, limits and policies on `POST /{set}/$query`,
+   described in OpenAPI together with `$batch`; QUERY is excluded from descriptions. The client keeps using QUERY.
+   Requiring `application/json` keeps the POST alias out of reach of cross-site form posts.
+10. **Testing.** End-to-end tests host the server with the ASP.NET Core test server directly instead of
    `WebApplicationFactory`, and share the integration tests' shop through linked source files. Integration tests
    capture the executed SQL to prove projections run in the database.
 

@@ -90,7 +90,7 @@ builder.Services.AddRestToLinq(model, o => o
     .AddPolicy<ProductPolicy>()
     .Limits(l => l.MaxNodes = 200));
 
-app.MapRestToLinq("/api").RequireAuthorization();   // QUERY /api/{set}, POST /api/$batch
+app.MapRestToLinq("/api").RequireAuthorization();   // QUERY /api/{set}, POST /api/{set}/$query, POST /api/$batch
 ```
 
 Mappings are validated at startup: every member must be assigned, and writable members, keys and tokens must be
@@ -208,8 +208,11 @@ providers order `NULL` differently.
 
 ## Deployment notes
 
-- **HTTP QUERY**: some proxies, WAFs and CDNs reject unknown methods. Allow `QUERY` on the API routes. Browsers send
-  a CORS preflight for it, and OpenAPI tooling barely describes it.
+- **HTTP QUERY**: some proxies, WAFs and CDNs reject unknown methods. Allow `QUERY` on the API routes, or send the same
+  body to `POST /api/{set}/$query`. Browsers send a CORS preflight for QUERY.
+- **OpenAPI**: OpenAPI 3.1 (what ASP.NET Core 10's `AddOpenApi()` generates) can't describe QUERY, so the QUERY route is
+  excluded from descriptions; `POST {set}/$query` and `POST $batch` carry full metadata. The sample serves the
+  document and a Scalar UI at `/scalar/v1` in Development.
 - **SQLite**: it stores `decimal` as text, which it can't compare, sort or sum. Convert those columns to `double` (as the
   tests and sample do) or use another provider.
 - **Concurrency tokens** must be EF Core concurrency tokens (`IsConcurrencyToken()` / `IsRowVersion()`); the server
@@ -222,7 +225,7 @@ dotnet test --solution RestToLinq.slnx                       # unit, SQLite inte
 dotnet format RestToLinq.slnx --verify-no-changes
 dotnet tool restore && dotnet jb inspectcode RestToLinq.slnx --format=Text --output=- --no-build
 
-dotnet run --project samples/Shop.Api --urls http://localhost:5080   # Development: API key dev-acme-key
+dotnet run --project samples/Shop.Api --urls http://localhost:5080   # Development: API key dev-acme-key, Scalar at /scalar/v1
 dotnet run --project samples/Shop.Console
 ```
 
