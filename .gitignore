@@ -1,0 +1,23 @@
+# .NET
+artifacts/
+bin/
+obj/
+*.user
+TestResults/
+*.db
+
+# IDE / OS (editor settings are personal; shared style lives in .editorconfig)
+.idea/
+.vs/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Claude Code local overrides
+.claude/settings.local.json
+CLAUDE.local.md

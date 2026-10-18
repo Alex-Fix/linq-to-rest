@@ -1,0 +1,32 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.{cs,csx}]
+indent_size = 4
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_for_built_in_types = true:suggestion
+dotnet_sort_system_directives_first = true
+
+# Libraries: public API is used by consumers, not this solution — ReSharper/Rider "never used" reports are noise.
+[src/**.cs]
+resharper_unused_member_global_highlighting = none
+resharper_unused_type_global_highlighting = none
+resharper_class_never_instantiated_global_highlighting = none
+
+# Tests: underscores make test names readable sentences (Unknown_property_is_rejected).
+[tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none
+
+[*.{sln,slnx}]
+indent_style = tab
+
+[*.md]
+max_line_length = off
+trim_trailing_whitespace = false
