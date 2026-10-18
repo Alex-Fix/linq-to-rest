@@ -1,5 +1,7 @@
 # rest-to-linq
 
+[![ci](https://github.com/Alex-Fix/rest-to-linq/actions/workflows/ci.yml/badge.svg)](https://github.com/Alex-Fix/rest-to-linq/actions/workflows/ci.yml)
+
 RestToLinq covers both ends of a .NET REST API with one set of shared DTOs:
 
 - **Client** — write LINQ and unit-of-work code against a `RestDataContext`. Queries are translated into a JSON
@@ -206,6 +208,34 @@ Errors are `application/problem+json` with a stable `code`, a JSON `pointer` int
 Every query is paged and every sort ends with the key. Cursor pagination only sorts by non-nullable members, because
 providers order `NULL` differently.
 
+## Databases
+
+Every query and batch test runs on **SQLite** and **PostgreSQL**. RestToLinq only builds standard EF Core
+expressions, so other EF Core providers should work, but these two are the ones verified.
+
+**`DateTime` values:**
+
+- A literal with an offset (`2026-03-01T14:00:00Z`, `…+02:00`) is that UTC instant (`Kind = Utc`). One without an
+  offset is a plain local timestamp (`Kind = Unspecified`). The server's own time zone never matters.
+- On PostgreSQL, Npgsql maps `DateTime` to `timestamp with time zone`, which only accepts UTC. Keep every value UTC
+  and add a converter that treats offset-less values as UTC. EF Core also applies it to the query parameters compared
+  with those columns:
+
+  ```csharp
+  protected override void ConfigureConventions(ModelConfigurationBuilder b) =>
+      b.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+
+  public sealed class UtcDateTimeConverter() : ValueConverter<DateTime, DateTime>(
+      v => v.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : v.ToUniversalTime(),
+      v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+  ```
+
+- If a provider still refuses a value the client sent, the server answers 400 `type_mismatch` and logs a warning
+  naming the set, instead of a 500.
+
+**SQLite** stores `decimal` as text, which it can't compare, sort or sum. Convert those columns to `double` on SQLite
+only, as the tests and sample do.
+
 ## Deployment notes
 
 - **HTTP QUERY**: some proxies, WAFs and CDNs reject unknown methods. Allow `QUERY` on the API routes, or send the same
@@ -213,20 +243,25 @@ providers order `NULL` differently.
 - **OpenAPI**: OpenAPI 3.1 (what ASP.NET Core 10's `AddOpenApi()` generates) can't describe QUERY, so the QUERY route is
   excluded from descriptions; `POST {set}/$query` and `POST $batch` carry full metadata. The sample serves the
   document and a Scalar UI at `/scalar/v1` in Development.
-- **SQLite**: it stores `decimal` as text, which it can't compare, sort or sum. Convert those columns to `double` (as the
-  tests and sample do) or use another provider.
 - **Concurrency tokens** must be EF Core concurrency tokens (`IsConcurrencyToken()` / `IsRowVersion()`); the server
   refuses a token that isn't one.
 
 ## Development
 
 ```sh
-dotnet test --solution RestToLinq.slnx                       # unit, SQLite integration and end-to-end tests
+dotnet test --solution RestToLinq.slnx                       # unit tests, plus integration and end-to-end tests on SQLite and PostgreSQL
 dotnet format RestToLinq.slnx --verify-no-changes
 dotnet tool restore && dotnet jb inspectcode RestToLinq.slnx --format=Text --output=- --no-build
 
+docker compose -f samples/docker-compose.yml up -d                   # PostgreSQL for the sample
 dotnet run --project samples/Shop.Api --urls http://localhost:5080   # Development: API key dev-acme-key, Scalar at /scalar/v1
+dotnet run --project samples/Shop.Api --urls http://localhost:5080 -- --Database:Provider=Sqlite   # without Docker
 dotnet run --project samples/Shop.Console
 ```
+
+The PostgreSQL tests start a throwaway container with Testcontainers, so they need Docker. Without it they are
+reported as **skipped**, with the reason. `RESTTOLINQ_REQUIRE_POSTGRES=1` makes that a failure instead, which is how CI
+runs them. CI (`.github/workflows/ci.yml`) also checks formatting, ReSharper inspections and vulnerable packages on
+every push to `main` and every pull request.
 
 No license has been chosen yet.

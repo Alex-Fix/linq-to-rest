@@ -1,5 +1,5 @@
 # PostgreSQL support, provider test matrix and CI — design
-Status: approved · Date: 2026-10-18
+Status: approved, implemented (see Implementation notes) · Date: 2026-10-18
 
 ## Problem
 
@@ -126,6 +126,22 @@ time.
 - Safety net: a PostgreSQL test where an unconverted `timestamptz` comparison with an offset-less literal returns 400
   `type_mismatch`, not 500.
 - Sample run manually on both providers; CI run on the PR.
+
+## Implementation notes
+
+1. **Npgsql throws `ArgumentException`**, not `InvalidCastException` (checked against a real container): directly
+   for query parameters (source `Npgsql.EntityFrameworkCore.PostgreSQL`) and inside `DbUpdateException` on save
+   (source `Npgsql`). The guard treats `ArgumentException` or `InvalidCastException` as a provider rejection when it
+   was thrown outside RestToLinq, EF Core, `System.Linq.Expressions` and CoreLib (judged by the exception's
+   `Source`). Tested with a command interceptor standing in for the provider, on both providers.
+2. **PostgreSQL found one library gap:** collection elements (includes, selected collections, `map` over DTO
+   collections) had no defined order. They are now ordered by the element key on every provider.
+3. **Comparisons on computed `DateTime`s** (`date(createdAt)`) with offset-less literals also work on PostgreSQL with
+   the UTC converter, verified in the sample.
+4. **CI doesn't upload test results.** The xUnit runner's report options weren't worth an extra package; failing
+   tests are printed in the log. Only the inspection SARIF is uploaded.
+5. **Untested: the "no Docker" skip.** It can't be simulated while Docker Desktop is running, because
+   `/var/run/docker.sock` always links to it. The skip path is the documented `DockerUnavailableException`.
 
 ## Open questions
 
