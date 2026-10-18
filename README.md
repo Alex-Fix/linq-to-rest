@@ -264,4 +264,6 @@ reported as **skipped**, with the reason. `RESTTOLINQ_REQUIRE_POSTGRES=1` makes 
 runs them. CI (`.github/workflows/ci.yml`) also checks formatting, ReSharper inspections and vulnerable packages on
 every push to `main` and every pull request.
 
-No license has been chosen yet.
+## License
+
+[MIT](LICENSE)

@@ -22,7 +22,7 @@ SQLite, which isn't the setup people deploy.
 **Non-goals**
 - SQL Server (the same test pattern can add it later).
 - Migrations (sample and tests keep `EnsureCreated`).
-- NuGet publishing, license.
+- NuGet publishing (the MIT license was added separately).
 - Coercing literals by inspecting column types in the EF model.
 
 ## Constraints check

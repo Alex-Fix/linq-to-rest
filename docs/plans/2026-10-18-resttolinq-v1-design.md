@@ -402,7 +402,7 @@ Where the implementation differs from the sections above, this list wins.
 
 ## Open questions
 
-- License (none chosen yet; packages are built without one).
+- ~~License~~ — MIT.
 
 - ~~PostgreSQL in CI (Testcontainers)~~ — done, see `2026-10-18-postgresql-design.md`.
 - `POST /{set}/$query` fallback for environments that block QUERY — demand-driven, post-v1.
