@@ -1,0 +1,60 @@
+using System.Linq.Expressions;
+using System.Reflection;
+using Microsoft.EntityFrameworkCore;
+using RestToLinq.Modeling;
+using RestToLinq.Server.Policies;
+
+namespace RestToLinq.Server.Mapping;
+
+/// <summary>The validated mapping of one set: how each DTO member and navigation is computed from the entity.</summary>
+internal abstract class SetMapping(DtoType dtoType, Type entityType)
+{
+    public DtoType DtoType { get; } = dtoType;
+
+    public Type EntityType { get; } = entityType;
+
+    public Type PolicyType { get; } = typeof(DtoSetPolicy<,>).MakeGenericType(dtoType.ClrType, entityType);
+
+    /// <summary>Gets each member's value as a lambda over the entity.</summary>
+    public required IReadOnlyDictionary<DtoProperty, LambdaExpression> Bindings { get; init; }
+
+    /// <summary>Gets the entity property of members assigned directly from one (the reverse binding writes use).</summary>
+    public required IReadOnlyDictionary<DtoProperty, PropertyInfo> EntityProperties { get; init; }
+
+    public IReadOnlyDictionary<DtoNavigation, NavigationMapping> Navigations { get; set; } = new Dictionary<DtoNavigation, NavigationMapping>();
+
+    public abstract IQueryable Query(DbContext db);
+}
+
+internal sealed class SetMapping<TEntity>(DtoType dtoType, Func<DbContext, IQueryable<TEntity>> source)
+    : SetMapping(dtoType, typeof(TEntity))
+    where TEntity : class
+{
+    public override IQueryable<TEntity> Query(DbContext db) => source(db);
+}
+
+/// <summary>A DTO navigation mapped to an entity navigation.</summary>
+internal sealed class NavigationMapping(LambdaExpression entity, PropertyInfo? entityProperty, SetMapping target)
+{
+    /// <summary>Gets the entity navigation as a lambda over the declaring entity.</summary>
+    public LambdaExpression Entity { get; } = entity;
+
+    /// <summary>Gets the entity navigation property when it's a direct member access (needed for batch refs).</summary>
+    public PropertyInfo? EntityProperty { get; } = entityProperty;
+
+    public SetMapping Target { get; } = target;
+}
+
+/// <summary>The DTO model, every set mapping and the server limits.</summary>
+internal sealed class ServerModel(DtoModel model, IReadOnlyDictionary<DtoType, SetMapping> mappings, Type contextType, Protocol.QueryLimits limits)
+{
+    public DtoModel Model { get; } = model;
+
+    public Type ContextType { get; } = contextType;
+
+    public Protocol.QueryLimits Limits { get; } = limits;
+
+    public SetMapping? FindSet(string setName) => Model.FindSet(setName) is { } type ? mappings[type] : null;
+
+    public SetMapping Get(DtoType type) => mappings[type];
+}
