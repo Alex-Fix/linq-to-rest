@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "filter": {
+    "gt": [
+      {
+        "member": "price"
+      },
+      1
+    ]
+  },
+  "select": {
+    "new": {}
+  },
+  "page": {
+    "mode": "offset",
+    "take": 0
+  },
+  "count": true
+}

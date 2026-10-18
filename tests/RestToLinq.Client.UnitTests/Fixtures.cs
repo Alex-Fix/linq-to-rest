@@ -5,43 +5,6 @@ using RestToLinq.Modeling;
 
 namespace RestToLinq.Client.UnitTests;
 
-public enum ProductStatus
-{
-    Draft,
-    Active,
-}
-
-public sealed class ProductDto : IDto
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-    public string? Description { get; set; }
-    public decimal Price { get; set; }
-    public ProductStatus Status { get; set; }
-    public Guid Version { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateOnly? ReleasedOn { get; set; }
-    public int? CategoryId { get; set; }
-    public CategoryDto? Category { get; set; }
-    public List<OrderLineDto> Lines { get; set; } = [];
-    public List<string> Tags { get; set; } = [];
-    public string? CategoryName { get; set; }
-}
-
-public sealed class CategoryDto : IDto
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-}
-
-public sealed class OrderLineDto : IDto
-{
-    public int Id { get; set; }
-    public string Sku { get; set; } = "";
-    public int Quantity { get; set; }
-    public decimal UnitPrice { get; set; }
-}
-
 public sealed class ShopContext(RestDataContextOptions<ShopContext> options) : RestDataContext(options)
 {
     public DtoSet<ProductDto> Products => Set<ProductDto>();
@@ -50,18 +13,7 @@ public sealed class ShopContext(RestDataContextOptions<ShopContext> options) : R
 
 public static class Shop
 {
-    public static readonly DtoModel Model = new DtoModelBuilder()
-        .Dto<ProductDto>(b =>
-        {
-            b.ToSet("products").HasKey(d => d.Id).HasConcurrencyToken(d => d.Version);
-            b.HasOne(d => d.Category).WithForeignKey(d => d.CategoryId);
-            b.Property(d => d.Price).IsSortable();
-            b.Property(d => d.Tags).IsReadOnly();
-            b.Property(d => d.CategoryName).IsReadOnly();
-        })
-        .Dto<CategoryDto>(b => b.ToSet("categories").HasKey(d => d.Id).HasPagination(p => p.Modes(PaginationModes.Cursor).DefaultPageSize(2)))
-        .Dto<OrderLineDto>(b => b.ToSet("orderLines").HasKey(d => d.Id).HasPagination(p => p.Modes(PaginationModes.Offset)))
-        .Build();
+    public static readonly DtoModel Model = TestModel.Create();
 
     public static (ShopContext Context, StubHandler Http) Create()
     {

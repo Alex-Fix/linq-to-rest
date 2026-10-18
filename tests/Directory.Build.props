@@ -1,13 +1,17 @@
 <Project>
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
 
-  <!-- Shared by every test project: xUnit v3 on Microsoft Testing Platform (runs as an executable). -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Test projects (named *Tests): xUnit v3 on Microsoft Testing Platform (runs as an executable). Helper libraries
+       such as RestToLinq.TestContracts stay plain class libraries. -->
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('Tests'))">
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('Tests'))">
     <PackageReference Include="xunit.v3" />
     <Using Include="Xunit" />
   </ItemGroup>

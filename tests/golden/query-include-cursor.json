@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "orderBy": [
+    {
+      "member": "price"
+    }
+  ],
+  "include": [
+    "category",
+    "lines"
+  ],
+  "page": {
+    "mode": "cursor",
+    "after": "c1",
+    "take": 3
+  }
+}

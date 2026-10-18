@@ -8,6 +8,11 @@ TestResults/
 *.db-shm
 *.db-wal
 
+# Node
+node_modules/
+clients/typescript/dist/
+coverage/
+
 # IDE / OS (editor settings are personal; shared style lives in .editorconfig)
 .idea/
 .vs/

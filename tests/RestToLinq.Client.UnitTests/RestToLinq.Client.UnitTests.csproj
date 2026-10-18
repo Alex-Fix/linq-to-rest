@@ -5,5 +5,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\RestToLinq.Client\RestToLinq.Client.csproj" />
+    <ProjectReference Include="..\RestToLinq.TestContracts\RestToLinq.TestContracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="RestToLinq.TestContracts" />
+    <!-- Golden request bodies shared with the TypeScript client's tests. -->
+    <None Include="..\golden\*.json" LinkBase="golden" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

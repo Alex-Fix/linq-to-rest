@@ -32,6 +32,7 @@ public sealed class TranslationTests
         { "enum", """{"eq":[{"member":"status"},"Active"]}""" },
         { "captured", """{"and":[{"ge":[{"member":"price"},5]},{"in":[{"member":"name"},["a","b"]]},{"in":[{"member":"id"},[1,2]]}]}""" },
         { "navigation", """{"eq":[{"member":"category/name"},"Games"]}""" },
+        { "enum list", """{"in":[{"member":"status"},["Draft","Active"]]}""" },
         { "any", """{"any":{"source":{"member":"tags"},"var":"v0","body":{"eq":[{"var":"v0"},"sale"]}}}""" },
         { "sum", """{"gt":[{"sum":{"source":{"member":"lines"},"var":"v0","where":{"gt":[{"member":"v0/quantity"},1]},"body":{"mul":[{"member":"v0/quantity"},{"member":"v0/unitPrice"}]}}},50]}""" },
         { "count", """{"and":[{"gt":[{"count":{"source":{"member":"lines"}}},1]},{"eq":[{"count":{"source":{"member":"lines"},"var":"v0","body":{"gt":[{"member":"v0/quantity"},0]}}},2]}]}""" },
@@ -55,12 +56,15 @@ public sealed class TranslationTests
         var min = 5m;
         string[] names = ["a", "b"];
         List<int> ids = [1, 2];
+        ProductStatus[] statuses = [ProductStatus.Draft, ProductStatus.Active];
         var query = name switch
         {
             "enum" => shop.Products.Where(p => p.Status == ProductStatus.Active),
             // ReSharper disable once CSharp14OverloadResolutionWithSpanBreakingChange — users write this; it binds to the span overload the translator must handle.
             "captured" => shop.Products.Where(p => p.Price >= min && names.Contains(p.Name) && ids.Contains(p.Id)),
             "navigation" => shop.Products.Where(p => p.Category!.Name == "Games"),
+            // ReSharper disable once CSharp14OverloadResolutionWithSpanBreakingChange — enums bind to the span overload with a comparer.
+            "enum list" => shop.Products.Where(p => statuses.Contains(p.Status)),
             "any" => shop.Products.Where(p => p.Tags.Any(t => t == "sale")),
             "sum" => shop.Products.Where(p => p.Lines.Where(l => l.Quantity > 1).Sum(l => l.Quantity * l.UnitPrice) > 50),
             "count" => shop.Products.Where(p => p.Lines.Count > 1 && p.Lines.Count(l => l.Quantity > 0) == 2),

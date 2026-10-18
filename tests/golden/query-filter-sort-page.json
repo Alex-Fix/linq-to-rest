@@ -1,0 +1,37 @@
+{
+  "v": 1,
+  "filter": {
+    "and": [
+      {
+        "gt": [
+          {
+            "member": "price"
+          },
+          10
+        ]
+      },
+      {
+        "startsWith": [
+          {
+            "member": "name"
+          },
+          "C"
+        ]
+      }
+    ]
+  },
+  "orderBy": [
+    {
+      "member": "price",
+      "desc": true
+    },
+    {
+      "member": "id"
+    }
+  ],
+  "page": {
+    "mode": "offset",
+    "skip": 2,
+    "take": 5
+  }
+}

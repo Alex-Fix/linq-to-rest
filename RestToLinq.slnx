@@ -18,6 +18,7 @@
 		<Project Path="src/RestToLinq.Abstractions/RestToLinq.Abstractions.csproj" />
 		<Project Path="src/RestToLinq.Client/RestToLinq.Client.csproj" />
 		<Project Path="src/RestToLinq.Server/RestToLinq.Server.csproj" />
+		<Project Path="src/RestToLinq.TypeScript/RestToLinq.TypeScript.csproj" />
 	</Folder>
 	<Folder Name="/tests/">
 		<File Path="tests/Directory.Build.props" />
@@ -26,5 +27,7 @@
 		<Project Path="tests/RestToLinq.EndToEnd.Tests/RestToLinq.EndToEnd.Tests.csproj" />
 		<Project Path="tests/RestToLinq.Server.IntegrationTests/RestToLinq.Server.IntegrationTests.csproj" />
 		<Project Path="tests/RestToLinq.Server.UnitTests/RestToLinq.Server.UnitTests.csproj" />
+		<Project Path="tests/RestToLinq.TestContracts/RestToLinq.TestContracts.csproj" />
+		<Project Path="tests/RestToLinq.TypeScript.UnitTests/RestToLinq.TypeScript.UnitTests.csproj" />
 	</Folder>
 </Solution>
