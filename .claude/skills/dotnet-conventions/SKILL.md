@@ -1,6 +1,6 @@
 ---
 name: dotnet-conventions
-description: Conventions and scaffolding for the RestToLinq .NET solution — build props, central package management, analyzers, library packaging and public API rules, xUnit v3 test layout (unit vs EF Core translation tests), sample API, and how to add a project. Use when creating or modifying anything under src/, samples/ or tests/, or any .csproj/.props file.
+description: Conventions and scaffolding for the RestToLinq .NET solution — package boundaries (Abstractions / Client / Server), build props, central package management, analyzers, library packaging and public API rules, JSON contract handling, xUnit v3 test layout (unit, SQLite translation, end-to-end), samples, and how to add a project. Use when creating or modifying anything under src/, samples/ or tests/, or any .csproj/.props file.
 ---
 
 # .NET conventions
@@ -16,8 +16,16 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — bu
 
 ## Packages
 - Versions only in `Directory.Packages.props` (`<PackageVersion>`); `.csproj` uses `<PackageReference Include="X" />`.
-- Free/open-source only. Core library: as few dependencies as possible (ideally none beyond the BCL);
-  ASP.NET Core and EF Core dependencies belong in the integration package, sample, or tests.
+- Free/open-source only. `RestToLinq.Abstractions` and `RestToLinq.Client` reference **BCL only**
+  (System.Text.Json, HttpClient; `Microsoft.Extensions.*` abstractions for DI/HttpClientFactory are the one
+  exception for Client). EF Core and ASP.NET Core belong in `RestToLinq.Server`, samples and tests.
+
+## Package boundaries
+- `Abstractions`: model (`IDto`, builders, `DtoModel`), AST node types, wire contracts (query, response, batch,
+  cursor), error codes. No HTTP, no EF, no LINQ translation.
+- `Client`: LINQ → AST, HTTP transport (QUERY, `$batch`), materialization, change tracking. Never references Server.
+- `Server`: mapping, type checking, AST → `Expression`, batch executor, policies, endpoints. Never references Client.
+- Anything both ends need (e.g. a node type, a cursor format, an error code) goes in Abstractions.
 
 ## Library projects (`src/`)
 - Packable: set `IsPackable`, `PackageId`, `Description`, `PackageReadmeFile`, `PackageLicenseExpression` in the
@@ -25,26 +33,41 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — bu
   warnings-as-errors — that's intended).
 - Keep the public surface small: `internal` by default, `sealed` classes unless designed for inheritance,
   `InternalsVisibleTo` for test projects instead of making things public.
-- Expression building: `System.Linq.Expressions` nodes only. Resolve members via configured allow-lists, never
-  `Type.GetProperty(clientString)` on arbitrary types. No `Expression.Compile()` on the request path.
+- Server expression building: `System.Linq.Expressions` nodes only, from the type-checked AST. Resolve members via
+  `DtoModel` / mappings, never `Type.GetProperty(clientString)`. No `Expression.Compile()` on the request path.
+  The client may compile captured-variable subtrees (developer code).
+- JSON: System.Text.Json with a strict source-generated `JsonSerializerContext` for batch contracts; the query tree is
+  read from a size-capped `JsonDocument` by a hand-written reader that enforces the limits while building nodes.
+  Wire values go through `JsonValues` (strict, enums by name). camelCase on the wire.
+- Inspections: test, sample and src fixtures/public API have `.Global` inspections turned off in `.editorconfig`;
+  anything else gets fixed. Suppress a single deliberate case with `// ReSharper disable once <Id> — <why>`
+  (get the id from `--format=Sarif`).
+- Async: every I/O API is async with a `CancellationToken`; no sync-over-async. `ConfigureAwait(false)` in `src/`.
 - Options: immutable options objects with safe defaults (max depth, max nodes, max page size); validate at
   configuration time.
-- Errors: a dedicated exception type (or result type) carrying a constant message and error code — never the
-  raw query text. The ASP.NET Core package maps it to ProblemDetails (400).
+- Errors: server-side failures carry an error code (constants in Abstractions) + JSON pointer, never raw values;
+  endpoints map them to ProblemDetails. Client maps responses to `RestQueryException` / `RestSaveException` /
+  `RestConcurrencyException`.
 - Time: inject `TimeProvider` if anything needs "now"; tests use `FakeTimeProvider`.
 
-## Sample (`samples/`)
-- Minimal ASP.NET Core API + EF Core (SQLite) showing the library end to end. Not packable. Keep it simple — it's
-  documentation, not a second product.
+## Samples (`samples/`)
+- `Shop.Contracts` (DTOs + configuration), `Shop.Api` (EF Core SQLite, API-key auth, tenant policies,
+  `RequireAuthorization`), `Shop.Console` (client: query, cursor paging, save). `samples/Directory.Build.props` makes
+  them non-packable. Keep them simple — they're documentation, and people copy them.
+- Run: `dotnet run --project samples/Shop.Api --urls http://localhost:5080` (Development, key `dev-acme-key`), then
+  `dotnet run --project samples/Shop.Console`.
 
 ## Tests (`tests/`)
 - `tests/Directory.Build.props` adds xUnit v3, `OutputType=Exe`, `IsPackable=false`, global `using Xunit`.
   Mocks: NSubstitute. Names use underscores (CA1707 off in tests).
-- Unit tests: parser/tokenizer and expression shape (valid and invalid inputs, every limit at and past its boundary).
-- Translation tests: run generated queries against a real EF Core provider (SQLite at minimum) and assert both the
-  results and that the query translated (no client evaluation). LINQ-to-Objects alone isn't proof.
-- Sample API functional tests: `WebApplicationFactory` hitting real endpoints, asserting status codes and
-  ProblemDetails bodies.
+- One test project per package: `RestToLinq.<Package>.UnitTests` (Client uses a stub `HttpMessageHandler`).
+- `RestToLinq.Server.IntegrationTests`: every AST node / operator executed on EF Core SQLite — assert results equal
+  LINQ-to-Objects over the same data **and** that nothing evaluated on the client. LINQ-to-Objects alone isn't proof.
+- `RestToLinq.EndToEnd.Tests`: the server on the ASP.NET Core test server (`UseTestServer`) + the real client (query →
+  modify → save → re-query, status codes, ProblemDetails, typed client exceptions). It links the integration tests'
+  `Shop/*.cs` (entities, DTOs, mappings, policies, seed) instead of copying them.
+- To prove an expression runs in SQL, assert on `ShopServer.Sql` (every executed command), not just on results.
+- Every limit gets a test at and just past its boundary.
 
 ## Commands
 - Test: `dotnet test --solution RestToLinq.slnx` (Microsoft Testing Platform via `global.json`); one project:

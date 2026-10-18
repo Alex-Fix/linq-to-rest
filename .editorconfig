@@ -19,6 +19,23 @@ dotnet_sort_system_directives_first = true
 resharper_unused_member_global_highlighting = none
 resharper_unused_type_global_highlighting = none
 resharper_class_never_instantiated_global_highlighting = none
+resharper_unused_method_return_value_global_highlighting = none
+resharper_unused_auto_property_accessor_global_highlighting = none
+resharper_member_can_be_private_global_highlighting = none
+# Options such as QueryLimits are configured by consumers through Action<T> callbacks, so they keep setters.
+resharper_property_can_be_made_init_only_global_highlighting = none
+
+# Tests and samples: DTOs, entities, configurations, mappings and policies are found by assembly scanning and
+# set by EF Core or JSON, so their members look unused.
+[{tests,samples}/**.cs]
+resharper_unused_member_global_highlighting = none
+resharper_unused_auto_property_accessor_global_highlighting = none
+resharper_auto_property_can_be_made_get_only_global_highlighting = none
+resharper_class_never_instantiated_global_highlighting = none
+resharper_member_can_be_private_global_highlighting = none
+resharper_collection_never_updated_global_highlighting = none
+resharper_property_can_be_made_init_only_global_highlighting = none
+resharper_unused_type_global_highlighting = none
 
 # Tests: underscores make test names readable sentences (Unknown_property_is_rejected).
 [tests/**.cs]

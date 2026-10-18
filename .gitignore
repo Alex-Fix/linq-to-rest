@@ -5,6 +5,8 @@ obj/
 *.user
 TestResults/
 *.db
+*.db-shm
+*.db-wal
 
 # IDE / OS (editor settings are personal; shared style lives in .editorconfig)
 .idea/

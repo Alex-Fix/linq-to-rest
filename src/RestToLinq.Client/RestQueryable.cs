@@ -1,0 +1,18 @@
+using System.Collections;
+using System.Linq.Expressions;
+
+namespace RestToLinq.Client;
+
+/// <summary>A query composed from a <see cref="DtoSet{TDto}"/>.</summary>
+internal sealed class RestQueryable<T>(RestQueryProvider provider, Expression expression) : IOrderedQueryable<T>
+{
+    public Type ElementType => typeof(T);
+
+    public Expression Expression { get; } = expression;
+
+    public IQueryProvider Provider { get; } = provider;
+
+    public IEnumerator<T> GetEnumerator() => throw RestQueryProvider.Synchronous();
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+}
