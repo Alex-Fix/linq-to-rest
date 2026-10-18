@@ -13,7 +13,11 @@ public sealed class ProductPolicy : DtoSetPolicy<ProductDto, Product>
         return product => product.TenantId == tenant;
     }
 
-    protected override void OnInsert(Product entity, PolicyContext context) => entity.TenantId = ApiKeyAuthentication.Tenant(context.User);
+    protected override void OnInsert(Product entity, PolicyContext context)
+    {
+        entity.TenantId = ApiKeyAuthentication.Tenant(context.User);
+        entity.CreatedAt = DateTime.UtcNow;
+    }
 }
 
 public sealed class CategoryPolicy : DtoSetPolicy<CategoryDto, Category>

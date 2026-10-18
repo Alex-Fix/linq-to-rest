@@ -14,6 +14,7 @@ public sealed class ProductMapping : IDtoMapping<ProductDto, Product>
             Price = p.Price,
             Status = p.Status,
             Version = p.Version,
+            CreatedAt = p.CreatedAt,
             CategoryId = p.CategoryId,
             Tags = p.Tags.Select(t => t.Value).ToList(),
             CategoryName = p.Category != null ? p.Category.Name : null,

@@ -13,6 +13,9 @@ public sealed class ProductConfiguration : IDtoTypeConfiguration<ProductDto>
         builder.Property(d => d.Price).IsSortable();
         builder.Property(d => d.Name).IsSortable();
 
+        // Server-owned: set when the product is created.
+        builder.Property(d => d.CreatedAt).IsReadOnly().IsSortable();
+
         // Computed on the server.
         builder.Property(d => d.Tags).IsReadOnly();
         builder.Property(d => d.CategoryName).IsReadOnly();

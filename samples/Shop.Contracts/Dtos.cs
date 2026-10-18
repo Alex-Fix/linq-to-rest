@@ -16,6 +16,7 @@ public sealed class ProductDto : IDto
     public decimal Price { get; set; }
     public ProductStatus Status { get; set; }
     public Guid Version { get; set; }
+    public DateTime CreatedAt { get; set; }
     public int? CategoryId { get; set; }
     public CategoryDto? Category { get; set; }
     public List<string> Tags { get; set; } = [];
