@@ -1,6 +1,6 @@
 # resttolinq
 
-TypeScript client for [RestToLinq](https://github.com/Alex-Fix/rest-to-linq) APIs: typed queries that run on the
+TypeScript client for [RestToLinq](https://github.com/Alex-Fix/linq-to-rest) APIs: typed queries that run on the
 server (filters, sorting, projections, offset and cursor pages) and a unit of work that saves every change in one
 atomic batch. No runtime dependencies; ESM; Node ≥ 20 and modern browsers.
 

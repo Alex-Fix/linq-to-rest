@@ -1,6 +1,6 @@
-# rest-to-linq
+# linq-to-rest
 
-[![ci](https://github.com/Alex-Fix/rest-to-linq/actions/workflows/ci.yml/badge.svg)](https://github.com/Alex-Fix/rest-to-linq/actions/workflows/ci.yml)
+[![ci](https://github.com/Alex-Fix/linq-to-rest/actions/workflows/ci.yml/badge.svg)](https://github.com/Alex-Fix/linq-to-rest/actions/workflows/ci.yml)
 
 RestToLinq covers both ends of a .NET REST API with one set of shared DTOs:
 

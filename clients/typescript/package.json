@@ -6,7 +6,7 @@
   "author": "Alex Papish",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Alex-Fix/rest-to-linq.git",
+    "url": "git+https://github.com/Alex-Fix/linq-to-rest.git",
     "directory": "clients/typescript"
   },
   "type": "module",

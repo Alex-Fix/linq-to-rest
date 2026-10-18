@@ -6,7 +6,7 @@
     <IsPackable>true</IsPackable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>$(MSBuildProjectName)</PackageId>
-    <RepositoryUrl>https://github.com/Alex-Fix/rest-to-linq</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Alex-Fix/linq-to-rest</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Authors>Alex Papish</Authors>
