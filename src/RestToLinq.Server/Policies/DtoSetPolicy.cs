@@ -19,29 +19,31 @@ public abstract class DtoSetPolicy<TDto, TEntity> : IDtoSetPolicy
     /// </summary>
     /// <param name="context">The request.</param>
     /// <returns>The predicate.</returns>
-    public virtual Expression<Func<TEntity, bool>>? Filter(PolicyContext context) => null;
+    protected virtual Expression<Func<TEntity, bool>>? Filter(PolicyContext context) => null;
 
     /// <summary>Returns whether the operation is allowed for this request. Default: allowed.</summary>
     /// <param name="operation">The operation.</param>
     /// <param name="context">The request.</param>
     /// <returns><see langword="true"/> to allow it.</returns>
-    public virtual ValueTask<bool> CanAsync(DtoOperation operation, PolicyContext context) => ValueTask.FromResult(true);
+    protected virtual ValueTask<bool> CanAsync(DtoOperation operation, PolicyContext context) => ValueTask.FromResult(true);
 
     /// <summary>Sets server-owned values on a new entity, after client values were applied.</summary>
     /// <param name="entity">The new entity.</param>
     /// <param name="context">The request.</param>
-    public virtual void OnInsert(TEntity entity, PolicyContext context)
+    protected virtual void OnInsert(TEntity entity, PolicyContext context)
     {
     }
 
     /// <summary>Sets server-owned values on an updated entity, after client values were applied.</summary>
     /// <param name="entity">The updated entity.</param>
     /// <param name="context">The request.</param>
-    public virtual void OnUpdate(TEntity entity, PolicyContext context)
+    protected virtual void OnUpdate(TEntity entity, PolicyContext context)
     {
     }
 
     LambdaExpression? IDtoSetPolicy.GetFilter(PolicyContext context) => Filter(context);
+
+    ValueTask<bool> IDtoSetPolicy.CanAsync(DtoOperation operation, PolicyContext context) => CanAsync(operation, context);
 
     void IDtoSetPolicy.OnInsert(object entity, PolicyContext context) => OnInsert((TEntity)entity, context);
 
