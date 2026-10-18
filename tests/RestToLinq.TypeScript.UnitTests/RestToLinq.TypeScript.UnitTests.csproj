@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RestToLinq.TypeScript\RestToLinq.TypeScript.csproj" />
+    <ProjectReference Include="..\RestToLinq.TestContracts\RestToLinq.TestContracts.csproj" />
+  </ItemGroup>
+</Project>

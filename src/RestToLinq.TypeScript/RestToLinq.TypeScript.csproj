@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>resttolinq-ts</ToolCommandName>
+    <RootNamespace>RestToLinq.TypeScript</RootNamespace>
+    <Description>Generates TypeScript DTO types and the RestToLinq client model from a .NET contracts assembly.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RestToLinq.Abstractions\RestToLinq.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
