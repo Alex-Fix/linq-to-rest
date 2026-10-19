@@ -48,7 +48,8 @@ artifacts/                      gitignored: all build output (no per-project bin
   (results in `artifacts/benchmarks/`). Changes to hot paths (reading, binding, execution, writing, client
   translation/materialization/tracking) need a before/after run of the affected suites.
 - TypeScript client (`cd clients/typescript`): `npm ci`, then `npm run check` (Prettier, ESLint strict type-checked,
-  `tsc`, Vitest incl. type tests, build) and `npm run test:e2e` (starts `samples/Shop.Api` on SQLite). Request bodies
+  `tsc`, Vitest incl. type tests, build) and `npm run test:e2e` (starts `samples/Shop.Api` on SQLite); `npm run bench` runs the Vitest
+  benchmarks (results in `artifacts/typescript-bench.json`). Request bodies
   must match `tests/golden/*.json`, which the .NET client tests also assert (`LINQTOREST_UPDATE_GOLDEN=1` regenerates
   them from the .NET client). Conventions: `typescript-client` skill.
 - Generated TypeScript models (never edit by hand): `dotnet run --project src/LinqToRest.TypeScript -- --assembly
