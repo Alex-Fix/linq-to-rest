@@ -1,4 +1,4 @@
-using RestToLinq.Client;
+using LinqToRest.Client;
 using Shop.Contracts;
 
 namespace Shop.Console;

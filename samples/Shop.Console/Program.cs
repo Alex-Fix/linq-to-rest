@@ -1,5 +1,5 @@
+using LinqToRest.Client;
 using Microsoft.Extensions.DependencyInjection;
-using RestToLinq.Client;
 using Shop.Console;
 using Shop.Contracts;
 

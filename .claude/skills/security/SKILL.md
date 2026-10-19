@@ -1,13 +1,13 @@
 ---
 name: security
-description: RestToLinq security guidance — threat model for a server that executes untrusted JSON query trees and $batch change sets against EF Core, rules for the DTO boundary, limits, type checking, write binding, policies (authorization, row filter), cursors, error messages, the client's trusted-code exceptions, and dependency auditing, plus a review checklist. Use when reviewing changes for security, adding AST nodes/operators, touching the JSON reader, type checker, member resolution, mapping/reverse binding, batch executor, policies, limits or endpoints, before releases, or when the user asks "is this secure?".
+description: LinqToRest security guidance — threat model for a server that executes untrusted JSON query trees and $batch change sets against EF Core, rules for the DTO boundary, limits, type checking, write binding, policies (authorization, row filter), cursors, error messages, the client's trusted-code exceptions, and dependency auditing, plus a review checklist. Use when reviewing changes for security, adding AST nodes/operators, touching the JSON reader, type checker, member resolution, mapping/reverse binding, batch executor, policies, limits or endpoints, before releases, or when the user asks "is this secure?".
 ---
 
 # Security
 
 The server takes a JSON tree or a change set from an untrusted client and turns it into EF Core queries and writes.
 It must make it impossible to read or write what the DTO model and policies don't expose, and hard to make the
-database suffer. Design: `docs/plans/2026-10-18-resttolinq-v1-design.md` → "Security notes".
+database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` → "Security notes".
 
 ## Threat model
 
@@ -74,7 +74,7 @@ database suffer. Design: `docs/plans/2026-10-18-resttolinq-v1-design.md` → "Se
   log request/response bodies by default.
 
 ### Hosting and sample
-- `MapRestToLinq` returns a `RouteGroupBuilder`; samples show `RequireAuthorization()` and a tenant policy — people
+- `MapLinqToRest` returns a `RouteGroupBuilder`; samples show `RequireAuthorization()` and a tenant policy — people
   copy samples. No secrets in git; connection strings via user-secrets or environment variables.
 - README documents QUERY-specific concerns: proxy/WAF allow-listing of the method and CORS preflight.
 - `POST /{set}/$query` is the same handler as QUERY. Keep requiring `application/json` on every endpoint: it forces a

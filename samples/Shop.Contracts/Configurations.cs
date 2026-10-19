@@ -1,4 +1,4 @@
-using RestToLinq.Modeling;
+using LinqToRest.Modeling;
 
 namespace Shop.Contracts;
 

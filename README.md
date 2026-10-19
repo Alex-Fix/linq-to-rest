@@ -1,8 +1,8 @@
-# rest-to-linq
+# linq-to-rest
 
-[![ci](https://github.com/Alex-Fix/rest-to-linq/actions/workflows/ci.yml/badge.svg)](https://github.com/Alex-Fix/rest-to-linq/actions/workflows/ci.yml)
+[![ci](https://github.com/Alex-Fix/linq-to-rest/actions/workflows/ci.yml/badge.svg)](https://github.com/Alex-Fix/linq-to-rest/actions/workflows/ci.yml)
 
-RestToLinq covers both ends of a .NET REST API with one set of shared DTOs:
+LinqToRest covers both ends of a .NET REST API with one set of shared DTOs:
 
 - **Client** — write LINQ and unit-of-work code against a `RestDataContext`. Queries are translated into a JSON
   expression tree and sent with HTTP `QUERY`; `SaveChangesAsync` sends every insert, update and delete as one
@@ -24,17 +24,17 @@ shop.Products.Add(new ProductDto { Name = "Cube", Price = 9.5m, Category = puzzl
 await shop.SaveChangesAsync();      // one atomic batch
 ```
 
-Design and rationale: [`docs/plans/2026-10-18-resttolinq-v1-design.md`](docs/plans/2026-10-18-resttolinq-v1-design.md).
+Design and rationale: [`docs/plans/2026-10-18-linqtorest-v1-design.md`](docs/plans/2026-10-18-linqtorest-v1-design.md).
 
 ## Packages
 
 | Package | Contents | Dependencies |
 |---|---|---|
-| `RestToLinq.Abstractions` | `IDto`, the EF-style DTO model builder, query tree and wire contracts | BCL only |
-| `RestToLinq.Client` | `RestDataContext`, `DtoSet<T>`, LINQ provider, change tracking | `Microsoft.Extensions.Http` |
-| `RestToLinq.Server` | DTO → entity mappings, query and batch execution, policies, endpoints | EF Core, ASP.NET Core |
-| `RestToLinq.TypeScript` | `resttolinq-ts` .NET tool: generates the TypeScript model from your contracts | — |
-| npm `resttolinq` | TypeScript client: typed queries and unit of work (see [its README](clients/typescript/README.md)) | none |
+| `LinqToRest.Abstractions` | `IDto`, the EF-style DTO model builder, query tree and wire contracts | BCL only |
+| `LinqToRest.Client` | `RestDataContext`, `DtoSet<T>`, LINQ provider, change tracking | `Microsoft.Extensions.Http` |
+| `LinqToRest.Server` | DTO → entity mappings, query and batch execution, policies, endpoints | EF Core, ASP.NET Core |
+| `LinqToRest.TypeScript` | `linqtorest-ts` .NET tool: generates the TypeScript model from your contracts | — |
+| npm `linqtorest` | TypeScript client: typed queries and unit of work (see [its README](clients/typescript/README.md)) | none |
 
 Targets .NET 10 (`HttpMethod.Query` and `HttpMethods.Query` are built in).
 
@@ -88,13 +88,13 @@ public sealed class ProductMapping : IDtoMapping<ProductDto, Product>
     }
 }
 
-builder.Services.AddRestToLinq(model, o => o
+builder.Services.AddLinqToRest(model, o => o
     .UseDbContext<ShopDbContext>()
     .AddMappingsFromAssembly(typeof(ProductMapping).Assembly)
     .AddPolicy<ProductPolicy>()
     .Limits(l => l.MaxNodes = 200));
 
-app.MapRestToLinq("/api").RequireAuthorization();   // QUERY /api/{set}, POST /api/{set}/$query, POST /api/$batch
+app.MapLinqToRest("/api").RequireAuthorization();   // QUERY /api/{set}, POST /api/{set}/$query, POST /api/$batch
 ```
 
 Mappings are validated at startup: every member must be assigned, and writable members, keys and tokens must be
@@ -146,7 +146,7 @@ date parts, `Any`/`All`/`Count`/`Sum`/`Min`/`Max`/`Average`/`Select`/`Where` on 
 | `ToCursorPageAsync` | One keyset page with `NextCursor` (and optionally `TotalCount`). |
 | `AsAsyncEnumerable` | Follows cursor pages to the end. |
 | `FirstAsync`, `SingleAsync`, `CountAsync`, `AnyAsync` (+ `OrDefault`, `LongCount`, predicate overloads) | Fetch only what they need. |
-| `Include`, `After`, `AsNoTracking` | RestToLinq operators. |
+| `Include`, `After`, `AsNoTracking` | LinqToRest operators. |
 
 Queries never run synchronously. Full-DTO results are tracked (identity map); projections aren't. Change tracked DTOs
 and call `SaveChangesAsync`: inserts get their generated keys, every saved DTO gets its new concurrency token and
@@ -155,7 +155,7 @@ computed members. Failures throw `RestSaveException` / `RestConcurrencyException
 ### 4. TypeScript client
 
 ```sh
-dotnet resttolinq-ts --assembly Shop.Contracts.dll --name Shop --out web/src/shop.generated.ts
+dotnet linqtorest-ts --assembly Shop.Contracts.dll --name Shop --out web/src/shop.generated.ts
 ```
 
 ```ts
@@ -231,7 +231,7 @@ providers order `NULL` differently.
 
 ## Databases
 
-Every query and batch test runs on **SQLite** and **PostgreSQL**. RestToLinq only builds standard EF Core
+Every query and batch test runs on **SQLite** and **PostgreSQL**. LinqToRest only builds standard EF Core
 expressions, so other EF Core providers should work, but these two are the ones verified.
 
 **`DateTime` values:**
@@ -270,9 +270,9 @@ only, as the tests and sample do.
 ## Development
 
 ```sh
-dotnet test --solution RestToLinq.slnx                       # unit tests, plus integration and end-to-end tests on SQLite and PostgreSQL
-dotnet format RestToLinq.slnx --verify-no-changes
-dotnet tool restore && dotnet jb inspectcode RestToLinq.slnx --format=Text --output=- --no-build
+dotnet test --solution LinqToRest.slnx                       # unit tests, plus integration and end-to-end tests on SQLite and PostgreSQL
+dotnet format LinqToRest.slnx --verify-no-changes
+dotnet tool restore && dotnet jb inspectcode LinqToRest.slnx --format=Text --output=- --no-build
 
 docker compose -f samples/docker-compose.yml up -d                   # PostgreSQL for the sample
 dotnet run --project samples/Shop.Api --urls http://localhost:5080   # Development: API key dev-acme-key, Scalar at /scalar/v1
@@ -283,7 +283,7 @@ dotnet run --project samples/Shop.Console
 ```
 
 The PostgreSQL tests start a throwaway container with Testcontainers, so they need Docker. Without it they are
-reported as **skipped**, with the reason. `RESTTOLINQ_REQUIRE_POSTGRES=1` makes that a failure instead, which is how CI
+reported as **skipped**, with the reason. `LINQTOREST_REQUIRE_POSTGRES=1` makes that a failure instead, which is how CI
 runs them. CI (`.github/workflows/ci.yml`) also checks formatting, ReSharper inspections and vulnerable packages on
 every push to `main` and every pull request.
 

@@ -9,7 +9,7 @@ const repository = new URL("../../../", import.meta.url).pathname;
 
 /** Starts samples/Shop.Api on SQLite with a throwaway database for the end-to-end tests. */
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
-  const directory = mkdtempSync(join(tmpdir(), "resttolinq-e2e-"));
+  const directory = mkdtempSync(join(tmpdir(), "linqtorest-e2e-"));
   const api: ChildProcess = spawn(
     "dotnet",
     [

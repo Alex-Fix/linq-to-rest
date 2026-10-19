@@ -2,11 +2,11 @@
   "name": "shop-ts-sample",
   "private": true,
   "type": "module",
-  "description": "RestToLinq TypeScript sample: run samples/Shop.Api first, then `npm start`.",
+  "description": "LinqToRest TypeScript sample: run samples/Shop.Api first, then `npm start`.",
   "scripts": {
     "start": "node main.ts"
   },
   "dependencies": {
-    "resttolinq": "file:../../clients/typescript"
+    "linqtorest": "file:../../clients/typescript"
   }
 }

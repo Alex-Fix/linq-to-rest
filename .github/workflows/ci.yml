@@ -20,7 +20,7 @@ jobs:
       DOTNET_NOLOGO: "1"
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       # The runners have Docker: missing PostgreSQL is a failure here, not a skip.
-      RESTTOLINQ_REQUIRE_POSTGRES: "1"
+      LINQTOREST_REQUIRE_POSTGRES: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -31,17 +31,17 @@ jobs:
       - name: Restore
         run: |
           dotnet tool restore
-          dotnet restore RestToLinq.slnx
+          dotnet restore LinqToRest.slnx
 
       - name: Build (warnings are errors)
-        run: dotnet build RestToLinq.slnx -c Release --no-restore
+        run: dotnet build LinqToRest.slnx -c Release --no-restore
 
       - name: Format
-        run: dotnet format RestToLinq.slnx --verify-no-changes --no-restore
+        run: dotnet format LinqToRest.slnx --verify-no-changes --no-restore
 
       - name: Inspections
         run: |
-          dotnet jb inspectcode RestToLinq.slnx --no-build --properties:Configuration=Release \
+          dotnet jb inspectcode LinqToRest.slnx --no-build --properties:Configuration=Release \
             --format=Sarif --output=artifacts/inspect.sarif
           count=$(jq '[.runs[].results[]] | length' artifacts/inspect.sarif)
           if [ "$count" -gt 0 ]; then
@@ -52,14 +52,14 @@ jobs:
 
       - name: Vulnerable packages
         run: |
-          dotnet list RestToLinq.slnx package --vulnerable --include-transitive | tee artifacts/vulnerable.txt
+          dotnet list LinqToRest.slnx package --vulnerable --include-transitive | tee artifacts/vulnerable.txt
           if grep -q "has the following vulnerable packages" artifacts/vulnerable.txt; then
             echo "::error::Vulnerable packages found"
             exit 1
           fi
 
       - name: Test (SQLite and PostgreSQL)
-        run: dotnet test --solution RestToLinq.slnx -c Release --no-build
+        run: dotnet test --solution LinqToRest.slnx -c Release --no-build
 
       - name: Upload inspection report
         if: always()
@@ -113,10 +113,10 @@ jobs:
         working-directory: .
         run: |
           dotnet build samples/Shop.Contracts
-          dotnet build tests/RestToLinq.TestContracts
-          dotnet build src/RestToLinq.TypeScript
-          generate() { dotnet run --project src/RestToLinq.TypeScript --no-build -- "$@" --check; }
-          generate --assembly artifacts/bin/RestToLinq.TestContracts/debug/RestToLinq.TestContracts.dll --name Shop --import ../src/index.js --out clients/typescript/test/shop.generated.ts
+          dotnet build tests/LinqToRest.TestContracts
+          dotnet build src/LinqToRest.TypeScript
+          generate() { dotnet run --project src/LinqToRest.TypeScript --no-build -- "$@" --check; }
+          generate --assembly artifacts/bin/LinqToRest.TestContracts/debug/LinqToRest.TestContracts.dll --name Shop --import ../src/index.js --out clients/typescript/test/shop.generated.ts
           generate --assembly artifacts/bin/Shop.Contracts/debug/Shop.Contracts.dll --name Shop --import ../src/index.js --out clients/typescript/test-e2e/shop.generated.ts
           generate --assembly artifacts/bin/Shop.Contracts/debug/Shop.Contracts.dll --name Shop --out samples/shop-ts/shop.generated.ts
 

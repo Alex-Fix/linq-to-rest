@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The same shop (entities, DTOs, configurations, mappings, policies, seed) as the server integration tests. -->
+    <Compile Include="..\LinqToRest.Server.IntegrationTests\Shop\*.cs" LinkBase="Shop" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
+    <ProjectReference Include="..\..\src\LinqToRest.Server\LinqToRest.Server.csproj" />
+  </ItemGroup>
+</Project>

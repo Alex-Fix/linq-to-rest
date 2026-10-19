@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-RestToLinq covers both ends of a .NET REST API. Design: `docs/plans/2026-10-18-resttolinq-v1-design.md` — read it
+LinqToRest covers both ends of a .NET REST API. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` — read it
 before changing behaviour or the wire contract.
 
 - **Client:** a `RestDataContext` of `DtoSet<T>` (our own `IQueryable<T>` / `IQueryProvider` — never EF's)
@@ -19,12 +19,12 @@ Every query body and batch reaching the server is untrusted — see the `securit
 ## Layout (target — create projects here, don't invent new top-level dirs)
 
 ```
-RestToLinq.slnx                 solution (+ global.json, Directory.Build.props, Directory.Packages.props)
+LinqToRest.slnx                 solution (+ global.json, Directory.Build.props, Directory.Packages.props)
 src/
-  RestToLinq.Abstractions/      IDto, model builder, query AST + JSON contract, batch/cursor contracts (BCL only)
-  RestToLinq.Client/            RestDataContext, DtoSet<T>, RestQueryProvider, change tracker (BCL only)
-  RestToLinq.Server/            DTO→entity mapping, AST → Expression, batch executor, policies, endpoints (EF Core)
-clients/typescript/              npm package "resttolinq": TypeScript client (same wire protocol, golden-tested)
+  LinqToRest.Abstractions/      IDto, model builder, query AST + JSON contract, batch/cursor contracts (BCL only)
+  LinqToRest.Client/            RestDataContext, DtoSet<T>, RestQueryProvider, change tracker (BCL only)
+  LinqToRest.Server/            DTO→entity mapping, AST → Expression, batch executor, policies, endpoints (EF Core)
+clients/typescript/              npm package "linqtorest": TypeScript client (same wire protocol, golden-tested)
 samples/                        Shop.Contracts, Shop.Api (EF Core SQLite, API key), Shop.Console (client) — not packable
 tests/                          xUnit v3, one project per package + Server.IntegrationTests (SQLite) + EndToEnd.Tests
                                 (EndToEnd links the integration tests' Shop/*.cs)
@@ -34,20 +34,20 @@ artifacts/                      gitignored: all build output (no per-project bin
 
 ## Commands
 
-- Test: `dotnet test --solution RestToLinq.slnx` (Microsoft Testing Platform via `global.json`, so pass
+- Test: `dotnet test --solution LinqToRest.slnx` (Microsoft Testing Platform via `global.json`, so pass
   `--solution`/`--project` explicitly). Integration and end-to-end tests run on SQLite and PostgreSQL; PostgreSQL needs
-  Docker (Testcontainers) and is skipped without it, so check the `skipped` count. `RESTTOLINQ_REQUIRE_POSTGRES=1`
+  Docker (Testcontainers) and is skipped without it, so check the `skipped` count. `LINQTOREST_REQUIRE_POSTGRES=1`
   (set in CI) makes a missing PostgreSQL fail instead.
-- Format check: `dotnet format RestToLinq.slnx --verify-no-changes`
+- Format check: `dotnet format LinqToRest.slnx --verify-no-changes`
 - Rider/ReSharper inspections: `dotnet tool restore` once, then
-  `dotnet jb inspectcode RestToLinq.slnx --format=Text --output=- --no-build` (~15s+; drop `--no-build` if not
+  `dotnet jb inspectcode LinqToRest.slnx --format=Text --output=- --no-build` (~15s+; drop `--no-build` if not
   just built; `--include="src/Foo/**"` to narrow)
-- Add a project: `dotnet sln RestToLinq.slnx add --solution-folder src <path>` (or `samples` / `tests`)
+- Add a project: `dotnet sln LinqToRest.slnx add --solution-folder src <path>` (or `samples` / `tests`)
 - TypeScript client (`cd clients/typescript`): `npm ci`, then `npm run check` (Prettier, ESLint strict type-checked,
   `tsc`, Vitest incl. type tests, build) and `npm run test:e2e` (starts `samples/Shop.Api` on SQLite). Request bodies
-  must match `tests/golden/*.json`, which the .NET client tests also assert (`RESTTOLINQ_UPDATE_GOLDEN=1` regenerates
+  must match `tests/golden/*.json`, which the .NET client tests also assert (`LINQTOREST_UPDATE_GOLDEN=1` regenerates
   them from the .NET client). Conventions: `typescript-client` skill.
-- Generated TypeScript models (never edit by hand): `dotnet run --project src/RestToLinq.TypeScript -- --assembly
+- Generated TypeScript models (never edit by hand): `dotnet run --project src/LinqToRest.TypeScript -- --assembly
   <Contracts.dll> --name Shop [--import ../src/index.js] --out <file>`; CI runs it with `--check` for
   `clients/typescript/test`, `clients/typescript/test-e2e` and `samples/shop-ts`.
 

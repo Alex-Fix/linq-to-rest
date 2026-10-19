@@ -4,7 +4,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\RestToLinq.Client\RestToLinq.Client.csproj" />
+    <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
     <ProjectReference Include="..\Shop.Contracts\Shop.Contracts.csproj" />
   </ItemGroup>
 </Project>
