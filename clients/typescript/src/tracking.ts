@@ -28,11 +28,19 @@ export class Entry {
   }
 
   takeSnapshot(): void {
-    this.snapshot = new Map(this.set.members.map((member) => [member.name, copy(this.entity[member.name])]));
-    this.navigationSnapshot = new Map(
-      this.set.navigations.map((navigation) => [navigation.name, copy(this.entity[navigation.name])]),
-    );
+    this.snapshot = snapshotOf(this.entity, this.set.members);
+    this.navigationSnapshot = snapshotOf(this.entity, this.set.navigations);
   }
+}
+
+// A loop rather than new Map(members.map(...)): no [name, value] pair per member and DTO.
+function snapshotOf(entity: Dto, members: readonly { readonly name: string }[]): Map<string, unknown> {
+  const snapshot = new Map<string, unknown>();
+  for (const member of members) {
+    snapshot.set(member.name, copy(entity[member.name]));
+  }
+
+  return snapshot;
 }
 
 function copy(value: unknown): unknown {
