@@ -458,12 +458,13 @@ public static partial class QueryJson
                 throw new ProtocolException(ErrorCodes.LimitExceeded, listLocation, "inListLength");
             }
 
-            var items = new List<LiteralNode>();
-            foreach (var item in list.EnumerateArray())
+            // Items are elements of one clone of the list rather than a clone each.
+            var items = new List<LiteralNode>(list.GetArrayLength());
+            foreach (var item in list.Clone().EnumerateArray())
             {
                 var itemLocation = $"{listLocation}/{items.Count}";
                 items.Add(item.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null
-                    ? new LiteralNode(item.Clone(), itemLocation)
+                    ? new LiteralNode(item, itemLocation)
                     : throw new ProtocolException(ErrorCodes.TypeMismatch, itemLocation));
             }
 
