@@ -160,8 +160,8 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
             source = OrderByKey(source, elementType, elementMapping);
         }
 
-        var select = Expression.Call(typeof(Enumerable), nameof(Enumerable.Select), [elementType, typeof(object[])], source, selector);
-        return Expression.Call(typeof(Enumerable), nameof(Enumerable.ToList), [typeof(object[])], select);
+        var select = Expression.Call(EnumerableMethods.Select.MakeGenericMethod(elementType, typeof(object[])), source, selector);
+        return Expression.Call(EnumerableMethods.ToList.MakeGenericMethod(typeof(object[])), select);
     }
 
     private static Expression OrderByKey(Expression source, Type elementType, SetMapping mapping)
@@ -170,8 +170,8 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
         for (var index = 0; index < mapping.DtoType.Key.Count; index++)
         {
             var key = Expression.Lambda(ExpressionHelpers.Inline(mapping.Bindings[mapping.DtoType.Key[index]], element), element);
-            var method = index == 0 ? nameof(Enumerable.OrderBy) : nameof(Enumerable.ThenBy);
-            source = Expression.Call(typeof(Enumerable), method, [elementType, key.ReturnType], source, key);
+            var method = index == 0 ? EnumerableMethods.OrderBy : EnumerableMethods.ThenBy;
+            source = Expression.Call(method.MakeGenericMethod(elementType, key.ReturnType), source, key);
         }
 
         return source;
@@ -198,7 +198,7 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
         entity.Guard is null ? source : Where(source, Expression.Lambda(entity.Guard, Expression.Parameter(elementType, "_")));
 
     private static MethodCallExpression Where(Expression source, LambdaExpression predicate) =>
-        Expression.Call(typeof(Enumerable), nameof(Enumerable.Where), [predicate.Parameters[0].Type], source, predicate);
+        Expression.Call(EnumerableMethods.Where.MakeGenericMethod(predicate.Parameters[0].Type), source, predicate);
 
     private static BinaryExpression NotNull(Expression value) => Expression.NotEqual(value, Expression.Constant(null, value.Type));
 

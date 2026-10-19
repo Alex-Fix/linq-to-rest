@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using System.Reflection;
 using LinqToRest.Modeling;
 using LinqToRest.Protocol;
 using LinqToRest.Server.Internal;
@@ -8,8 +7,6 @@ namespace LinqToRest.Server.Query;
 
 internal sealed partial class QueryBinder
 {
-    private static readonly MethodInfo[] EnumerableMethods = typeof(Enumerable).GetMethods(BindingFlags.Public | BindingFlags.Static);
-
     public Shape Select(QueryNode node, Scope scope, Row row)
     {
         switch (node)
@@ -89,10 +86,10 @@ internal sealed partial class QueryBinder
         {
             case QueryOperators.Any or QueryOperators.Count:
                 return node.Body is null
-                    ? Expression.Call(typeof(Enumerable), node.Op == QueryOperators.Any ? nameof(Enumerable.Any) : nameof(Enumerable.Count), [elementType], source)
-                    : Expression.Call(typeof(Enumerable), node.Op == QueryOperators.Any ? nameof(Enumerable.Any) : nameof(Enumerable.Count), [elementType], source, Expression.Lambda(Bool(node.Body, inner, MemberUse.Filter), parameter!));
+                    ? Expression.Call((node.Op == QueryOperators.Any ? EnumerableMethods.Any : EnumerableMethods.Count).MakeGenericMethod(elementType), source)
+                    : Expression.Call((node.Op == QueryOperators.Any ? EnumerableMethods.AnyWhere : EnumerableMethods.CountWhere).MakeGenericMethod(elementType), source, Expression.Lambda(Bool(node.Body, inner, MemberUse.Filter), parameter!));
             case QueryOperators.All:
-                return Expression.Call(typeof(Enumerable), nameof(Enumerable.All), [elementType], source, Expression.Lambda(Bool(node.Body!, inner, MemberUse.Filter), parameter!));
+                return Expression.Call(EnumerableMethods.All.MakeGenericMethod(elementType), source, Expression.Lambda(Bool(node.Body!, inner, MemberUse.Filter), parameter!));
         }
 
         parameter ??= Expression.Parameter(elementType, NextParameterName());
@@ -111,9 +108,7 @@ internal sealed partial class QueryBinder
 
             // Sum of nothing is 0; average of nothing is null, so it's computed over a nullable selector.
             target = node.Op == QueryOperators.Avg || Nullable.GetUnderlyingType(selector.Type) is not null ? ExpressionHelpers.MakeNullable(target) : target;
-            var name = node.Op == QueryOperators.Sum ? nameof(Enumerable.Sum) : nameof(Enumerable.Average);
-            var method = EnumerableMethods.Single(method => method.Name == name && method.IsGenericMethodDefinition && method.GetParameters().Length == 2
-                && method.GetParameters()[1].ParameterType.GetGenericArguments()[1] == target);
+            var method = (node.Op == QueryOperators.Sum ? EnumerableMethods.Sum : EnumerableMethods.Average)[target];
             return Expression.Call(method.MakeGenericMethod(elementType), source, Expression.Lambda(Convert(selector, target), parameter));
         }
 
@@ -124,8 +119,7 @@ internal sealed partial class QueryBinder
 
         // Min and max of nothing are null, so the selector is lifted to nullable.
         var lifted = Convert(selector, ExpressionHelpers.MakeNullable(selector.Type));
-        var minMax = EnumerableMethods.Single(method => method.Name == (node.Op == QueryOperators.Min ? nameof(Enumerable.Min) : nameof(Enumerable.Max))
-            && method.IsGenericMethodDefinition && method.GetGenericArguments().Length == 2 && method.GetParameters().Length == 2);
+        var minMax = node.Op == QueryOperators.Min ? EnumerableMethods.Min : EnumerableMethods.Max;
         return Expression.Call(minMax.MakeGenericMethod(elementType, lifted.Type), source, Expression.Lambda(lifted, parameter));
     }
 
@@ -152,7 +146,7 @@ internal sealed partial class QueryBinder
         var source = collection.Source;
         if (node.Where is not null)
         {
-            source = Expression.Call(typeof(Enumerable), nameof(Enumerable.Where), [collection.ElementType], source, Expression.Lambda(Bool(node.Where, inner, MemberUse.Filter), parameter));
+            source = Expression.Call(EnumerableMethods.Where.MakeGenericMethod(collection.ElementType), source, Expression.Lambda(Bool(node.Where, inner, MemberUse.Filter), parameter));
         }
 
         return (source, parameter, inner);

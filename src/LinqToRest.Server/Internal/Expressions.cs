@@ -1,13 +1,9 @@
 using System.Linq.Expressions;
-using System.Reflection;
 
 namespace LinqToRest.Server.Internal;
 
 internal static class ExpressionHelpers
 {
-    private static readonly MethodInfo ContainsDefinition = typeof(Enumerable).GetMethods()
-        .Single(method => method is { Name: nameof(Enumerable.Contains) } && method.GetParameters().Length == 2);
-
     /// <summary>Inlines <paramref name="lambda"/> with its parameter replaced by <paramref name="argument"/>.</summary>
     public static Expression Inline(LambdaExpression lambda, Expression argument) =>
         new ReplaceVisitor(lambda.Parameters[0], argument).Visit(lambda.Body);
@@ -52,7 +48,7 @@ internal static class ExpressionHelpers
     }
 
     public static Expression Contains(Expression list, Expression item) =>
-        Expression.Call(ContainsDefinition.MakeGenericMethod(item.Type), list, item);
+        Expression.Call(EnumerableMethods.Contains.MakeGenericMethod(item.Type), list, item);
 
     public static Expression AndAlso(Expression? left, Expression right) => left is null ? right : Expression.AndAlso(left, right);
 
