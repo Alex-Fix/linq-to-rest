@@ -283,7 +283,7 @@ export class Query<T, P, D> {
   private require(allowed: boolean, name: string): void {
     if (!allowed) {
       throw new Error(
-        `'${name}' isn't supported at this point. RestToLinq queries are where/include/orderBy/thenBy, then select, with after or skip, then take, anywhere after the sort; each at most once except where (orderBy once, then thenBy).`,
+        `'${name}' isn't supported at this point. LinqToRest queries are where/include/orderBy/thenBy, then select, with after or skip, then take, anywhere after the sort; each at most once except where (orderBy once, then thenBy).`,
       );
     }
   }

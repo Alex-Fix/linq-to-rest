@@ -15,7 +15,7 @@ export function literal(value: unknown): Literal {
       return value;
     case "number":
       if (!Number.isFinite(value)) {
-        throw new TypeError("RestToLinq can't send NaN or Infinity.");
+        throw new TypeError("LinqToRest can't send NaN or Infinity.");
       }
 
       return value;
@@ -25,7 +25,7 @@ export function literal(value: unknown): Literal {
       }
 
       if (value instanceof Date) {
-        throw new TypeError("RestToLinq sends dates as ISO 8601 strings, not Date objects. Use value.toISOString().");
+        throw new TypeError("LinqToRest sends dates as ISO 8601 strings, not Date objects. Use value.toISOString().");
       }
 
       break;
@@ -33,5 +33,5 @@ export function literal(value: unknown): Literal {
       break;
   }
 
-  throw new TypeError(`RestToLinq can't send a value of type ${typeof value}.`);
+  throw new TypeError(`LinqToRest can't send a value of type ${typeof value}.`);
 }

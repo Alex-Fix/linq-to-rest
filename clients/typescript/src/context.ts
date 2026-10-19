@@ -50,7 +50,7 @@ export interface EntityEntry<D> {
   setModified(member: WritableKeys<D> & string, modified: boolean): void;
 }
 
-/** A unit of work over a RestToLinq API. Generated contexts add one `DtoSet` per set. */
+/** A unit of work over a LinqToRest API. Generated contexts add one `DtoSet` per set. */
 export interface Context {
   /** Sends every insert, update and delete as one atomic batch; returns the number of operations. */
   saveChanges(options?: CallOptions): Promise<number>;

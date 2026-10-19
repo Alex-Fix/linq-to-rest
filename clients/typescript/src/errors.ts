@@ -1,4 +1,4 @@
-/** The server rejected a query. `code` is one of RestToLinq's stable error codes. */
+/** The server rejected a query. `code` is one of LinqToRest's stable error codes. */
 export class RestQueryError extends Error {
   override readonly name = "RestQueryError";
 
@@ -32,12 +32,12 @@ export class RestConcurrencyError extends RestSaveError {
   override readonly name = "RestConcurrencyError";
 }
 
-/** The API answered with an error that isn't a RestToLinq problem response. */
+/** The API answered with an error that isn't a LinqToRest problem response. */
 export class RestHttpError extends Error {
   override readonly name = "RestHttpError";
 
   constructor(readonly status: number) {
-    super(`The RestToLinq API answered ${String(status)} without a problem response.`);
+    super(`The LinqToRest API answered ${String(status)} without a problem response.`);
   }
 }
 

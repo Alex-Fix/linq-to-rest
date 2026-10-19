@@ -1,7 +1,7 @@
+using LinqToRest.Server.Hosting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
-using RestToLinq.Server.Hosting;
 using Scalar.AspNetCore;
 using Shop.Api;
 using Shop.Contracts;
@@ -32,7 +32,7 @@ builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document,
     document.Security = [new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference(ApiKeyAuthentication.SchemeName, document)] = [] }];
     return Task.CompletedTask;
 }));
-builder.Services.AddRestToLinq(ShopModel.Create(), options => options
+builder.Services.AddLinqToRest(ShopModel.Create(), options => options
     .UseDbContext<ShopDbContext>()
     .AddMappingsFromAssembly(typeof(ProductMapping).Assembly)
     .AddPolicy<ProductPolicy>()
@@ -49,7 +49,7 @@ using (var scope = app.Services.CreateScope())
 
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapRestToLinq("/api").RequireAuthorization();
+app.MapLinqToRest("/api").RequireAuthorization();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

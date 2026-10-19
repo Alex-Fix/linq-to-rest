@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>LinqToRest</RootNamespace>
+    <Description>Shared DTO model, query tree and wire contracts for LinqToRest clients and servers.</Description>
+  </PropertyGroup>
+</Project>

@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <!-- Test projects (named *Tests): xUnit v3 on Microsoft Testing Platform (runs as an executable). Helper libraries
-       such as RestToLinq.TestContracts stay plain class libraries. -->
+       such as LinqToRest.TestContracts stay plain class libraries. -->
   <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('Tests'))">
     <OutputType>Exe</OutputType>
   </PropertyGroup>

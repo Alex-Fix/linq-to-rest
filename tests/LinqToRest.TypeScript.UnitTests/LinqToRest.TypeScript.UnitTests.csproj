@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LinqToRest.TypeScript\LinqToRest.TypeScript.csproj" />
+    <ProjectReference Include="..\LinqToRest.TestContracts\LinqToRest.TestContracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The generator's snapshot: the TypeScript test model must be exactly its output for the test contracts. -->
+    <None Include="..\..\clients\typescript\test\shop.generated.ts" Link="typescript\shop.generated.ts" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

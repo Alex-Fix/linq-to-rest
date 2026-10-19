@@ -1,6 +1,6 @@
 ---
 name: dotnet-conventions
-description: Conventions and scaffolding for the RestToLinq .NET solution — package boundaries (Abstractions / Client / Server), build props, central package management, analyzers, library packaging and public API rules, JSON contract handling, xUnit v3 test layout (unit, SQLite translation, end-to-end), samples, and how to add a project. Use when creating or modifying anything under src/, samples/ or tests/, or any .csproj/.props file.
+description: Conventions and scaffolding for the LinqToRest .NET solution — package boundaries (Abstractions / Client / Server), build props, central package management, analyzers, library packaging and public API rules, JSON contract handling, xUnit v3 test layout (unit, SQLite translation, end-to-end), samples, and how to add a project. Use when creating or modifying anything under src/, samples/ or tests/, or any .csproj/.props file.
 ---
 
 # .NET conventions
@@ -16,9 +16,9 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — pa
 
 ## Packages
 - Versions only in `Directory.Packages.props` (`<PackageVersion>`); `.csproj` uses `<PackageReference Include="X" />`.
-- Free/open-source only. `RestToLinq.Abstractions` and `RestToLinq.Client` reference **BCL only**
+- Free/open-source only. `LinqToRest.Abstractions` and `LinqToRest.Client` reference **BCL only**
   (System.Text.Json, HttpClient; `Microsoft.Extensions.*` abstractions for DI/HttpClientFactory are the one
-  exception for Client). EF Core and ASP.NET Core belong in `RestToLinq.Server`, samples and tests.
+  exception for Client). EF Core and ASP.NET Core belong in `LinqToRest.Server`, samples and tests.
 
 ## Package boundaries
 - `Abstractions`: model (`IDto`, builders, `DtoModel`), AST node types, wire contracts (query, response, batch,
@@ -60,10 +60,10 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — pa
 ## Tests (`tests/`)
 - `tests/Directory.Build.props` adds xUnit v3, `OutputType=Exe`, `IsPackable=false`, global `using Xunit`.
   Mocks: NSubstitute. Names use underscores (CA1707 off in tests).
-- One test project per package: `RestToLinq.<Package>.UnitTests` (Client uses a stub `HttpMessageHandler`).
-- `RestToLinq.Server.IntegrationTests`: every AST node / operator executed on EF Core SQLite — assert results equal
+- One test project per package: `LinqToRest.<Package>.UnitTests` (Client uses a stub `HttpMessageHandler`).
+- `LinqToRest.Server.IntegrationTests`: every AST node / operator executed on EF Core SQLite — assert results equal
   LINQ-to-Objects over the same data **and** that nothing evaluated on the client. LINQ-to-Objects alone isn't proof.
-- `RestToLinq.EndToEnd.Tests`: the server on the ASP.NET Core test server (`UseTestServer`) + the real client (query →
+- `LinqToRest.EndToEnd.Tests`: the server on the ASP.NET Core test server (`UseTestServer`) + the real client (query →
   modify → save → re-query, status codes, ProblemDetails, typed client exceptions). It links the integration tests'
   `Shop/*.cs` (entities, DTOs, mappings, policies, seed) instead of copying them.
 - To prove an expression runs in SQL, assert on `ShopServer.Sql` (every executed command), not just on results.
@@ -77,12 +77,12 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — pa
   defines them differently (collation, null ordering). Then the test uses values both providers agree on.
 
 ## Commands
-- Test: `dotnet test --solution RestToLinq.slnx` (Microsoft Testing Platform via `global.json`); one project:
+- Test: `dotnet test --solution LinqToRest.slnx` (Microsoft Testing Platform via `global.json`); one project:
   `dotnet test --project tests/<Project>`
-- Format: `dotnet format RestToLinq.slnx --verify-no-changes` (drop the flag to fix)
-- Pack: `dotnet pack RestToLinq.slnx -c Release` → `artifacts/package/`
+- Format: `dotnet format LinqToRest.slnx --verify-no-changes` (drop the flag to fix)
+- Pack: `dotnet pack LinqToRest.slnx -c Release` → `artifacts/package/`
 - Rider/ReSharper inspections (tool pinned in `dotnet-tools.json`; `dotnet tool restore` first):
-  `dotnet jb inspectcode RestToLinq.slnx --format=Text --output=- --no-build [--include="src/X/**"]`.
+  `dotnet jb inspectcode LinqToRest.slnx --format=Text --output=- --no-build [--include="src/X/**"]`.
   Default minimum severity is SUGGESTION — fix those too, not just warnings. Text output has no severity column;
   use `--format=Sarif --output=artifacts/inspect.sarif` when severity matters. When Rider is connected,
   `mcp__ide__getDiagnostics` with the file URI gives the live editor highlights faster.
@@ -91,7 +91,7 @@ description: Conventions and scaffolding for the RestToLinq .NET solution — pa
 
 ## Adding a project
 1. Create the `.csproj` under `src/`, `samples/` or `tests/` (no `TargetFramework`/versions — inherited).
-2. `dotnet sln RestToLinq.slnx add --solution-folder src <path>` (or `samples` / `tests`).
+2. `dotnet sln LinqToRest.slnx add --solution-folder src <path>` (or `samples` / `tests`).
 3. Test projects reference production projects as `..\..\src\<Project>\<Project>.csproj` and inherit xUnit from
    `tests/Directory.Build.props`.
 4. Add any new package versions to `Directory.Packages.props`.

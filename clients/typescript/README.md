@@ -1,6 +1,6 @@
-# resttolinq
+# linqtorest
 
-TypeScript client for [RestToLinq](https://github.com/Alex-Fix/linq-to-rest) APIs: typed queries that run on the
+TypeScript client for [LinqToRest](https://github.com/Alex-Fix/linq-to-rest) APIs: typed queries that run on the
 server (filters, sorting, projections, offset and cursor pages) and a unit of work that saves every change in one
 atomic batch. No runtime dependencies; ESM; Node ≥ 20 and modern browsers.
 
@@ -9,8 +9,8 @@ atomic batch. No runtime dependencies; ESM; Node ≥ 20 and modern browsers.
 The DTO types and the client model come from your .NET contracts assembly, so they always match the server:
 
 ```sh
-dotnet tool install RestToLinq.TypeScript   # provides the resttolinq-ts command
-dotnet resttolinq-ts --assembly Shop.Contracts/bin/Debug/net10.0/Shop.Contracts.dll --name Shop --out src/shop.generated.ts
+dotnet tool install LinqToRest.TypeScript   # provides the linqtorest-ts command
+dotnet linqtorest-ts --assembly Shop.Contracts/bin/Debug/net10.0/Shop.Contracts.dll --name Shop --out src/shop.generated.ts
 ```
 
 Add `--check` in CI to fail when the file is stale. The tool warns about `decimal` and `long` members: JavaScript
@@ -19,7 +19,7 @@ numbers keep about 15 significant digits and are exact only up to 2^53.
 ## Query
 
 ```ts
-import { cond } from "resttolinq";
+import { cond } from "linqtorest";
 import { createShop } from "./shop.generated.js";
 
 const shop = createShop({

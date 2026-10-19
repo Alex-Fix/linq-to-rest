@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>linqtorest-ts</ToolCommandName>
+    <RootNamespace>LinqToRest.TypeScript</RootNamespace>
+    <Description>Generates TypeScript DTO types and the LinqToRest client model from a .NET contracts assembly.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LinqToRest.Abstractions\LinqToRest.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

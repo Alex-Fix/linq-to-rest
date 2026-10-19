@@ -1,4 +1,4 @@
-using RestToLinq.Server.Mapping;
+using LinqToRest.Server.Mapping;
 using Shop.Contracts;
 
 namespace Shop.Api;

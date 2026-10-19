@@ -1,6 +1,6 @@
 ---
 name: brainstorming
-description: Turn a rough RestToLinq feature idea into an agreed design before any code is written — clarify with one question at a time, check it against the project's hard constraints (EF Core translatability, untrusted input limits, public API stability), compare 2–3 approaches, then write a design doc to docs/plans/. Use when the user wants to brainstorm, explore, or design a feature (new operator, syntax, integration), or says "let's think about…", "how should we…", "what if…", or starts a new feature without a clear spec.
+description: Turn a rough LinqToRest feature idea into an agreed design before any code is written — clarify with one question at a time, check it against the project's hard constraints (EF Core translatability, untrusted input limits, public API stability), compare 2–3 approaches, then write a design doc to docs/plans/. Use when the user wants to brainstorm, explore, or design a feature (new operator, syntax, integration), or says "let's think about…", "how should we…", "what if…", or starts a new feature without a clear spec.
 ---
 
 # Brainstorming
@@ -10,7 +10,7 @@ config during brainstorming. The output is a design doc.
 
 ## 1. Understand the context first (silently)
 Before asking anything, read what's relevant so you don't ask what the repo already answers:
-- `CLAUDE.md`, `docs/plans/` (earlier designs, especially `2026-10-18-resttolinq-v1-design.md`)
+- `CLAUDE.md`, `docs/plans/` (earlier designs, especially `2026-10-18-linqtorest-v1-design.md`)
 - The code the feature would touch, and `git log --oneline -15`
 
 ## 2. Clarify — one question at a time
@@ -22,7 +22,7 @@ Before asking anything, read what's relevant so you don't ask what the repo alre
 - If an answer touches a concept the user may not know (expression trees, client evaluation, keyset
   pagination, unit of work), explain it plainly in 2–4 lines.
 
-## 3. Check against RestToLinq's hard constraints
+## 3. Check against LinqToRest's hard constraints
 Every idea gets checked against these before approaches are proposed. Name any conflict out loud.
 
 | Constraint | Ask |

@@ -1,7 +1,7 @@
 {
-  "name": "resttolinq",
+  "name": "linqtorest",
   "version": "0.1.0",
-  "description": "Typed queries and a unit of work for RestToLinq APIs: filters, sorting, projections, cursor pages and atomic saves over HTTP QUERY and $batch.",
+  "description": "Typed queries and a unit of work for LinqToRest APIs: filters, sorting, projections, cursor pages and atomic saves over HTTP QUERY and $batch.",
   "license": "MIT",
   "author": "Alex Papish",
   "repository": {

@@ -1,6 +1,6 @@
 ---
 name: typescript-client
-description: Conventions for the RestToLinq TypeScript client (clients/typescript, npm package resttolinq) and its generator (src/RestToLinq.TypeScript, resttolinq-ts) — deferred proxy lambdas and .NET-identical JSON, golden files, the unit of work, generated models, tooling (strict TypeScript, ESLint, Prettier, Vitest type tests, e2e against Shop.Api). Use when changing anything under clients/typescript, samples/shop-ts, tests/golden or src/RestToLinq.TypeScript, or when a protocol change must reach both clients.
+description: Conventions for the LinqToRest TypeScript client (clients/typescript, npm package linqtorest) and its generator (src/LinqToRest.TypeScript, linqtorest-ts) — deferred proxy lambdas and .NET-identical JSON, golden files, the unit of work, generated models, tooling (strict TypeScript, ESLint, Prettier, Vitest type tests, e2e against Shop.Api). Use when changing anything under clients/typescript, samples/shop-ts, tests/golden or src/LinqToRest.TypeScript, or when a protocol change must reach both clients.
 ---
 
 # TypeScript client
@@ -9,10 +9,10 @@ Design: `docs/plans/2026-10-18-typescript-client-design.md` (implementation note
 
 ## Rules
 
-- **Same JSON as the .NET client.** Every query or batch body must equal what `RestToLinq.Client` writes for the
+- **Same JSON as the .NET client.** Every query or batch body must equal what `LinqToRest.Client` writes for the
   equivalent C#. Protocol or translation changes go to both clients in the same change, with a golden case in
   `tests/golden/` (add it to `GoldenTests.cs` and `test/golden.test.ts`, regenerate with
-  `RESTTOLINQ_UPDATE_GOLDEN=1 dotnet test --project tests/RestToLinq.Client.UnitTests`, review the diff).
+  `LINQTOREST_UPDATE_GOLDEN=1 dotnet test --project tests/LinqToRest.Client.UnitTests`, review the diff).
 - **Lambdas are deferred.** Builders store user functions; they only run in `Translator`-driven building, so lambda
   variables are allocated in the .NET order: collection variable first, then its `where` filters, then the body.
   `and`/`or`/`concat` chains flatten like C#'s `&&`/`||`/string `+`. Never build nodes eagerly in a builder method.
@@ -23,9 +23,9 @@ Design: `docs/plans/2026-10-18-typescript-client-design.md` (implementation note
 
 ## Generated models
 
-- `*.generated.ts` files come from `resttolinq-ts`; never edit them, and they're excluded from Prettier and ESLint.
-- `clients/typescript/test/shop.generated.ts` is also the generator's snapshot (`tests/RestToLinq.TypeScript.UnitTests`).
-- After changing `tests/RestToLinq.TestContracts`, `samples/Shop.Contracts` or the emitter, regenerate all three
+- `*.generated.ts` files come from `linqtorest-ts`; never edit them, and they're excluded from Prettier and ESLint.
+- `clients/typescript/test/shop.generated.ts` is also the generator's snapshot (`tests/LinqToRest.TypeScript.UnitTests`).
+- After changing `tests/LinqToRest.TestContracts`, `samples/Shop.Contracts` or the emitter, regenerate all three
   files (commands in CLAUDE.md); CI fails on stale ones.
 
 ## Tooling

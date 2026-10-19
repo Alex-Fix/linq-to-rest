@@ -1,5 +1,5 @@
 using System.Linq.Expressions;
-using RestToLinq.Server.Policies;
+using LinqToRest.Server.Policies;
 using Shop.Contracts;
 
 namespace Shop.Api;

@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <PackageReference Include="NSubstitute" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\RestToLinq.Abstractions\RestToLinq.Abstractions.csproj" />
-  </ItemGroup>
-</Project>

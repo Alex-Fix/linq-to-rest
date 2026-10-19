@@ -13,7 +13,7 @@ SQLite, which isn't the setup people deploy.
 **Goals**
 - Run every server integration and end-to-end test on SQLite **and** PostgreSQL in a plain `dotnet test`.
 - PostgreSQL via Testcontainers. Without Docker the PostgreSQL tests are skipped with a visible reason;
-  `RESTTOLINQ_REQUIRE_POSTGRES=1` makes them fail instead.
+  `LINQTOREST_REQUIRE_POSTGRES=1` makes them fail instead.
 - A GitHub Actions workflow on every push to `main` and every PR: build (warnings as errors), format check,
   ReSharper inspections, vulnerable-package check, full tests with PostgreSQL required.
 - `Shop.Api` on PostgreSQL by default (docker compose), with a SQLite fallback.
@@ -63,7 +63,7 @@ Abstract test classes with one SQLite and one PostgreSQL subclass each; one Post
 
 - `TestProvider { Sqlite, Postgres }`.
 - `PostgresContainer` assembly fixture in `Server.IntegrationTests` and `EndToEnd.Tests`: starts `postgres:17-alpine`
-  once; if Docker isn't available records the reason, or rethrows when `RESTTOLINQ_REQUIRE_POSTGRES=1`.
+  once; if Docker isn't available records the reason, or rethrows when `LINQTOREST_REQUIRE_POSTGRES=1`.
 - `ShopServer.StartAsync(TestProvider provider, …)`: Postgres creates a fresh database `shop_<guid>` in the container
   (or calls `Assert.Skip("Docker isn't available")`); SQLite keeps the in-memory connection.
 - `ShopDbContext`: decimal→double conversions only when `Database.IsSqlite()`; the UTC `DateTime` converter on both
@@ -92,11 +92,11 @@ Abstract test classes with one SQLite and one PostgreSQL subclass each; one Post
 concurrency cancels superseded runs, actions pinned to commit SHAs:
 
 1. checkout; setup-dotnet from `global.json`; `dotnet tool restore`; `dotnet restore`
-2. `dotnet build RestToLinq.slnx -c Release --no-restore`
-3. `dotnet format RestToLinq.slnx --verify-no-changes --no-restore`
+2. `dotnet build LinqToRest.slnx -c Release --no-restore`
+3. `dotnet format LinqToRest.slnx --verify-no-changes --no-restore`
 4. `dotnet jb inspectcode` (SARIF) — fail and print findings if any
 5. `dotnet list package --vulnerable --include-transitive` — fail if any
-6. `dotnet test --solution RestToLinq.slnx -c Release --no-build` with `RESTTOLINQ_REQUIRE_POSTGRES=1`
+6. `dotnet test --solution LinqToRest.slnx -c Release --no-build` with `LINQTOREST_REQUIRE_POSTGRES=1`
 7. upload SARIF and test results as artifacts
 
 ### Docs
@@ -132,7 +132,7 @@ time.
 1. **Npgsql throws `ArgumentException`**, not `InvalidCastException` (checked against a real container): directly
    for query parameters (source `Npgsql.EntityFrameworkCore.PostgreSQL`) and inside `DbUpdateException` on save
    (source `Npgsql`). The guard treats `ArgumentException` or `InvalidCastException` as a provider rejection when it
-   was thrown outside RestToLinq, EF Core, `System.Linq.Expressions` and CoreLib (judged by the exception's
+   was thrown outside LinqToRest, EF Core, `System.Linq.Expressions` and CoreLib (judged by the exception's
    `Source`). Tested with a command interceptor standing in for the provider, on both providers.
 2. **PostgreSQL found one library gap:** collection elements (includes, selected collections, `map` over DTO
    collections) had no defined order. They are now ordered by the element key on every provider.

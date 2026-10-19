@@ -7,7 +7,7 @@ import type { Translator } from "./translator.js";
 export type Build = (t: Translator) => QueryNode;
 
 /** @internal */
-export const BUILD: unique symbol = Symbol("resttolinq.build");
+export const BUILD: unique symbol = Symbol("linqtorest.build");
 
 /** Anything that turns into a query node. */
 export interface Buildable {
