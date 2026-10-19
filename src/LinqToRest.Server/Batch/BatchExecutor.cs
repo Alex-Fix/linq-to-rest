@@ -4,6 +4,7 @@ using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using LinqToRest.Protocol;
 using LinqToRest.Server.Hosting;
+using LinqToRest.Server.Internal;
 using LinqToRest.Server.Mapping;
 using LinqToRest.Server.Policies;
 using LinqToRest.Server.Query;
@@ -14,7 +15,8 @@ namespace LinqToRest.Server.Batch;
 
 /// <summary>
 /// Applies a batch in one transaction: validates every operation against the model, writes only through the direct
-/// member bindings of the default projection, saves once, re-reads changed rows through the projection, and rolls
+/// member bindings of the default projection, saves once, re-reads changed rows through the projection (one query per
+/// set), and rolls
 /// everything back on any failure.
 /// </summary>
 internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPolicies policies)
@@ -58,14 +60,8 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
                 throw new RequestException(StatusCodes.Status409Conflict, ErrorCodes.Conflict, "");
             }
 
-            var results = new List<BatchResult>(batch.Operations.Count);
-            foreach (var operation in batch.Operations)
-            {
-                var applied = _applied[operation.Id];
-                var value = operation.Op == BatchOperationKind.Delete ? null : await ReadBackAsync(applied, cancellationToken).ConfigureAwait(false);
-                results.Add(new BatchResult { Id = operation.Id, Value = value });
-            }
-
+            var values = await ReadBackAsync(batch, cancellationToken).ConfigureAwait(false);
+            var results = batch.Operations.Select(operation => new BatchResult { Id = operation.Id, Value = values.TryGetValue(operation.Id, out var value) ? value : null }).ToList();
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new BatchResponse { Results = results };
         }
@@ -233,34 +229,50 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         }
     }
 
-    private async Task<JsonElement?> ReadBackAsync(Applied applied, CancellationToken cancellationToken)
+    /// <summary>Reads every inserted or updated row back through the default projection, by operation id.</summary>
+    private async Task<Dictionary<string, JsonElement>> ReadBackAsync(BatchRequest batch, CancellationToken cancellationToken)
     {
-        var mapping = applied.Mapping;
-        var key = mapping.DtoType.Key.Select(property => mapping.EntityProperties[property].GetValue(applied.Entity)).ToList();
-        var root = Expression.Parameter(mapping.EntityType, "e");
-        var row = new Row(root);
-        var shape = new QueryBinder(server, policies).DefaultShape(new EntityBound(root, mapping, null, isNullable: false), row, null);
-        var plan = new QueryPlan
+        var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var written = batch.Operations.Where(operation => operation.Op != BatchOperationKind.Delete).Select(operation => _applied[operation.Id]);
+        foreach (var set in written.GroupBy(applied => applied.Mapping))
         {
-            PolicyFilter = policies.Filter(mapping),
-            Filter = mapping.KeyPredicate(key),
-            Sorts = [],
-            Projection = row.ToLambda(),
-            Shape = shape,
-            Mode = PageMode.Offset,
-            Take = 1,
-        };
+            var mapping = set.Key;
+            var keys = set.Select(applied => (IReadOnlyList<object?>)[.. mapping.DtoType.Key.Select(property => mapping.EntityProperties[property].GetValue(applied.Entity))]).ToList();
+            var root = Expression.Parameter(mapping.EntityType, "e");
+            var row = new Row(root);
+            var shape = new QueryBinder(server, policies).DefaultShape(new EntityBound(root, mapping, null, isNullable: false), row, null);
+            var keyIndexes = mapping.DtoType.Key.Select(property => row.Add(ExpressionHelpers.Inline(mapping.Bindings[property], root))).ToList();
+            var plan = new QueryPlan
+            {
+                PolicyFilter = policies.Filter(mapping),
+                Filter = mapping.KeyPredicate(keys),
+                Sorts = [],
+                Projection = row.ToLambda(),
+                Shape = shape,
+                Mode = PageMode.Offset,
+                Take = keys.Count,
+            };
 
-        var result = await mapping.ExecuteAsync(db, plan, cancellationToken).ConfigureAwait(false);
-        if (result.Rows.Count == 0)
-        {
-            return null;
+            var result = await mapping.ExecuteAsync(db, plan, cancellationToken).ConfigureAwait(false);
+            foreach (var (applied, key) in set.Zip(keys))
+            {
+                // Rows the policy filter hides after the write come back without a value.
+                if (result.Rows.FirstOrDefault(candidate => keyIndexes.Select(index => candidate[index]).SequenceEqual(key)) is { } match)
+                {
+                    values[applied.Operation.Id] = Serialize(shape, match);
+                }
+            }
         }
 
+        return values;
+    }
+
+    private static JsonElement Serialize(Shape shape, object?[] row)
+    {
         var buffer = new ArrayBufferWriter<byte>();
-        await using (var writer = new Utf8JsonWriter(buffer))
+        using (var writer = new Utf8JsonWriter(buffer))
         {
-            shape.Write(writer, result.Rows[0]);
+            shape.Write(writer, row);
         }
 
         using var document = JsonDocument.Parse(buffer.WrittenMemory);
