@@ -1,0 +1,251 @@
+@page "/"
+@implements IDisposable
+@inject Session Session
+
+<div class="browse">
+    <aside>
+        <h2>Categories</h2>
+        <CategoryTree Categories="_categories" Selected="_categoryId" OnSelect="SelectCategoryAsync" />
+        <h2>Brands</h2>
+        <ul class="brands">
+            @foreach (var brand in _brands)
+            {
+                <li>
+                    <label>
+                        <input type="checkbox" checked="@_brandIds.Contains(brand.Id)" @onchange="e => ToggleBrandAsync(brand.Id, (bool)e.Value!)" />
+                        @brand.Name <span class="muted">(@brand.ProductCount)</span>
+                    </label>
+                </li>
+            }
+        </ul>
+    </aside>
+    <section>
+        <div class="filters">
+            <input type="search" placeholder="Search products" @bind="_search" @bind:event="oninput" @bind:after="ReloadAsync" />
+            <input type="number" placeholder="Min price" min="0" @bind="_minPrice" @bind:after="ReloadAsync" />
+            <input type="number" placeholder="Max price" min="0" @bind="_maxPrice" @bind:after="ReloadAsync" />
+            <label><input type="checkbox" @bind="_inStockOnly" @bind:after="ReloadAsync" /> In stock</label>
+            <select @bind="_sort" @bind:after="ReloadAsync">
+                <option value="name">Name</option>
+                <option value="price">Price: low to high</option>
+                <option value="priceDesc">Price: high to low</option>
+                <option value="newest">Newest</option>
+            </select>
+        </div>
+        @if (_error is not null)
+        {
+            <p class="error">@_error</p>
+        }
+        @if (_cards is not null)
+        {
+            <p class="muted">@_total products@(Session.IsEditor ? " (including drafts and discontinued)" : "")</p>
+            <ul class="grid">
+                @foreach (var card in _cards)
+                {
+                    <li class="card">
+                        <a href="products/@card.Id">
+                            @if (card.Images.Count > 0)
+                            {
+                                <img src="@card.Images[0]" alt="" />
+                            }
+                            else
+                            {
+                                <div class="noimage"></div>
+                            }
+                            <span class="name">@card.Name</span>
+                        </a>
+                        <span class="price">@card.Price.ToString("F2")</span>
+                        @if (!card.InStock)
+                        {
+                            <span class="badge">Out of stock</span>
+                        }
+                        @if (card.Status != ProductStatus.Active)
+                        {
+                            <span class="badge draft">@card.Status</span>
+                        }
+                    </li>
+                }
+            </ul>
+            @if (_next is not null)
+            {
+                <button type="button" disabled="@_loadingMore" @onclick="LoadMoreAsync">@(_loadingMore ? "Loading…" : "Load more")</button>
+            }
+        }
+    </section>
+</div>
+
+@code {
+    private List<CategoryNode> _categories = [];
+    private List<BrandRow> _brands = [];
+    private List<ProductCard>? _cards;
+    private string? _next;
+    private long? _total;
+    private string? _error;
+    private bool _loadingMore;
+    private CancellationTokenSource? _loading;
+
+    private string _search = "";
+    private int? _categoryId;
+    private readonly List<int> _brandIds = [];
+    private decimal? _minPrice;
+    private decimal? _maxPrice;
+    private bool _inStockOnly;
+    private string _sort = "name";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        await LoadOptionsAsync();
+        await ReloadAsync();
+    }
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+        _loading?.Cancel();
+        _loading?.Dispose();
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadOptionsAsync();
+        await ReloadAsync();
+    });
+
+    // About fifteen categories: one query, assembled into a tree on the client.
+    private async Task LoadOptionsAsync()
+    {
+        var catalog = Session.NewCatalog();
+        _categories = await catalog.Categories
+            .OrderBy(c => c.Name)
+            .Select(c => new CategoryNode(c.Id, c.Name, c.ParentId, c.ProductCount))
+            .Take(200)
+            .ToListAsync();
+        _brands = await catalog.Brands
+            .OrderBy(b => b.Name)
+            .Select(b => new BrandRow(b.Id, b.Name, b.ProductCount))
+            .Take(100)
+            .ToListAsync();
+    }
+
+    /// <summary>The product grid's query: every filter is translated to the server, nothing is filtered here.</summary>
+    private IQueryable<ProductCard> Query()
+    {
+        IQueryable<Product> query = Session.NewCatalog().Products.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var search = _search.Trim();
+            query = query.Where(p => p.Name.Contains(search));
+        }
+
+        if (_categoryId is { } categoryId)
+        {
+            // The selected category and every category below it.
+            var ids = CategoryNode.Descendants(_categories, categoryId);
+            query = query.Where(p => ids.Contains(p.CategoryId));
+        }
+
+        if (_brandIds.Count > 0)
+        {
+            var brands = _brandIds.ToList();
+            query = query.Where(p => brands.Contains(p.BrandId));
+        }
+
+        if (_minPrice is { } min)
+        {
+            query = query.Where(p => p.Price >= min);
+        }
+
+        if (_maxPrice is { } max)
+        {
+            query = query.Where(p => p.Price <= max);
+        }
+
+        if (_inStockOnly)
+        {
+            query = query.Where(p => p.InStock);
+        }
+
+        query = _sort switch
+        {
+            "price" => query.OrderBy(p => p.Price),
+            "priceDesc" => query.OrderByDescending(p => p.Price),
+            "newest" => query.OrderByDescending(p => p.CreatedAt),
+            _ => query.OrderBy(p => p.Name),
+        };
+
+        // Cards only need a few members and the first image, so that's all the server sends.
+        return query
+            .Select(p => new ProductCard(p.Id, p.Name, p.Price, p.InStock, p.Status, p.Images.Where(i => i.SortOrder == 0).Select(i => i.Url).ToList()))
+            .Take(24);
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_loading is not null)
+        {
+            await _loading.CancelAsync();
+            _loading.Dispose();
+        }
+
+        _loading = new CancellationTokenSource();
+        var token = _loading.Token;
+        try
+        {
+            var page = await Query().ToCursorPageAsync(includeTotalCount: true, cancellationToken: token);
+            (_cards, _next, _total, _error) = (page.Items.ToList(), page.NextCursor, page.TotalCount, null);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // A newer reload replaced this one.
+        }
+        catch (Exception exception) when (exception is RestQueryException or HttpRequestException)
+        {
+            _error = Errors.Describe(exception);
+        }
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        if (_next is null || _cards is null)
+        {
+            return;
+        }
+
+        _loadingMore = true;
+        try
+        {
+            var page = await Query().After(_next).ToCursorPageAsync();
+            _cards.AddRange(page.Items);
+            _next = page.NextCursor;
+        }
+        catch (Exception exception) when (exception is RestQueryException or HttpRequestException)
+        {
+            _error = Errors.Describe(exception);
+        }
+        finally
+        {
+            _loadingMore = false;
+        }
+    }
+
+    private Task SelectCategoryAsync(int? categoryId)
+    {
+        _categoryId = categoryId;
+        return ReloadAsync();
+    }
+
+    private Task ToggleBrandAsync(int brandId, bool selected)
+    {
+        if (selected)
+        {
+            _brandIds.Add(brandId);
+        }
+        else
+        {
+            _brandIds.Remove(brandId);
+        }
+
+        return ReloadAsync();
+    }
+}

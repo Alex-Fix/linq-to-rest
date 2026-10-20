@@ -14,6 +14,7 @@
 	<Folder Name="/samples/">
 		<File Path="samples/Directory.Build.props" />
 		<Project Path="samples/Catalog/Catalog.Api/Catalog.Api.csproj" />
+		<Project Path="samples/Catalog/Catalog.Blazor/Catalog.Blazor.csproj" />
 		<Project Path="samples/Catalog/Catalog.Client/Catalog.Client.csproj" />
 		<Project Path="samples/Shop.Api/Shop.Api.csproj" />
 		<Project Path="samples/Shop.Client/Shop.Client.csproj" />

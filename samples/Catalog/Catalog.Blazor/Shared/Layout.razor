@@ -1,0 +1,49 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject Session Session
+
+<header class="header">
+    <a href="" class="brand">Catalog</a>
+    @if (Session.IsEditor)
+    {
+        <nav class="editor-links">
+            <a href="products/new">New product</a>
+            <a href="categories">Categories</a>
+        </nav>
+    }
+    <div class="roles" role="group" aria-label="Signed in as">
+        @foreach (var option in Roles)
+        {
+            var role = option == "anonymous" ? null : option;
+            <button type="button" aria-pressed="@(Session.Role == role)" @onclick="() => SignInAsync(role)">@option</button>
+        }
+        @if (_error is not null)
+        {
+            <span class="error">@_error</span>
+        }
+    </div>
+</header>
+<main>@Body</main>
+
+@code {
+    private static readonly string[] Roles = ["anonymous", "viewer", "editor"];
+    private string? _error;
+
+    protected override void OnInitialized() => Session.Changed += StateHasChanged;
+
+    public void Dispose() => Session.Changed -= StateHasChanged;
+
+    // Anonymous, viewer or editor: switching re-runs the queries, so drafts appear and disappear.
+    private async Task SignInAsync(string? role)
+    {
+        _error = null;
+        try
+        {
+            await Session.SignInAsync(role);
+        }
+        catch (HttpRequestException exception)
+        {
+            _error = $"Sign-in failed: {exception.Message}";
+        }
+    }
+}

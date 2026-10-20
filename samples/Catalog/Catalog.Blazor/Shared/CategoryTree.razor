@@ -1,0 +1,39 @@
+@{
+    var children = Categories.Where(category => category.ParentId == ParentId).ToList();
+}
+@if (children.Count > 0)
+{
+    <ul class="tree">
+        @if (ParentId is null)
+        {
+            <li><button type="button" aria-pressed="@(Selected is null)" @onclick="() => OnSelect.InvokeAsync(null)">All</button></li>
+        }
+        @foreach (var category in children)
+        {
+            <li>
+                <button type="button" aria-pressed="@(Selected == category.Id)" @onclick="() => OnSelect.InvokeAsync(category.Id)">
+                    @category.Name
+                    @if (category.ProductCount > 0)
+                    {
+                        <span class="muted"> (@category.ProductCount)</span>
+                    }
+                </button>
+                <CategoryTree Categories="Categories" Selected="Selected" OnSelect="OnSelect" ParentId="category.Id" />
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CategoryNode> Categories { get; set; } = [];
+
+    [Parameter]
+    public int? Selected { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> OnSelect { get; set; }
+
+    [Parameter]
+    public int? ParentId { get; set; }
+}
