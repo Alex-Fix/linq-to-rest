@@ -68,6 +68,10 @@ jobs:
           generate --model tests/LinqToRest.Server.IntegrationTests/Shop/model.json --namespace LinqToRest.EndToEnd.Tests --context ShopClient --out tests/LinqToRest.EndToEnd.Tests/ShopClient.generated.cs
           generate --model tests/golden/model.json --namespace LinqToRest.Benchmarks.Client --context BenchmarkShop --out benchmarks/LinqToRest.Benchmarks/Client/BenchmarkShop.generated.cs
 
+      # Trimmed like a real deployment, so trimming problems show up here rather than in users' apps.
+      - name: Publish the Blazor catalog sample (Release, trimmed)
+        run: dotnet publish samples/Catalog/Catalog.Blazor -c Release --no-restore -o artifacts/publish/catalog-blazor
+
       # Proves every suite still runs; shared runners are too noisy for timings, so nothing is compared.
       - name: Benchmarks (dry run)
         run: dotnet run -c Release --no-build --project benchmarks/LinqToRest.Benchmarks -- --filter '*' --job dry

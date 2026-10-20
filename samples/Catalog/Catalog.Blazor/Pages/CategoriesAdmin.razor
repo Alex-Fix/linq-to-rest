@@ -1,0 +1,122 @@
+@page "/categories"
+@implements IDisposable
+@inject Session Session
+
+@if (!Session.IsEditor)
+{
+    <p>Sign in as an editor to manage categories.</p>
+}
+else
+{
+    <div class="admin">
+        <h1>Categories</h1>
+        @if (_error is not null)
+        {
+            <p class="error">@_error</p>
+        }
+        <form @onsubmit="AddAsync">
+            <input required placeholder="New category" @bind="_name" />
+            <select @bind="_parentId">
+                <option value="">(top level)</option>
+                @foreach (var row in Sorted)
+                {
+                    <option value="@row.Id">@PathOf(row)</option>
+                }
+            </select>
+            <button type="submit">Add</button>
+        </form>
+        <table>
+            <thead>
+                <tr><th>Category</th><th>Products</th><th>Parent</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Sorted)
+                {
+                    <tr @key="row.Id">
+                        <td><input value="@row.Name" aria-label="Name of @row.Name" @onchange="e => RenameAsync(row, (string?)e.Value)" /></td>
+                        <td>@row.ProductCount</td>
+                        <td>
+                            <select value="@row.ParentId" @onchange="e => MoveAsync(row, e.Value as string)">
+                                <option value="">(top level)</option>
+                                @foreach (var other in Sorted.Where(other => other.Id != row.Id))
+                                {
+                                    <option value="@other.Id">@PathOf(other)</option>
+                                }
+                            </select>
+                        </td>
+                        <td><button type="button" @onclick="() => DeleteAsync(row)">Delete</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<CategoryNode> _rows = [];
+    private string? _error;
+    private string _name = "";
+    private int? _parentId;
+
+    private IEnumerable<CategoryNode> Sorted => _rows.OrderBy(PathOf, StringComparer.CurrentCulture);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        await LoadAsync();
+    }
+
+    public void Dispose() => Session.Changed -= OnSessionChanged;
+
+    private void OnSessionChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadAsync() =>
+        _rows = await Session.NewCatalog().Categories.OrderBy(c => c.Name).Select(c => new CategoryNode(c.Id, c.Name, c.ParentId, c.ProductCount)).Take(200).ToListAsync();
+
+    private string PathOf(CategoryNode row) =>
+        _rows.FirstOrDefault(candidate => candidate.Id == row.ParentId) is { } parent ? $"{PathOf(parent)} / {row.Name}" : row.Name;
+
+    private Task AddAsync() => RunAsync(catalog =>
+    {
+        catalog.Categories.Add(new Category { Name = _name, ParentId = _parentId });
+        _name = "";
+    });
+
+    private Task RenameAsync(CategoryNode row, string? name) =>
+        string.IsNullOrWhiteSpace(name) || name == row.Name ? Task.CompletedTask : RunAsync(catalog => Attach(catalog, row).Name = name.Trim());
+
+    private Task MoveAsync(CategoryNode row, string? parent) =>
+        RunAsync(catalog => Attach(catalog, row).ParentId = string.IsNullOrEmpty(parent) ? null : int.Parse(parent, System.Globalization.CultureInfo.InvariantCulture));
+
+    // Deleting a category that still has products or subcategories is refused by the database (409).
+    private Task DeleteAsync(CategoryNode row) => RunAsync(catalog => catalog.Categories.Remove(Attach(catalog, row)));
+
+    /// <summary>Each action is its own small unit of work: attach the row as shown, change it, save one batch.</summary>
+    private static Category Attach(CatalogContext catalog, CategoryNode row)
+    {
+        var category = new Category { Id = row.Id, Name = row.Name, ParentId = row.ParentId };
+        catalog.Categories.Attach(category);
+        return category;
+    }
+
+    private async Task RunAsync(Action<CatalogContext> change)
+    {
+        _error = null;
+        try
+        {
+            var catalog = Session.NewCatalog();
+            change(catalog);
+            await catalog.SaveChangesAsync();
+        }
+        catch (Exception exception) when (exception is RestSaveException or HttpRequestException)
+        {
+            _error = Errors.Describe(exception);
+        }
+
+        await LoadAsync();
+    }
+}

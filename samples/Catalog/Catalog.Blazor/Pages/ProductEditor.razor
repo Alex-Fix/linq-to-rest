@@ -1,0 +1,280 @@
+@page "/products/new"
+@page "/products/{Id:int}/edit"
+@inject Session Session
+@inject NavigationManager Navigation
+
+@if (!Session.IsEditor)
+{
+    <p>Sign in as an editor to change products.</p>
+}
+else if (_form is null)
+{
+    @if (_error is null)
+    {
+        <p class="muted">Loading…</p>
+    }
+    else
+    {
+        <p class="error">@_error</p>
+    }
+}
+else
+{
+    <form class="editor" @onsubmit="() => SaveAsync(_loaded)">
+        <h1>@(Id is null ? "New product" : $"Edit {_loaded?.Product.Name}")</h1>
+        <label>SKU <input required @bind="_form.Sku" /></label>
+        <label>Name <input required @bind="_form.Name" /></label>
+        <label>Description <textarea @bind="_form.Description"></textarea></label>
+        <label>Price <input type="number" min="0" step="0.01" @bind="_form.Price" /></label>
+        <label>Stock <input type="number" min="0" @bind="_form.Stock" /></label>
+        <label>
+            Status
+            <select @bind="_form.Status">
+                @foreach (var status in Enum.GetValues<ProductStatus>())
+                {
+                    <option value="@status">@status</option>
+                }
+            </select>
+        </label>
+        <label>
+            Category
+            <select @bind="_form.CategoryId">
+                @foreach (var category in _categories)
+                {
+                    <option value="@category.Id">@category.Name</option>
+                }
+            </select>
+        </label>
+        <label>
+            Brand
+            <select @bind="_form.BrandId">
+                @foreach (var brand in _brands)
+                {
+                    <option value="@brand.Id">@brand.Name</option>
+                }
+            </select>
+        </label>
+        <fieldset>
+            <legend>Images (the first one is the card image)</legend>
+            @for (var index = 0; index < _form.Images.Count; index++)
+            {
+                var position = index;
+                var row = _form.Images[position];
+                <div class="image-row" @key="row">
+                    <input type="url" required @bind="row.Url" />
+                    <button type="button" disabled="@(position == 0)" @onclick="() => Move(position, -1)">↑</button>
+                    <button type="button" disabled="@(position == _form.Images.Count - 1)" @onclick="() => Move(position, 1)">↓</button>
+                    <button type="button" @onclick="() => _form.Images.Remove(row)">Remove</button>
+                </div>
+            }
+            <button type="button" @onclick="() => _form.Images.Add(new ImageRow(null, string.Empty))">Add image</button>
+        </fieldset>
+        @if (_error is not null)
+        {
+            <p class="error">@_error</p>
+        }
+        @if (_conflict)
+        {
+            <button type="button" disabled="@_saving" @onclick="ReloadAndReapplyAsync">Reload and reapply my changes</button>
+        }
+        <button type="submit" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
+    </form>
+}
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    private Loaded? _loaded;
+    private EditorForm? _form;
+    private List<CategoryNode> _categories = [];
+    private List<BrandRow> _brands = [];
+    private string? _error;
+    private bool _conflict;
+    private bool _saving;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            var catalog = Session.NewCatalog();
+            _categories = await catalog.Categories.OrderBy(c => c.Name).Select(c => new CategoryNode(c.Id, c.Name, c.ParentId, c.ProductCount)).Take(200).ToListAsync();
+            _brands = await catalog.Brands.OrderBy(b => b.Name).Select(b => new BrandRow(b.Id, b.Name, b.ProductCount)).Take(100).ToListAsync();
+            _loaded = Id is { } id ? await LoadAsync(id) : null;
+            _form = _loaded is null
+                ? new EditorForm { CategoryId = _categories.FirstOrDefault()?.Id ?? 0, BrandId = _brands.FirstOrDefault()?.Id ?? 0 }
+                : EditorForm.Of(_loaded);
+        }
+        catch (Exception exception) when (exception is RestQueryException or HttpRequestException)
+        {
+            _error = Errors.Describe(exception);
+        }
+    }
+
+    private async Task<Loaded?> LoadAsync(int id)
+    {
+        var catalog = Session.NewCatalog();
+        var product = await catalog.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id);
+        return product is null
+            ? null
+            : new Loaded(product, await catalog.ProductImages.AsNoTracking().Where(i => i.ProductId == id).OrderBy(i => i.SortOrder).Take(50).ToListAsync());
+    }
+
+    /// <summary>
+    /// One save is one batch: the product and every image change. The unit of work starts from the rows as the editor
+    /// loaded them, so a change made elsewhere in the meantime fails with a concurrency conflict instead of being lost.
+    /// </summary>
+    private async Task SaveAsync(Loaded? baseline)
+    {
+        (_saving, _error, _conflict) = (true, null, false);
+        try
+        {
+            var catalog = Session.NewCatalog();
+            Product product;
+            var existing = new Dictionary<int, ProductImage>();
+            if (baseline is null)
+            {
+                product = new Product();
+                catalog.Products.Add(product);
+            }
+            else
+            {
+                product = Copy(baseline.Product);
+                catalog.Products.Attach(product);
+                foreach (var image in baseline.Images)
+                {
+                    var tracked = new ProductImage { Id = image.Id, ProductId = image.ProductId, Url = image.Url, SortOrder = image.SortOrder };
+                    catalog.ProductImages.Attach(tracked);
+                    existing.Add(image.Id, tracked);
+                }
+            }
+
+            _form!.ApplyTo(product);
+            for (var sortOrder = 0; sortOrder < _form.Images.Count; sortOrder++)
+            {
+                var row = _form.Images[sortOrder];
+                if (row.Id is { } imageId && existing.Remove(imageId, out var image))
+                {
+                    (image.Url, image.SortOrder) = (row.Url, sortOrder);
+                }
+                else
+                {
+                    // A new image points at the product; for a new product that becomes a ref in the batch.
+                    catalog.ProductImages.Add(new ProductImage { Url = row.Url, SortOrder = sortOrder, Product = product });
+                }
+            }
+
+            foreach (var removed in existing.Values)
+            {
+                catalog.ProductImages.Remove(removed);
+            }
+
+            await catalog.SaveChangesAsync();
+            Navigation.NavigateTo($"products/{product.Id}");
+        }
+        catch (RestSaveException exception)
+        {
+            (_conflict, _error) = (exception is RestConcurrencyException, Errors.Describe(exception));
+        }
+        catch (HttpRequestException exception)
+        {
+            _error = Errors.Describe(exception);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // Keeps what the editor typed and applies it on top of the current row (with its new concurrency token).
+    private async Task ReloadAndReapplyAsync()
+    {
+        if (Id is not { } id)
+        {
+            return;
+        }
+
+        _loaded = await LoadAsync(id);
+        if (_loaded is null)
+        {
+            _error = "The product was deleted meanwhile.";
+            return;
+        }
+
+        await SaveAsync(_loaded);
+    }
+
+    private void Move(int index, int offset)
+    {
+        var row = _form!.Images[index];
+        _form.Images.RemoveAt(index);
+        _form.Images.Insert(index + offset, row);
+    }
+
+    private static Product Copy(Product product) => new()
+    {
+        Id = product.Id,
+        Sku = product.Sku,
+        Name = product.Name,
+        Description = product.Description,
+        Price = product.Price,
+        Status = product.Status,
+        Stock = product.Stock,
+        CategoryId = product.CategoryId,
+        BrandId = product.BrandId,
+        CreatedAt = product.CreatedAt,
+        Version = product.Version,
+    };
+
+    private sealed record Loaded(Product Product, List<ProductImage> Images);
+
+    private sealed class ImageRow(int? id, string url)
+    {
+        public int? Id { get; } = id;
+
+        public string Url { get; set; } = url;
+    }
+
+    private sealed class EditorForm
+    {
+        public string Sku { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public decimal Price { get; set; }
+        public ProductStatus Status { get; set; } = ProductStatus.Draft;
+        public int Stock { get; set; }
+        public int CategoryId { get; set; }
+        public int BrandId { get; set; }
+        public List<ImageRow> Images { get; } = [];
+
+        public static EditorForm Of(Loaded loaded)
+        {
+            var product = loaded.Product;
+            var form = new EditorForm
+            {
+                Sku = product.Sku,
+                Name = product.Name,
+                Description = product.Description ?? "",
+                Price = product.Price,
+                Status = product.Status,
+                Stock = product.Stock,
+                CategoryId = product.CategoryId,
+                BrandId = product.BrandId,
+            };
+            form.Images.AddRange(loaded.Images.Select(image => new ImageRow(image.Id, image.Url)));
+            return form;
+        }
+
+        public void ApplyTo(Product product)
+        {
+            product.Sku = Sku;
+            product.Name = Name;
+            product.Description = Description.Length == 0 ? null : Description;
+            product.Price = Price;
+            product.Status = Status;
+            product.Stock = Stock;
+            product.CategoryId = CategoryId;
+            product.BrandId = BrandId;
+        }
+    }
+}

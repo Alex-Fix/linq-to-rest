@@ -1,0 +1,108 @@
+@page "/products/{Id:int}"
+@implements IDisposable
+@inject Session Session
+
+@if (_error is not null)
+{
+    <p class="error">@_error</p>
+}
+else if (!_loaded)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_product is null)
+{
+    <p>This product doesn't exist, or you can't see it.</p>
+}
+else
+{
+    <article class="product">
+        <p class="muted">@_product.Category?.Name · @_product.Brand?.Name · @_product.Sku</p>
+        <h1>@_product.Name</h1>
+        @if (_product.Status != ProductStatus.Active)
+        {
+            <span class="badge draft">@_product.Status</span>
+        }
+        <p class="price">@_product.Price.ToString("F2")</p>
+        <p>@(_product.InStock ? $"{_product.Stock} in stock" : "Out of stock")</p>
+        @if (_product.Description is not null)
+        {
+            <p>@_product.Description</p>
+        }
+        @if (_product.Tags.Count > 0)
+        {
+            <p class="muted">Tags: @string.Join(", ", _product.Tags)</p>
+        }
+        <div class="gallery">
+            @foreach (var image in _product.Images.OrderBy(i => i.SortOrder))
+            {
+                <img src="@image.Url" alt="" />
+            }
+        </div>
+        @if (Session.IsEditor)
+        {
+            <a href="products/@_product.Id/edit">Edit</a>
+        }
+        @if (_related.Count > 0)
+        {
+            <h2>More in this category</h2>
+            <ul>
+                @foreach (var item in _related)
+                {
+                    <li><a href="products/@item.Id">@item.Name</a> @item.Price.ToString("F2")</li>
+                }
+            </ul>
+        }
+    </article>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Product? _product;
+    private List<RelatedRow> _related = [];
+    private bool _loaded;
+    private string? _error;
+
+    protected override void OnInitialized() => Session.Changed += OnSessionChanged;
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    public void Dispose() => Session.Changed -= OnSessionChanged;
+
+    private void OnSessionChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var catalog = Session.NewCatalog();
+            _product = await catalog.Products
+                .AsNoTracking()
+                .Include(p => p.Category)
+                .Include(p => p.Brand)
+                .Include(p => p.Images)
+                .FirstOrDefaultAsync(p => p.Id == Id);
+            _related = _product is null
+                ? []
+                : await catalog.Products
+                    .Where(p => p.CategoryId == _product.CategoryId && p.Id != _product.Id)
+                    .OrderByDescending(p => p.CreatedAt)
+                    .Select(p => new RelatedRow(p.Id, p.Name, p.Price))
+                    .Take(4)
+                    .ToListAsync();
+            (_loaded, _error) = (true, null);
+        }
+        catch (Exception exception) when (exception is RestQueryException or HttpRequestException)
+        {
+            _error = Errors.Describe(exception);
+        }
+    }
+
+    private sealed record RelatedRow(int Id, string Name, decimal Price);
+}
