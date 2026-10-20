@@ -1,4 +1,5 @@
 using LinqToRest.Client;
+using LinqToRest.Modeling;
 using LinqToRest.Server.IntegrationTests.Shop;
 
 namespace LinqToRest.EndToEnd.Tests;
@@ -206,6 +207,29 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
         var error = await Assert.ThrowsAsync<RestSaveException>(() => readOnly.SaveChangesAsync(Token));
 
         Assert.Equal((403, "forbidden"), (error.Status, error.Code));
+    }
+
+    [Fact]
+    public async Task Writes_the_set_does_not_allow_fail_before_and_on_the_server()
+    {
+        var client = Host.Client();
+        var games = await client.Categories.FirstAsync(c => c.Name == "Games", Token);
+
+        // The generated model knows categories can't be deleted, so nothing is sent.
+        var local = Assert.Throws<InvalidOperationException>(() => client.Categories.Remove(games));
+
+        // A client built from an outdated model sends the delete; the server refuses it the same way.
+        var outdated = Host.Client(model: ClientModel.Bind(
+            RestModel.Parse(ShopClient.Model.Document.ToJson(indented: false).Replace("\"name\":\"categories\",\"type\":\"Category\",\"key\":[\"id\"],\"writes\":[\"insert\",\"update\"]", "\"name\":\"categories\",\"type\":\"Category\",\"key\":[\"id\"],\"writes\":[\"insert\",\"update\",\"delete\"]", StringComparison.Ordinal)),
+            new Dictionary<string, Type> { ["categories"] = typeof(Category), ["orderLines"] = typeof(OrderLine), ["products"] = typeof(Product) }));
+        var stale = await outdated.Categories.FirstAsync(c => c.Name == "Games", Token);
+        outdated.Categories.Remove(stale);
+        var remote = await Assert.ThrowsAsync<RestSaveException>(() => outdated.SaveChangesAsync(Token));
+
+        Assert.Equal("The set 'categories' doesn't allow deletes.", local.Message);
+        Assert.Equal((403, "operation_not_allowed", "/operations/0"), (remote.Status, remote.Code, remote.Location));
+        Assert.Same(stale, Assert.Single(remote.Entities));
+        Assert.Equal("Games", (await Host.Client().Categories.FirstAsync(c => c.Id == games.Id, Token)).Name);
     }
 }
 

@@ -44,7 +44,7 @@ public sealed class ShopHost : IAsyncDisposable
     }
 
     /// <summary>A new unit of work for a tenant.</summary>
-    public ShopClient Client(int tenant = 1, bool readOnly = false)
+    public ShopClient Client(int tenant = 1, bool readOnly = false, ClientModel? model = null)
     {
         var http = _app.GetTestClient();
         http.BaseAddress = new Uri(http.BaseAddress!, "/api/");
@@ -54,7 +54,7 @@ public sealed class ShopHost : IAsyncDisposable
             http.DefaultRequestHeaders.Add("X-Read-Only", "1");
         }
 
-        return new ShopClient(new RestDataContextOptions<ShopClient>(ShopClient.Model, http));
+        return new ShopClient(new RestDataContextOptions<ShopClient>(model ?? ShopClient.Model, http));
     }
 
     public async ValueTask DisposeAsync()
