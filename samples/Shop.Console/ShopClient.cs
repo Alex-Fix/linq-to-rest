@@ -5,6 +5,6 @@ namespace Shop.Console;
 
 public sealed class ShopClient(RestDataContextOptions<ShopClient> options) : RestDataContext(options)
 {
-    public DtoSet<ProductDto> Products => Set<ProductDto>();
-    public DtoSet<CategoryDto> Categories => Set<CategoryDto>();
+    public RestSet<ProductDto> Products => Set<ProductDto>();
+    public RestSet<CategoryDto> Categories => Set<CategoryDto>();
 }

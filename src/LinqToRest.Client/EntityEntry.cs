@@ -1,26 +1,25 @@
 using System.Linq.Expressions;
 using LinqToRest.Client.Tracking;
-using LinqToRest.Modeling;
 
 namespace LinqToRest.Client;
 
-/// <summary>The tracking information of one DTO.</summary>
-/// <typeparam name="TDto">The DTO type.</typeparam>
-public sealed class EntityEntry<TDto>
-    where TDto : class, IDto
+/// <summary>The tracking information of one entity.</summary>
+/// <typeparam name="TEntity">The entity type.</typeparam>
+public sealed class EntityEntry<TEntity>
+    where TEntity : class
 {
     private readonly ChangeTracker _tracker;
-    private readonly DtoType _type;
+    private readonly ClientSet _type;
 
-    internal EntityEntry(ChangeTracker tracker, DtoType type, TDto entity)
+    internal EntityEntry(ChangeTracker tracker, ClientSet type, TEntity entity)
     {
         _tracker = tracker;
         _type = type;
         Entity = entity;
     }
 
-    /// <summary>Gets the DTO.</summary>
-    public TDto Entity { get; }
+    /// <summary>Gets the entity.</summary>
+    public TEntity Entity { get; }
 
     /// <summary>Gets the current state, detecting changes first.</summary>
     public EntityState State
@@ -41,26 +40,26 @@ public sealed class EntityEntry<TDto>
     /// <param name="property">The member selector.</param>
     /// <typeparam name="TProperty">The member type.</typeparam>
     /// <returns>The member entry.</returns>
-    public PropertyEntry Property<TProperty>(Expression<Func<TDto, TProperty>> property)
+    public PropertyEntry Property<TProperty>(Expression<Func<TEntity, TProperty>> property)
     {
         ArgumentNullException.ThrowIfNull(property);
         var name = property.Body is MemberExpression member && member.Expression == property.Parameters[0]
             ? member.Member.Name
             : throw new ArgumentException("The expression must be a direct member access, such as 'd => d.Price'.", nameof(property));
         var dtoProperty = _type.Properties.FirstOrDefault(candidate => candidate.Name == name)
-            ?? throw new ArgumentException($"{_type}.{name} isn't a scalar member of the DTO model.", nameof(property));
+            ?? throw new ArgumentException($"{_type}.{name} isn't a scalar member of the model.", nameof(property));
         return new PropertyEntry(_tracker, Entity, dtoProperty);
     }
 }
 
-/// <summary>The tracking information of one DTO member.</summary>
+/// <summary>The tracking information of one entity member.</summary>
 public sealed class PropertyEntry
 {
     private readonly ChangeTracker _tracker;
     private readonly object _entity;
-    private readonly DtoProperty _property;
+    private readonly ClientProperty _property;
 
-    internal PropertyEntry(ChangeTracker tracker, object entity, DtoProperty property)
+    internal PropertyEntry(ChangeTracker tracker, object entity, ClientProperty property)
     {
         _tracker = tracker;
         _entity = entity;
@@ -86,7 +85,7 @@ public sealed class PropertyEntry
 
         set
         {
-            var entry = _tracker.Find(_entity) ?? throw new InvalidOperationException("The DTO isn't tracked.");
+            var entry = _tracker.Find(_entity) ?? throw new InvalidOperationException("The entity isn't tracked.");
             if (!_property.IsWritable)
             {
                 throw new InvalidOperationException($"{_property} isn't writable.");

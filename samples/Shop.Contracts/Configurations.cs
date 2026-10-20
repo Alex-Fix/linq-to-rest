@@ -1,3 +1,4 @@
+using LinqToRest.Client;
 using LinqToRest.Modeling;
 
 namespace Shop.Contracts;
@@ -30,5 +31,13 @@ public sealed class CategoryConfiguration : IDtoTypeConfiguration<CategoryDto>
 
 public static class ShopModel
 {
-    public static DtoModel Create() => new DtoModelBuilder().ApplyConfigurationsFromAssembly(typeof(ShopModel).Assembly).Build();
+    /// <summary>Shop.Api's exported model bound to these classes.</summary>
+    public static ClientModel Create()
+    {
+        using var stream = typeof(ShopModel).Assembly.GetManifestResourceStream("model.json")!;
+        using var reader = new StreamReader(stream);
+        return ClientModel.Bind(
+            RestModel.Parse(reader.ReadToEnd()),
+            new Dictionary<string, Type> { ["products"] = typeof(ProductDto), ["categories"] = typeof(CategoryDto) });
+    }
 }

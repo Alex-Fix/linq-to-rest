@@ -11,14 +11,17 @@ namespace LinqToRest.EndToEnd.Tests;
 /// <summary>The client's view of the shop API.</summary>
 public sealed class ShopClient(RestDataContextOptions<ShopClient> options) : RestDataContext(options)
 {
-    public DtoSet<ProductDto> Products => Set<ProductDto>();
-    public DtoSet<CategoryDto> Categories => Set<CategoryDto>();
+    public RestSet<ProductDto> Products => Set<ProductDto>();
+    public RestSet<CategoryDto> Categories => Set<CategoryDto>();
 }
 
 /// <summary>A seeded shop server and a factory of client contexts talking to it over the test server.</summary>
 public sealed class ShopHost : IAsyncDisposable
 {
-    private static readonly DtoModel Model = ShopModel.Create();
+    /// <summary>The shop's exported model bound to the client classes, as a generated context binds its own.</summary>
+    private static readonly ClientModel Model = ClientModel.Bind(
+        RestModel.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Shop", "model.json"))),
+        new Dictionary<string, Type> { ["products"] = typeof(ProductDto), ["categories"] = typeof(CategoryDto), ["orderLines"] = typeof(OrderLineDto) });
     private readonly WebApplication _app;
     private readonly IAsyncDisposable? _database;
 

@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <ProjectReference Include="..\..\src\LinqToRest.Abstractions\LinqToRest.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\Shop.Api\model.json" LogicalName="model.json" />
   </ItemGroup>
 </Project>

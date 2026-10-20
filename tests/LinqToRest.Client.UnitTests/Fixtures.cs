@@ -7,13 +7,16 @@ namespace LinqToRest.Client.UnitTests;
 
 public sealed class ShopContext(RestDataContextOptions<ShopContext> options) : RestDataContext(options)
 {
-    public DtoSet<ProductDto> Products => Set<ProductDto>();
-    public DtoSet<CategoryDto> Categories => Set<CategoryDto>();
+    public RestSet<ProductDto> Products => Set<ProductDto>();
+    public RestSet<CategoryDto> Categories => Set<CategoryDto>();
 }
 
 public static class Shop
 {
-    public static readonly DtoModel Model = TestModel.Create();
+    /// <summary>The golden model bound to the test contracts, as a generated context binds its own classes.</summary>
+    public static readonly ClientModel Model = ClientModel.Bind(
+        RestModel.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "golden", "model.json"))),
+        new Dictionary<string, Type> { ["products"] = typeof(ProductDto), ["categories"] = typeof(CategoryDto), ["orderLines"] = typeof(OrderLineDto) });
 
     public static (ShopContext Context, StubHandler Http) Create()
     {

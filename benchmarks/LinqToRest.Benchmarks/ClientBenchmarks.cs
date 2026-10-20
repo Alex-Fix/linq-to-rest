@@ -11,13 +11,15 @@ namespace LinqToRest.Benchmarks;
 
 public sealed class BenchmarkShop(RestDataContextOptions<BenchmarkShop> options) : RestDataContext(options)
 {
-    public DtoSet<ProductDto> Products => Set<ProductDto>();
+    public RestSet<ProductDto> Products => Set<ProductDto>();
 
     /// <summary>A context whose HTTP calls answer with <paramref name="response"/>, without a network.</summary>
     public static BenchmarkShop Create(byte[] response) =>
         new(new RestDataContextOptions<BenchmarkShop>(SharedModel, new HttpClient(new CannedHandler(response)) { BaseAddress = new Uri("https://shop.test/api/") }));
 
-    private static readonly Modeling.DtoModel SharedModel = TestModel.Create();
+    private static readonly ClientModel SharedModel = ClientModel.Bind(
+        Modeling.RestModel.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "golden", "model.json"))),
+        new Dictionary<string, Type> { ["products"] = typeof(ProductDto), ["categories"] = typeof(CategoryDto), ["orderLines"] = typeof(OrderLineDto) });
 
     private sealed class CannedHandler(byte[] response) : HttpMessageHandler
     {

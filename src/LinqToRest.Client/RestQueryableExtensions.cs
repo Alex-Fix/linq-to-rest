@@ -14,18 +14,18 @@ public static class RestQueryableExtensions
     private static readonly MethodInfo AsNoTrackingMethod = typeof(RestQueryableExtensions).GetMethod(nameof(AsNoTracking))!;
     private static readonly NewNode Nothing = new([]);
 
-    /// <summary>Loads a navigation (or a navigation of a navigation, <c>d =&gt; d.Category.Products</c>) with the full DTOs.</summary>
+    /// <summary>Loads a navigation (or a navigation of a navigation, <c>d =&gt; d.Category.Products</c>) with the full entities.</summary>
     /// <param name="source">The query.</param>
     /// <param name="navigation">The navigation.</param>
-    /// <typeparam name="TDto">The DTO type.</typeparam>
+    /// <typeparam name="TEntity">The entity type.</typeparam>
     /// <typeparam name="TProperty">The navigation type.</typeparam>
     /// <returns>The query.</returns>
-    public static IQueryable<TDto> Include<TDto, TProperty>(this IQueryable<TDto> source, Expression<Func<TDto, TProperty>> navigation)
-        where TDto : class, IDto
+    public static IQueryable<TEntity> Include<TEntity, TProperty>(this IQueryable<TEntity> source, Expression<Func<TEntity, TProperty>> navigation)
+        where TEntity : class
     {
         ArgumentNullException.ThrowIfNull(navigation);
-        return Provider(source).CreateQuery<TDto>(
-            Expression.Call(null, IncludeMethod.MakeGenericMethod(typeof(TDto), typeof(TProperty)), source.Expression, Expression.Quote(navigation)));
+        return Provider(source).CreateQuery<TEntity>(
+            Expression.Call(null, IncludeMethod.MakeGenericMethod(typeof(TEntity), typeof(TProperty)), source.Expression, Expression.Quote(navigation)));
     }
 
     /// <summary>Continues keyset pagination after a cursor from <see cref="CursorPage{T}.NextCursor"/>.</summary>
@@ -39,7 +39,7 @@ public static class RestQueryableExtensions
         return Provider(source).CreateQuery<T>(Expression.Call(null, AfterMethod.MakeGenericMethod(typeof(T)), source.Expression, Expression.Constant(cursor)));
     }
 
-    /// <summary>Returns the DTOs without tracking them.</summary>
+    /// <summary>Returns the entities without tracking them.</summary>
     /// <param name="source">The query.</param>
     /// <typeparam name="T">The element type.</typeparam>
     /// <returns>The query.</returns>
@@ -283,6 +283,6 @@ public static class RestQueryableExtensions
     {
         ArgumentNullException.ThrowIfNull(source);
         return source.Provider as RestQueryProvider
-            ?? throw new InvalidOperationException("This operator only works on queries that start from a LinqToRest DtoSet.");
+            ?? throw new InvalidOperationException("This operator only works on queries that start from a LinqToRest RestSet.");
     }
 }

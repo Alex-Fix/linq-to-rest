@@ -56,8 +56,9 @@ artifacts/                      gitignored: all build output (no per-project bin
   benchmarks (results in `artifacts/typescript-bench.json`). Request bodies
   must match `tests/golden/*.json`, which the .NET client tests also assert (`LINQTOREST_UPDATE_GOLDEN=1` regenerates
   them from the .NET client). Conventions: `typescript-client` skill.
-- Model document: `dotnet run --project samples/Shop.Api -- --export-linqtorest-model samples/Shop.Api/model.json`
-  (golden copy for tests: `tests/golden/model.json`).
+- Model document: `dotnet run --project samples/Shop.Api -- --Database:Provider=Sqlite --export-linqtorest-model
+  model.json` (relative to `samples/Shop.Api`). Test models: `LINQTOREST_UPDATE_GOLDEN=1` rewrites `tests/golden/model.json`
+  and `tests/LinqToRest.Server.IntegrationTests/Shop/model.json`.
 - Generated clients (never edit by hand): `dotnet run --project src/LinqToRest.CodeGen -- ts --model <model.json>
   --name Shop [--import ../src/index.js] --out <file>` and `... -- cs --model <model.json> --namespace <ns> --context
   <Name>Context --out <file>`; CI re-exports the model and runs both with `--check` for every checked-in generated

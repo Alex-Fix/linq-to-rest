@@ -3,7 +3,7 @@ using LinqToRest.Modeling;
 
 namespace LinqToRest.Client.Tracking;
 
-/// <summary>Identity map and snapshot-based change detection for the DTOs of one context.</summary>
+/// <summary>Identity map and snapshot-based change detection for the entities of one context.</summary>
 internal sealed class ChangeTracker
 {
     private readonly Dictionary<object, Entry> _entries = new(ReferenceEqualityComparer.Instance);
@@ -14,7 +14,7 @@ internal sealed class ChangeTracker
     public Entry? Find(object entity) => _entries.GetValueOrDefault(entity);
 
     /// <summary>Returns the tracked instance for a queried row, tracking it (and its loaded navigations) if it's new.</summary>
-    public object TrackQueried(object entity, DtoType type)
+    public object TrackQueried(object entity, ClientSet type)
     {
         var key = EntityKey.Of(entity, type);
         if (_identity.TryGetValue(key, out var existing))
@@ -45,8 +45,9 @@ internal sealed class ChangeTracker
         return entity;
     }
 
-    public void Add(object entity, DtoType type)
+    public void Add(object entity, ClientSet type)
     {
+        RequireWrite(type, WriteOperations.Insert, "inserts");
         if (_entries.TryGetValue(entity, out var entry))
         {
             throw new InvalidOperationException($"This {type} is already tracked as {entry.State}.");
@@ -55,7 +56,7 @@ internal sealed class ChangeTracker
         _entries.Add(entity, new Entry(entity, type) { State = EntityState.Added });
     }
 
-    public Entry Attach(object entity, DtoType type)
+    public Entry Attach(object entity, ClientSet type)
     {
         if (_entries.TryGetValue(entity, out var entry))
         {
@@ -75,8 +76,9 @@ internal sealed class ChangeTracker
         return entry;
     }
 
-    public void Update(object entity, DtoType type)
+    public void Update(object entity, ClientSet type)
     {
+        RequireWrite(type, WriteOperations.Update, "updates");
         var entry = Attach(entity, type);
         foreach (var property in type.Properties.Where(property => property.IsWritable))
         {
@@ -84,16 +86,25 @@ internal sealed class ChangeTracker
         }
     }
 
-    public void Remove(object entity, DtoType type)
+    public void Remove(object entity, ClientSet type)
     {
-        var entry = Attach(entity, type);
-        if (entry.State == EntityState.Added)
+        if (Find(entity) is { State: EntityState.Added } added)
         {
-            Detach(entry);
+            Detach(added);
             return;
         }
 
-        entry.State = EntityState.Deleted;
+        RequireWrite(type, WriteOperations.Delete, "deletes");
+        Attach(entity, type).State = EntityState.Deleted;
+    }
+
+    /// <summary>Fails before anything is sent when the set doesn't allow the write (the server would refuse it).</summary>
+    public static void RequireWrite(ClientSet type, WriteOperations operation, string description)
+    {
+        if (!type.Allows(operation))
+        {
+            throw new InvalidOperationException($"The set '{type.SetName}' doesn't allow {description}.");
+        }
     }
 
     public void Detach(Entry entry)
@@ -149,7 +160,7 @@ internal sealed class ChangeTracker
             var navigation = entry.Type.Navigations[index];
             if (navigation.IsCollection && !Entry.SameItems(entry.Accessors.Navigations[index](entry.Entity), entry.NavigationSnapshot[index]))
             {
-                throw new NotSupportedException($"Items were added to or removed from {navigation}. Set the foreign key of the child DTO instead.");
+                throw new NotSupportedException($"Items were added to or removed from {navigation}. Set the foreign key of the child entity instead.");
             }
         }
 
@@ -166,7 +177,7 @@ internal sealed class ChangeTracker
         entry.State = entry.Modified.Count > 0 || entry.References.Count > 0 ? EntityState.Modified : EntityState.Unchanged;
     }
 
-    /// <summary>Copies the key of a referenced DTO into the foreign key, or records a ref to an added one.</summary>
+    /// <summary>Copies the key of a referenced entity into the foreign key, or records a ref to an added one.</summary>
     private void SyncForeignKeys(Entry entry)
     {
         for (var index = 0; index < entry.Type.Navigations.Count; index++)
@@ -196,7 +207,7 @@ internal sealed class ChangeTracker
             }
 
             var targetEntry = Find(target)
-                ?? throw new InvalidOperationException($"{navigation} points at a DTO this context doesn't track. Add or attach it first.");
+                ?? throw new InvalidOperationException($"{navigation} points at an entity this context doesn't track. Add or attach it first.");
             if (targetEntry.State == EntityState.Added)
             {
                 entry.References[foreignKey] = targetEntry;
@@ -210,12 +221,12 @@ internal sealed class ChangeTracker
     }
 }
 
-/// <summary>The tracking state of one DTO.</summary>
-internal sealed class Entry(object entity, DtoType type)
+/// <summary>The tracking state of one entity.</summary>
+internal sealed class Entry(object entity, ClientSet type)
 {
     public object Entity { get; } = entity;
 
-    public DtoType Type { get; } = type;
+    public ClientSet Type { get; } = type;
 
     public Accessors Accessors { get; } = Accessors.For(type);
 
@@ -228,12 +239,12 @@ internal sealed class Entry(object entity, DtoType type)
     public object?[] NavigationSnapshot { get; private set; } = [];
 
     /// <summary>Gets the members marked modified explicitly (Update, IsModified = true).</summary>
-    public HashSet<DtoProperty> Forced { get; } = [];
+    public HashSet<ClientProperty> Forced { get; } = [];
 
-    public HashSet<DtoProperty> Modified { get; } = [];
+    public HashSet<ClientProperty> Modified { get; } = [];
 
-    /// <summary>Gets foreign keys whose value is the key of an added DTO, known only after the save.</summary>
-    public Dictionary<DtoProperty, Entry> References { get; } = [];
+    /// <summary>Gets foreign keys whose value is the key of an added entity, known only after the save.</summary>
+    public Dictionary<ClientProperty, Entry> References { get; } = [];
 
     public void TakeSnapshot()
     {
@@ -241,9 +252,9 @@ internal sealed class Entry(object entity, DtoType type)
         NavigationSnapshot = [.. Accessors.Navigations.Select(get => Copy(get(Entity)))];
     }
 
-    public object? Original(DtoProperty property) => Snapshot[IndexOf(property)];
+    public object? Original(ClientProperty property) => Snapshot[IndexOf(property)];
 
-    public void ResetSnapshot(DtoProperty property)
+    public void ResetSnapshot(ClientProperty property)
     {
         var index = IndexOf(property);
         Snapshot[index] = Copy(Accessors.Properties[index](Entity));
@@ -261,7 +272,7 @@ internal sealed class Entry(object entity, DtoType type)
             ? items.Cast<object?>().SequenceEqual(copy)
             : current is null && snapshot is null;
 
-    private int IndexOf(DtoProperty property)
+    private int IndexOf(ClientProperty property)
     {
         for (var index = 0; index < Type.Properties.Count; index++)
         {
@@ -282,14 +293,14 @@ internal sealed class Entry(object entity, DtoType type)
     };
 }
 
-/// <summary>A DTO type and its key values.</summary>
-internal readonly struct EntityKey(DtoType type, object?[] values) : IEquatable<EntityKey>
+/// <summary>An entity type and its key values.</summary>
+internal readonly struct EntityKey(ClientSet type, object?[] values) : IEquatable<EntityKey>
 {
-    public DtoType Type { get; } = type;
+    public ClientSet Type { get; } = type;
 
     public object?[] Values { get; } = values;
 
-    public static EntityKey Of(object entity, DtoType type) =>
+    public static EntityKey Of(object entity, ClientSet type) =>
         new(type, [.. Accessors.For(type).Key.Select(get => get(entity))]);
 
     public bool Equals(EntityKey other) => Type == other.Type && Values.SequenceEqual(other.Values);

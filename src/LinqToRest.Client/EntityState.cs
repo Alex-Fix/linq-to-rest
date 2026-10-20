@@ -1,6 +1,6 @@
 namespace LinqToRest.Client;
 
-/// <summary>The tracking state of a DTO.</summary>
+/// <summary>The tracking state of an entity.</summary>
 public enum EntityState
 {
     /// <summary>Not tracked.</summary>

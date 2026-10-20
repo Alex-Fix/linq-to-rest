@@ -1,4 +1,3 @@
-using LinqToRest.Modeling;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LinqToRest.Client;
@@ -11,11 +10,11 @@ public static class RestDataContextServiceCollectionExtensions
     /// Returns the client builder, so handlers (authentication, resilience…) are configured the usual way.
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="model">The shared DTO model.</param>
+    /// <param name="model">The model, bound to the client classes.</param>
     /// <param name="configureClient">Configures the client; set its base address to the API root, ending with <c>/</c>.</param>
     /// <typeparam name="TContext">The context type; its constructor takes <see cref="RestDataContextOptions{TContext}"/>.</typeparam>
     /// <returns>The HTTP client builder.</returns>
-    public static IHttpClientBuilder AddRestDataContext<TContext>(this IServiceCollection services, DtoModel model, Action<HttpClient> configureClient)
+    public static IHttpClientBuilder AddRestDataContext<TContext>(this IServiceCollection services, ClientModel model, Action<HttpClient> configureClient)
         where TContext : RestDataContext
     {
         ArgumentNullException.ThrowIfNull(services);

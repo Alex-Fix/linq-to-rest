@@ -11,8 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The integration tests' shop (entities, DTOs, mappings, policies); its test-only database helpers stay out. -->
+    <!-- The integration tests' shop (entities, sets, policies); its test-only database helpers stay out. -->
     <Compile Include="..\..\tests\LinqToRest.Server.IntegrationTests\Shop\*.cs" Exclude="..\..\tests\LinqToRest.Server.IntegrationTests\Shop\ShopDatabase.cs" LinkBase="Shop" />
+    <!-- The golden model the client benchmarks bind to the test contracts. -->
+    <Content Include="..\..\tests\golden\model.json" Link="golden\model.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
