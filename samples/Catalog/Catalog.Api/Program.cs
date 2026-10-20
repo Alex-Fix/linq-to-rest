@@ -21,6 +21,13 @@ builder.Services.AddLinqToRest(options => options
     .AddPolicy<BrandPolicy>()
     .AddPolicy<ProductPolicy>()
     .AddPolicy<ProductImagePolicy>());
+builder.Services.AddDevLoginAuthentication(builder.Configuration);
+
+// The browser apps call the API directly, so they need CORS, including the QUERY method (browsers preflight it).
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
+    .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [])
+    .WithMethods("QUERY", "POST")
+    .WithHeaders("Content-Type", "Authorization")));
 
 var app = builder.Build();
 
@@ -40,8 +47,16 @@ using (var scope = app.Services.CreateScope())
     await CatalogSeed.SeedAsync(db);
 }
 
-// Reads are public; the policies let only editors write. Step 3 adds sign-in and CORS.
+app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Reads are public, so the group doesn't require authorization; the policies let only editors write.
 app.MapLinqToRest("/api");
+if (app.Environment.IsDevelopment())
+{
+    app.MapDevLogin(app.Configuration, app.Services.GetRequiredService<TimeProvider>());
+}
 
 await app.RunAsync();
 

@@ -25,9 +25,10 @@ resharper_member_can_be_private_global_highlighting = none
 # Options such as QueryLimits are configured by consumers through Action<T> callbacks, so they keep setters.
 resharper_property_can_be_made_init_only_global_highlighting = none
 
-# Tests and samples: DTOs, entities, configurations, mappings and policies are found by assembly scanning and
-# set by EF Core or JSON, so their members look unused.
+# Tests and samples: entities, set configurations, policies and response records are found by assembly scanning,
+# set by EF Core or read by JSON serialization, so their members look unused.
 [{tests,samples}/**.cs]
+resharper_not_accessed_positional_property_global_highlighting = none
 resharper_unused_member_global_highlighting = none
 resharper_unused_auto_property_accessor_global_highlighting = none
 resharper_auto_property_can_be_made_get_only_global_highlighting = none
