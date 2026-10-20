@@ -51,6 +51,9 @@ public static class ErrorCodes
     /// <summary>A policy denied the operation.</summary>
     public const string Forbidden = "forbidden";
 
+    /// <summary>The set doesn't allow the batch operation (insert, update or delete).</summary>
+    public const string OperationNotAllowed = "operation_not_allowed";
+
     /// <summary>The batch violates a database constraint (for example a unique index).</summary>
     public const string Conflict = "conflict";
 

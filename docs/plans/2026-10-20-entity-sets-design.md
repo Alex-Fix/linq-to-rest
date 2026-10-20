@@ -133,7 +133,7 @@ app.MapLinqToRest("/api").RequireAuthorization();   // QUERY {set}, POST {set}/$
 }
 ```
 
-- Scalar types are the closed list matching `ScalarTypes`: `bool`, `int8`, `int16`, `int32`, `int64`, `float32`,
+- Scalar types are the closed list matching `ScalarTypes`: `bool`, `uint8`, `int16`, `int32`, `int64`, `float32`,
   `float64`, `decimal`, `string`, `guid`, `dateTime`, `dateTimeOffset`, `dateOnly`, `timeOnly`, `timeSpan`, `bytes`;
   anything else must name an entry of `enums` (enums travel as names, as today).
 - False flags are omitted (`writable`, `sortable`, `nullable`, `collection`); `"filterable": false` is written only
