@@ -151,7 +151,12 @@ Where the implementation differs from the sections above, this list wins.
 3. **`productImages` has a `product` navigation.** Batch `refs` resolve through a navigation whose foreign key is the
    referenced member, so inserting a product and its images in one batch needs `HasOne(i => i.Product)
    .WithForeignKey(i => i.ProductId)` on the image set, not just an exposed `productId`.
-4. **Sample tests** run Catalog.Api's own `Program` through `WebApplicationFactory` (`Microsoft.AspNetCore.Mvc.Testing`)
+4. **Category tree is one flat query.** The TypeScript `include` takes one navigation level at a time, and about fifteen
+   categories fit in one projection (id, name, parentId, productCount), so both apps load them flat and assemble the
+   tree; "category with subcategories" filters with `categoryId in [ids]` computed from that tree.
+5. **Ports:** Catalog.Api listens on 5095 in Development, the React dev server on 5173 and Blazor on 5174 (the CORS
+   origins).
+6. **Sample tests** run Catalog.Api's own `Program` through `WebApplicationFactory` (`Microsoft.AspNetCore.Mvc.Testing`)
    on a throwaway SQLite file; read-only checks share one API, writes get their own.
 
 ## Open questions
