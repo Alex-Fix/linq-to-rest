@@ -366,7 +366,7 @@ internal sealed class NodeTranslator(ClientSet root)
             }
             else
             {
-                throw NotSupported(expression, $"{type.ClrType.Name}.{member.Name} isn't the class of a set in the model.");
+                throw NotSupported(expression, $"{type.ClrType.Name}.{member.Name} isn't a member of the model.");
             }
         }
 

@@ -127,8 +127,11 @@ public sealed class ClientModel
 }
 
 /// <summary>A set bound to its client class.</summary>
-internal sealed class ClientSet(RestSetModel model, Type clrType, IReadOnlyList<ClientProperty> properties)
+internal sealed class ClientSet(RestSetModel model, Type clrType, ClientProperty[] properties)
 {
+    private readonly Dictionary<string, ClientProperty> _properties = properties.ToDictionary(property => property.WireName, StringComparer.Ordinal);
+    private Dictionary<string, ClientNavigation> _navigations = [];
+
     public RestSetModel Model { get; } = model;
 
     public Type ClrType { get; } = clrType;
@@ -137,21 +140,25 @@ internal sealed class ClientSet(RestSetModel model, Type clrType, IReadOnlyList<
 
     public RestPaginationModel Pagination => Model.Pagination;
 
-    public IReadOnlyList<ClientProperty> Properties { get; } = properties;
+    public ClientProperty[] Properties { get; } = properties;
 
-    public IReadOnlyList<ClientNavigation> Navigations { get; private set; } = [];
+    public ClientNavigation[] Navigations { get; private set; } = [];
 
-    public IReadOnlyList<ClientProperty> Key { get; } = [.. model.Key.Select(name => properties.Single(property => property.WireName == name))];
+    public ClientProperty[] Key { get; } = [.. model.Key.Select(name => properties.Single(property => property.WireName == name))];
 
     public ClientProperty? ConcurrencyToken { get; } = properties.SingleOrDefault(property => property.IsConcurrencyToken);
 
-    public ClientProperty? FindProperty(string wireName) => Properties.FirstOrDefault(property => property.WireName == wireName);
+    public ClientProperty? FindProperty(string wireName) => _properties.GetValueOrDefault(wireName);
 
-    public ClientNavigation? FindNavigation(string wireName) => Navigations.FirstOrDefault(navigation => navigation.WireName == wireName);
+    public ClientNavigation? FindNavigation(string wireName) => _navigations.GetValueOrDefault(wireName);
 
     public bool Allows(WriteOperations operations) => Model.Allows(operations);
 
-    public void Initialize(IReadOnlyList<ClientNavigation> navigations) => Navigations = navigations;
+    public void Initialize(ClientNavigation[] navigations)
+    {
+        Navigations = navigations;
+        _navigations = navigations.ToDictionary(navigation => navigation.WireName, StringComparer.Ordinal);
+    }
 
     public override string ToString() => ClrType.Name;
 }

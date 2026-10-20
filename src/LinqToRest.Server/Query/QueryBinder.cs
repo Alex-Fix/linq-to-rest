@@ -165,7 +165,7 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
     private static Expression OrderByKey(Expression source, Type elementType, SetMapping mapping)
     {
         var element = Expression.Parameter(elementType, "k");
-        for (var index = 0; index < mapping.Key.Count; index++)
+        for (var index = 0; index < mapping.Key.Length; index++)
         {
             var key = Expression.Lambda(ExpressionHelpers.Inline(mapping.Key[index].Binding, element), element);
             var method = index == 0 ? EnumerableMethods.OrderBy : EnumerableMethods.ThenBy;

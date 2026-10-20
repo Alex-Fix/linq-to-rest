@@ -25,11 +25,11 @@ internal abstract class SetMapping(RestSetModel model, Type entityType)
 
     public RestPaginationModel Pagination => Model.Pagination;
 
-    public IReadOnlyList<SetProperty> Properties { get; private set; } = [];
+    public SetProperty[] Properties { get; private set; } = [];
 
-    public IReadOnlyList<SetNavigation> Navigations { get; private set; } = [];
+    public SetNavigation[] Navigations { get; private set; } = [];
 
-    public IReadOnlyList<SetProperty> Key { get; private set; } = [];
+    public SetProperty[] Key { get; private set; } = [];
 
     public SetProperty? ConcurrencyToken { get; private set; }
 
@@ -37,7 +37,7 @@ internal abstract class SetMapping(RestSetModel model, Type entityType)
 
     public SetNavigation? FindNavigation(string name) => _navigations.GetValueOrDefault(name);
 
-    public void Initialize(IReadOnlyList<SetProperty> properties, IReadOnlyList<SetNavigation> navigations)
+    public void Initialize(SetProperty[] properties, SetNavigation[] navigations)
     {
         Properties = properties;
         Navigations = navigations;

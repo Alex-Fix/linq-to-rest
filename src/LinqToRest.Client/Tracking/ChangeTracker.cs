@@ -155,7 +155,7 @@ internal sealed class ChangeTracker
             return;
         }
 
-        for (var index = 0; index < entry.Type.Navigations.Count; index++)
+        for (var index = 0; index < entry.Type.Navigations.Length; index++)
         {
             var navigation = entry.Type.Navigations[index];
             if (navigation.IsCollection && !Entry.SameItems(entry.Accessors.Navigations[index](entry.Entity), entry.NavigationSnapshot[index]))
@@ -165,7 +165,7 @@ internal sealed class ChangeTracker
         }
 
         entry.Modified.Clear();
-        for (var index = 0; index < entry.Type.Properties.Count; index++)
+        for (var index = 0; index < entry.Type.Properties.Length; index++)
         {
             var property = entry.Type.Properties[index];
             if (property.IsWritable && (entry.Forced.Contains(property) || !Entry.SameValue(entry.Accessors.Properties[index](entry.Entity), entry.Snapshot[index])))
@@ -180,7 +180,7 @@ internal sealed class ChangeTracker
     /// <summary>Copies the key of a referenced entity into the foreign key, or records a ref to an added one.</summary>
     private void SyncForeignKeys(Entry entry)
     {
-        for (var index = 0; index < entry.Type.Navigations.Count; index++)
+        for (var index = 0; index < entry.Type.Navigations.Length; index++)
         {
             var navigation = entry.Type.Navigations[index];
             if (navigation.IsCollection || navigation.ForeignKey is not { } foreignKey)
@@ -274,7 +274,7 @@ internal sealed class Entry(object entity, ClientSet type)
 
     private int IndexOf(ClientProperty property)
     {
-        for (var index = 0; index < Type.Properties.Count; index++)
+        for (var index = 0; index < Type.Properties.Length; index++)
         {
             if (Type.Properties[index] == property)
             {

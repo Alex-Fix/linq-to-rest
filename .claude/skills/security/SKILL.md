@@ -72,7 +72,8 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
 
 ### Model document
 - Export contains only what the wire exposes: set, type, member and enum names, scalar types, flags. Never entity
-  member names, computed expressions, CLR or assembly names.
+  member names, computed expressions, namespaces or assembly names. A set's type name defaults to the entity's class
+  name; `HasTypeName` changes it when that name shouldn't be public.
 - `GET /$model` is off by default (`WithModelEndpoint()`) and sits under the route group's auth.
 - `RestModel.Parse` enforces size and count limits and rejects unknown keys, types and versions, even though its
   input is developer files.

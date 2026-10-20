@@ -1,5 +1,5 @@
 # Entity sets and generated clients — design
-Status: approved · Date: 2026-10-20
+Status: approved, implemented (see Implementation notes) · Date: 2026-10-20
 
 Supersedes the shared-DTO model of `2026-10-18-linqtorest-v1-design.md` (sections *Shared model*, *Server mapping and
 hosting*, the client registration in *Client queries*) and the assembly input of
@@ -138,7 +138,8 @@ app.MapLinqToRest("/api").RequireAuthorization();   // QUERY {set}, POST {set}/$
   anything else must name an entry of `enums` (enums travel as names, as today).
 - False flags are omitted (`writable`, `sortable`, `nullable`, `collection`); `"filterable": false` is written only
   when opted out. Sets, members and enums are written in a stable order so diffs stay small.
-- No entity member names, computed expressions, CLR or assembly names: only what the wire already exposes.
+- No entity member names, computed expressions, namespaces or assembly names: only what the wire already exposes,
+  plus each set's type name, which defaults to the entity's class name (`HasTypeName` sets another).
 - `RestModel` (Abstractions, BCL-only) parses and writes it, rejecting unknown keys, types and versions, and enforcing
   size/count limits. The server produces its document through it; generated clients embed it.
 
@@ -292,6 +293,12 @@ Where the implementation differs from the sections above, this list wins.
    shadow the linked shop entities). CI checks them with `--check`.
 9. **Formatting:** the model document is indented by two spaces, with every object or array that fits in 120 columns
    on one line, so each property is one line in diffs.
+10. **Performance.** Before/after on the same machine, `main` and this branch alternated twice (DefaultJob): query
+   binding, batch execution, client translation, materialization and change detection are all within ±5% (noise
+   level) with the same or fewer allocations; query execution and the endpoint were unchanged in a `--job short` run.
+   A first run found translation 11% slower and allocating more: the bound model's lists were compiler-generated
+   read-only wrappers (collection expressions typed `IReadOnlyList<T>`), which LINQ can't treat as spans. The
+   server and client model lists are arrays now.
 
 ## Open questions
 

@@ -130,7 +130,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
     private async Task<object> LoadAsync(SetMapping mapping, BatchOperation operation, string location, CancellationToken cancellationToken)
     {
         var key = mapping.Key;
-        if (operation.Key is null || operation.Key.Count != key.Count)
+        if (operation.Key is null || operation.Key.Count != key.Length)
         {
             throw Invalid(ErrorCodes.InvalidBatch, $"{location}/key", operation);
         }
