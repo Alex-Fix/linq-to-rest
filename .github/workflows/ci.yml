@@ -124,19 +124,22 @@ jobs:
       - name: Audit
         run: npm audit --audit-level=high
 
-      # The sample's model must match its sets; the golden test models are checked by the .NET tests.
+      # The samples' models must match their sets; the golden test models are checked by the .NET tests.
       - name: Exported models and generated clients are current
         working-directory: .
         run: |
           dotnet build samples/Shop.Api
+          dotnet build samples/Catalog/Catalog.Api
           dotnet build src/LinqToRest.CodeGen
           dotnet run --project samples/Shop.Api --no-build -- --Database:Provider=Sqlite --export-linqtorest-model model.json
-          git diff --exit-code samples/Shop.Api/model.json
+          dotnet run --project samples/Catalog/Catalog.Api --no-build -- --export-linqtorest-model model.json
+          git diff --exit-code samples/Shop.Api/model.json samples/Catalog/Catalog.Api/model.json
           generate() { dotnet run --project src/LinqToRest.CodeGen --no-build -- "$@" --check; }
           generate ts --model tests/golden/model.json --name Shop --import ../src/index.js --out clients/typescript/test/shop.generated.ts
           generate ts --model samples/Shop.Api/model.json --name Shop --import ../src/index.js --out clients/typescript/test-e2e/shop.generated.ts
           generate ts --model samples/Shop.Api/model.json --name Shop --out samples/shop-ts/shop.generated.ts
           generate cs --model samples/Shop.Api/model.json --namespace Shop.Client --context ShopContext --out samples/Shop.Client/ShopContext.generated.cs
+          generate cs --model samples/Catalog/Catalog.Api/model.json --namespace Catalog.Client --context CatalogContext --out samples/Catalog/Catalog.Client/CatalogContext.generated.cs
 
       - name: End-to-end tests against samples/Shop.Api
         run: npm run test:e2e
