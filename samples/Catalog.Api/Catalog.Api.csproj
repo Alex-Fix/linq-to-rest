@@ -6,6 +6,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\LinqToRest.Server\LinqToRest.Server.csproj" />
+    <ProjectReference Include="..\..\src\LinqToRest.Server\LinqToRest.Server.csproj" />
   </ItemGroup>
 </Project>

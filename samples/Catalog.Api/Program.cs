@@ -32,7 +32,7 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
 var app = builder.Build();
 
 // Writes the model the clients are generated from, then exits:
-// dotnet run --project samples/Catalog/Catalog.Api -- --export-linqtorest-model model.json
+// dotnet run --project samples/Catalog.Api -- --export-linqtorest-model model.json
 // (dotnet run starts in the project directory, so the path is relative to it).
 if (Array.IndexOf(args, "--export-linqtorest-model") is var export and >= 0)
 {

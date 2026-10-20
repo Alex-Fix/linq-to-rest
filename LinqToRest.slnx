@@ -13,12 +13,9 @@
 	</Folder>
 	<Folder Name="/samples/">
 		<File Path="samples/Directory.Build.props" />
-		<Project Path="samples/Catalog/Catalog.Api/Catalog.Api.csproj" />
-		<Project Path="samples/Catalog/Catalog.Blazor/Catalog.Blazor.csproj" />
-		<Project Path="samples/Catalog/Catalog.Client/Catalog.Client.csproj" />
-		<Project Path="samples/Shop.Api/Shop.Api.csproj" />
-		<Project Path="samples/Shop.Client/Shop.Client.csproj" />
-		<Project Path="samples/Shop.Console/Shop.Console.csproj" />
+		<Project Path="samples/Catalog.Api/Catalog.Api.csproj" />
+		<Project Path="samples/Catalog.Blazor/Catalog.Blazor.csproj" />
+		<Project Path="samples/Catalog.Client/Catalog.Client.csproj" />
 	</Folder>
 	<Folder Name="/src/">
 		<File Path="src/Directory.Build.props" />

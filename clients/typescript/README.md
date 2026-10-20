@@ -11,7 +11,7 @@ The row types and the client model come from the model document your LinqToRest 
 
 ```sh
 dotnet tool install LinqToRest.CodeGen   # provides the linqtorest-gen command
-dotnet linqtorest-gen ts --model ../Shop.Api/model.json --name Shop --out src/shop.generated.ts
+dotnet linqtorest-gen ts --model ../Shop.Api/model.json --name Shop --out src/shop.generated.ts   # your API's exported model
 ```
 
 Each set only offers the writes the server allows: `add` needs inserts, `update` updates and `remove` deletes; the

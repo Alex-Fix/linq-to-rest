@@ -27,7 +27,7 @@ shop.Products.Add(new Product { Name = "Cube", Price = 9.5m, Category = puzzles 
 await shop.SaveChangesAsync();      // one atomic batch
 ```
 
-For a realistic app (roles, a category tree, React and Blazor front ends) see [`samples/Catalog`](samples/Catalog/README.md);
+For a realistic app (roles, a category tree, React and Blazor front ends) see [`samples/`](samples/README.md);
 what comes next is in the [roadmap](docs/plans/2026-10-20-roadmap.md).
 
 Design and rationale: [`docs/plans/2026-10-18-linqtorest-v1-design.md`](docs/plans/2026-10-18-linqtorest-v1-design.md),
@@ -115,7 +115,7 @@ if (Array.IndexOf(args, "--export-linqtorest-model") is var export and >= 0)
 ```
 
 ```sh
-dotnet run --project Shop.Api -- --export-linqtorest-model model.json
+dotnet run --project Shop.Api -- --export-linqtorest-model model.json   # relative to the project directory
 dotnet linqtorest-gen cs --model Shop.Api/model.json --namespace Shop.Client --context ShopContext --out Shop.Client/ShopContext.generated.cs
 dotnet linqtorest-gen ts --model Shop.Api/model.json --name Shop --out web/src/shop.generated.ts
 ```
@@ -271,8 +271,7 @@ only, as the tests and sample do.
   app.UseCors();
   ```
 - **OpenAPI**: OpenAPI 3.1 (what ASP.NET Core 10's `AddOpenApi()` generates) can't describe QUERY, so the QUERY route is
-  excluded from descriptions; `POST {set}/$query` and `POST $batch` carry full metadata. The sample serves the
-  document and a Scalar UI at `/scalar/v1` in Development.
+  excluded from descriptions; `POST {set}/$query` and `POST $batch` carry full metadata.
 - **Concurrency tokens** must be EF Core concurrency tokens (`IsConcurrencyToken()` / `IsRowVersion()`); the server
   refuses to start with one that isn't.
 
@@ -283,14 +282,11 @@ dotnet test --solution LinqToRest.slnx                       # unit tests, plus 
 dotnet format LinqToRest.slnx --verify-no-changes
 dotnet tool restore && dotnet jb inspectcode LinqToRest.slnx --format=Text --output=- --no-build
 
-docker compose -f samples/docker-compose.yml up -d                   # PostgreSQL for the sample
-dotnet run --project samples/Shop.Api --urls http://localhost:5080   # Development: API key dev-acme-key, Scalar at /scalar/v1
-dotnet run --project samples/Shop.Api --urls http://localhost:5080 -- --Database:Provider=Sqlite   # without Docker
-dotnet run --project samples/Shop.Console                          # the generated C# client (samples/Shop.Client)
-dotnet run --project samples/Catalog/Catalog.Api                   # the realistic sample: see samples/Catalog/README.md
-dotnet run --project samples/Shop.Api -- --Database:Provider=Sqlite --export-linqtorest-model model.json   # after changing a set
-(cd clients/typescript && npm ci && npm run check && npm run test:e2e)   # TypeScript client
-(cd samples/shop-ts && npm install && npm start)                         # TypeScript sample (API running)
+dotnet run --project samples/Catalog.Api                                 # the sample API (SQLite): see samples/README.md
+dotnet run --project samples/Catalog.Blazor                              # Blazor front end, http://localhost:5174
+(cd samples/catalog-web && npm install && npm run dev)                   # React front end, http://localhost:5173
+dotnet run --project samples/Catalog.Api -- --export-linqtorest-model model.json   # after changing a set
+(cd clients/typescript && npm ci && npm run check && npm run test:e2e)   # TypeScript client (e2e starts the sample API)
 ```
 
 The PostgreSQL tests start a throwaway container with Testcontainers, so they need Docker. Without it they are

@@ -28,9 +28,8 @@ src/
   LinqToRest.Server/            entity sets, AST → Expression, batch executor, policies, endpoints, model export (EF Core)
   LinqToRest.CodeGen/           linqtorest-gen (dotnet tool): C# and TypeScript clients from a model document
 clients/typescript/              npm package "linqtorest": TypeScript client (same wire protocol, golden-tested)
-samples/                        Shop.Api (EF Core SQLite, API key, model.json), Shop.Client (generated), Shop.Console,
-                                shop-ts: the minimal sample. Catalog/ (Catalog.Api, Catalog.Client, Catalog.Blazor,
-                                catalog-web): the realistic one. Not packable
+samples/                        the catalog sample: Catalog.Api (EF Core SQLite, roles, model.json), Catalog.Client
+                                (generated), Catalog.Blazor, catalog-web (React). Not packable
 tests/                          xUnit v3, one project per package + Server.IntegrationTests (SQLite) + EndToEnd.Tests
                                 (EndToEnd links the integration tests' Shop/*.cs) + Samples.Tests (the catalog sample)
 benchmarks/                     BenchmarkDotNet suites for every src/ project (not packable)
@@ -53,12 +52,12 @@ artifacts/                      gitignored: all build output (no per-project bin
   (results in `artifacts/benchmarks/`). Changes to hot paths (reading, binding, execution, writing, client
   translation/materialization/tracking) need a before/after run of the affected suites.
 - TypeScript client (`cd clients/typescript`): `npm ci`, then `npm run check` (Prettier, ESLint strict type-checked,
-  `tsc`, Vitest incl. type tests, build) and `npm run test:e2e` (starts `samples/Shop.Api` on SQLite); `npm run bench` runs the Vitest
+  `tsc`, Vitest incl. type tests, build) and `npm run test:e2e` (starts `samples/Catalog.Api` on SQLite); `npm run bench` runs the Vitest
   benchmarks (results in `artifacts/typescript-bench.json`). Request bodies
   must match `tests/golden/*.json`, which the .NET client tests also assert (`LINQTOREST_UPDATE_GOLDEN=1` regenerates
   them from the .NET client). Conventions: `typescript-client` skill.
-- Model document: `dotnet run --project samples/Shop.Api -- --Database:Provider=Sqlite --export-linqtorest-model
-  model.json` (relative to `samples/Shop.Api`). Test models: `LINQTOREST_UPDATE_GOLDEN=1` rewrites `tests/golden/model.json`
+- Model document: `dotnet run --project samples/Catalog.Api -- --export-linqtorest-model model.json` (relative to
+  `samples/Catalog.Api`). Test models: `LINQTOREST_UPDATE_GOLDEN=1` rewrites `tests/golden/model.json`
   and `tests/LinqToRest.Server.IntegrationTests/Shop/model.json`.
 - Generated clients (never edit by hand): `dotnet run --project src/LinqToRest.CodeGen -- ts --model <model.json>
   --name Shop [--import ../src/index.js] --out <file>` and `... -- cs --model <model.json> --namespace <ns> --context

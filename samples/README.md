@@ -1,9 +1,9 @@
 # Catalog sample
 
 A realistic LinqToRest app: one API and two front ends with the same four screens, one on the TypeScript client
-(React) and one on the generated .NET client (Blazor WebAssembly). The minimal getting-started sample is
-[`samples/Shop.*`](../); this one shows the library under realistic pressure: roles, a category tree, real data
-volume and editing in a browser. Design: [`docs/plans/2026-10-20-catalog-sample-design.md`](../../docs/plans/2026-10-20-catalog-sample-design.md).
+(React) and one on the generated .NET client (Blazor WebAssembly). It shows the library under realistic pressure:
+roles, a category tree, real data volume and editing in a browser.
+Design: [`docs/plans/2026-10-20-catalog-sample-design.md`](../docs/plans/2026-10-20-catalog-sample-design.md).
 
 | Project | What it is |
 |---|---|
@@ -15,12 +15,12 @@ volume and editing in a browser. Design: [`docs/plans/2026-10-20-catalog-sample-
 ## Run it
 
 ```sh
-dotnet run --project samples/Catalog/Catalog.Api              # http://localhost:5095, SQLite, seeds 200 products
+dotnet run --project samples/Catalog.Api              # http://localhost:5095, SQLite, seeds 200 products
 
 (cd clients/typescript && npm ci && npm run build)             # the React app uses the local client package
-(cd samples/Catalog/catalog-web && npm install && npm run dev) # http://localhost:5173
+(cd samples/catalog-web && npm install && npm run dev) # http://localhost:5173
 
-dotnet run --project samples/Catalog/Catalog.Blazor           # http://localhost:5174
+dotnet run --project samples/Catalog.Blazor           # http://localhost:5174
 ```
 
 PostgreSQL instead of SQLite: `docker compose -f samples/docker-compose.yml up -d`, then add
@@ -46,9 +46,9 @@ counts, navigations and images), only editors can write, brands can never be del
 ## Regenerate after changing a set
 
 ```sh
-dotnet run --project samples/Catalog/Catalog.Api -- --export-linqtorest-model model.json
-dotnet run --project src/LinqToRest.CodeGen -- cs --model samples/Catalog/Catalog.Api/model.json --namespace Catalog.Client --context CatalogContext --out samples/Catalog/Catalog.Client/CatalogContext.generated.cs
-dotnet run --project src/LinqToRest.CodeGen -- ts --model samples/Catalog/Catalog.Api/model.json --name Catalog --out samples/Catalog/catalog-web/src/catalog.generated.ts
+dotnet run --project samples/Catalog.Api -- --export-linqtorest-model model.json
+dotnet run --project src/LinqToRest.CodeGen -- cs --model samples/Catalog.Api/model.json --namespace Catalog.Client --context CatalogContext --out samples/Catalog.Client/CatalogContext.generated.cs
+dotnet run --project src/LinqToRest.CodeGen -- ts --model samples/Catalog.Api/model.json --name Catalog --out samples/catalog-web/src/catalog.generated.ts
 ```
 
 CI fails when `model.json` or a generated client is out of date. `tests/LinqToRest.Samples.Tests` checks what this

@@ -13,7 +13,7 @@ editing flow, no navigation trees, no data volume worth paging. Gaps that a real
 ## Goals / Non-goals
 
 **Goals**
-- A realistic catalog app in `samples/Catalog/`: one API, a React front end on the TypeScript client and a Blazor
+- A realistic catalog app in `samples/`: one API, a React front end on the TypeScript client and a Blazor
   WebAssembly front end on the generated C# client, with the same four screens.
 - Anonymous browsing; a dev-only login with two roles (viewer, editor); editors change the catalog and each edit
   is saved as one batch.
@@ -43,7 +43,7 @@ editing flow, no navigation trees, no data volume worth paging. Gaps that a real
 
 ## Chosen approach
 
-**A separate realistic sample next to the minimal one.** `samples/Catalog/` holds `Catalog.Api`, `Catalog.Client`
+**A separate realistic sample next to the minimal one.** `samples/` holds `Catalog.Api`, `Catalog.Client`
 (generated C#), `Catalog.Blazor` and `catalog-web` (React).
 
 - *Not growing Shop into the catalog app:* the README quick start, the TypeScript e2e tests and `shop-ts` rely on
@@ -56,7 +56,7 @@ editing flow, no navigation trees, no data volume worth paging. Gaps that a real
 ### Layout
 
 ```
-samples/Catalog/
+samples/
   Catalog.Api/        ASP.NET Core + EF Core (SQLite default, --Database:Provider=Postgres), sets, policies,
                       dev login, CORS, model.json (exported, checked in)
   Catalog.Client/     CatalogContext.generated.cs (linqtorest-gen cs), never edited by hand
@@ -161,6 +161,9 @@ Where the implementation differs from the sections above, this list wins.
    change made elsewhere comes back as 412; "reload and reapply" reloads the row and applies the same form again.
    Errors are shown against the entity (`code` at `pointer`), not the field: batch value errors point at
    `/operations/N/values`, a library gap now on the roadmap (Milestone 2).
+8. **The catalog is the only sample (2026-10-20).** At the user's request the minimal Shop sample (`Shop.Api`,
+   `Shop.Client`, `Shop.Console`, `shop-ts`) was removed and the catalog projects moved up to `samples/`. The
+   TypeScript client's e2e tests now run against `Catalog.Api`, signing in through the dev login for writes.
 7. **Sample tests** run Catalog.Api's own `Program` through `WebApplicationFactory` (`Microsoft.AspNetCore.Mvc.Testing`)
    on a throwaway SQLite file; read-only checks share one API, writes get their own.
 
@@ -184,5 +187,5 @@ Where the implementation differs from the sections above, this list wins.
    CI job (`npm run check`).
 8. `Catalog.Blazor`: skeleton, token handler, Browse screen.
 9. `Catalog.Blazor`: product page, editor, categories admin; CI Release publish (trimmed) with the stopgap root.
-10. Docs: `samples/Catalog/README.md`, README link and CORS section, `dotnet-conventions` and `typescript-client`
+10. Docs: `samples/README.md`, README link and CORS section, `dotnet-conventions` and `typescript-client`
     skills, CLAUDE.md layout.
