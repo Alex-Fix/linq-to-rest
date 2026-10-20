@@ -34,3 +34,6 @@ Design: `docs/plans/2026-10-18-typescript-client-design.md` (implementation note
   Vitest (unit, golden, type tests), build. Fix findings; a suppression needs a `--` reason on the same comment.
 - `npm run test:e2e`: starts `samples/Shop.Api` (SQLite, throwaway database, port 5091) and runs `test-e2e/`.
 - Tests use `StubFetch` (`test/stub.ts`) for requests; no network in unit tests.
+- `npm run bench`: Vitest benchmarks in `bench/` (translate, proxy, materialize, saveChanges) against a canned
+  `fetch`; results in `artifacts/typescript-bench.json`. Single runs vary by ±10%, so compare a change with several
+  alternating before/after runs (medians), not one run each. Profile with `node --cpu-prof` on the compiled output.
