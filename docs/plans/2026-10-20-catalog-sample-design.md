@@ -148,6 +148,11 @@ Where the implementation differs from the sections above, this list wins.
    `productCount` count active products only: a set's `Computed` values read entities past other sets' policies
    (pinned by the self-reference tests).
 2. **Self-referencing navigations needed no library change**; `SelfReferenceTests` covers them on both providers.
+3. **`productImages` has a `product` navigation.** Batch `refs` resolve through a navigation whose foreign key is the
+   referenced member, so inserting a product and its images in one batch needs `HasOne(i => i.Product)
+   .WithForeignKey(i => i.ProductId)` on the image set, not just an exposed `productId`.
+4. **Sample tests** run Catalog.Api's own `Program` through `WebApplicationFactory` (`Microsoft.AspNetCore.Mvc.Testing`)
+   on a throwaway SQLite file; read-only checks share one API, writes get their own.
 
 ## Open questions
 

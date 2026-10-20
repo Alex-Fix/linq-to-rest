@@ -45,7 +45,7 @@
         {"name": "url", "type": "string", "writable": true},
         {"name": "sortOrder", "type": "int32", "writable": true, "sortable": true}
       ],
-      "navigations": []
+      "navigations": [{"name": "product", "target": "products", "foreignKey": ["productId"]}]
     },
     {
       "name": "products",

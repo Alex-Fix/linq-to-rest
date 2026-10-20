@@ -66,5 +66,8 @@ public sealed class ProductImageSet : IEntitySetConfiguration<ProductImage>
         builder.Property(i => i.ProductId);
         builder.Property(i => i.Url);
         builder.Property(i => i.SortOrder).IsSortable();
+
+        // The navigation is what lets a batch point a new image at a product inserted in the same batch (refs).
+        builder.HasOne(i => i.Product).WithForeignKey(i => i.ProductId);
     }
 }

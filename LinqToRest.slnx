@@ -30,6 +30,7 @@
 		<Project Path="tests/LinqToRest.Abstractions.UnitTests/LinqToRest.Abstractions.UnitTests.csproj" />
 		<Project Path="tests/LinqToRest.Client.UnitTests/LinqToRest.Client.UnitTests.csproj" />
 		<Project Path="tests/LinqToRest.EndToEnd.Tests/LinqToRest.EndToEnd.Tests.csproj" />
+		<Project Path="tests/LinqToRest.Samples.Tests/LinqToRest.Samples.Tests.csproj" />
 		<Project Path="tests/LinqToRest.Server.IntegrationTests/LinqToRest.Server.IntegrationTests.csproj" />
 		<Project Path="tests/LinqToRest.Server.UnitTests/LinqToRest.Server.UnitTests.csproj" />
 		<Project Path="tests/LinqToRest.CodeGen.UnitTests/LinqToRest.CodeGen.UnitTests.csproj" />
