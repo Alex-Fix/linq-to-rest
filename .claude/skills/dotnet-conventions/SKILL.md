@@ -27,7 +27,7 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
   materialization, change tracking. Never references Server.
 - `Server`: entity set configuration (`IEntitySetConfiguration<T>`), model production and export, type checking,
   AST → `Expression`, batch executor, policies, endpoints. Never references Client.
-- `CodeGen` (`linqtorest-gen`, not packable): reads a model document, writes C# or TypeScript clients. References
+- `CodeGen` (`linqtorest-gen`, a dotnet tool): reads a model document, writes C# or TypeScript clients. References
   Abstractions only.
 - Anything both ends need (e.g. a node type, a cursor format, an error code) goes in Abstractions.
 

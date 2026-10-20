@@ -10,7 +10,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="LinqToRest.Server.IntegrationTests" />
-    <InternalsVisibleTo Include="LinqToRest.Server.UnitTests" />
   </ItemGroup>
 
   <ItemGroup>

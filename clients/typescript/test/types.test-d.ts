@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
-import { cond } from "../src/index.js";
-import type { CategoryDto, ProductDto } from "./shop.generated.js";
+import { cond, type RestSet } from "../src/index.js";
+import type { CategoryDto, CategoryProxy, ProductDto } from "./shop.generated.js";
 import { shop } from "./stub.js";
 
 const { shop: s } = shop();
@@ -52,5 +52,19 @@ describe("types", () => {
     product.categoryName = "x";
     // @ts-expect-error — null only for nullable members.
     s.products.where((p) => p.name.eq(null));
+  });
+
+  it("offers only the writes a set allows", () => {
+    type ReadOnly = RestSet<CategoryDto, CategoryProxy>;
+    type InsertOnly = RestSet<CategoryDto, CategoryProxy, "insert">;
+
+    expectTypeOf<ReadOnly>().toHaveProperty("where");
+    expectTypeOf<ReadOnly>().toHaveProperty("attach");
+    expectTypeOf<ReadOnly>().not.toHaveProperty("add");
+    expectTypeOf<ReadOnly>().not.toHaveProperty("update");
+    expectTypeOf<ReadOnly>().not.toHaveProperty("remove");
+    expectTypeOf<InsertOnly>().toHaveProperty("add");
+    expectTypeOf<InsertOnly>().not.toHaveProperty("remove");
+    expectTypeOf(s.products).toHaveProperty("remove");
   });
 });

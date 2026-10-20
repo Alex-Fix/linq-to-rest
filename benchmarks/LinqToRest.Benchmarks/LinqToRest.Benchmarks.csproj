@@ -15,12 +15,13 @@
     <Compile Include="..\..\tests\LinqToRest.Server.IntegrationTests\Shop\*.cs" Exclude="..\..\tests\LinqToRest.Server.IntegrationTests\Shop\ShopDatabase.cs" LinkBase="Shop" />
     <!-- The golden model the client benchmarks bind to the test contracts. -->
     <Content Include="..\..\tests\golden\model.json" Link="golden\model.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\tests\LinqToRest.Server.IntegrationTests\Shop\model.json" Link="Shop\model.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
     <ProjectReference Include="..\..\src\LinqToRest.Server\LinqToRest.Server.csproj" />
-    <ProjectReference Include="..\..\src\LinqToRest.TypeScript\LinqToRest.TypeScript.csproj" />
+    <ProjectReference Include="..\..\src\LinqToRest.CodeGen\LinqToRest.CodeGen.csproj" />
     <ProjectReference Include="..\..\tests\LinqToRest.TestContracts\LinqToRest.TestContracts.csproj" />
   </ItemGroup>
 </Project>

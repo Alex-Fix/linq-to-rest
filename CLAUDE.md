@@ -26,7 +26,7 @@ src/
   LinqToRest.Abstractions/      RestModel (model document), query AST + JSON contract, batch/cursor contracts (BCL only)
   LinqToRest.Client/            RestDataContext, RestSet<T>, ClientModel, RestQueryProvider, change tracker (BCL only)
   LinqToRest.Server/            entity sets, AST → Expression, batch executor, policies, endpoints, model export (EF Core)
-  LinqToRest.CodeGen/           linqtorest-gen: C# and TypeScript clients from a model document (not packable)
+  LinqToRest.CodeGen/           linqtorest-gen (dotnet tool): C# and TypeScript clients from a model document
 clients/typescript/              npm package "linqtorest": TypeScript client (same wire protocol, golden-tested)
 samples/                        Shop.Api (EF Core SQLite, API key, model.json), Shop.Client (generated), Shop.Console,
                                 shop-ts — not packable

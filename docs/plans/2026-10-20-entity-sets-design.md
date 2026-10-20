@@ -281,7 +281,11 @@ Where the implementation differs from the sections above, this list wins.
    client is generated from. Both are rewritten with `LINQTOREST_UPDATE_GOLDEN=1`.
 6. **No `$batch` without writable sets** means no handler: `POST {prefix}/$batch` then only matches the
    `QUERY {prefix}/{set}` route by path, so ASP.NET Core routing answers 405 rather than 404.
-7. **Formatting:** the model document is indented by two spaces, with every object or array that fits in 120 columns
+7. **Generator:** `linqtorest-gen` stays a dotnet tool (`LinqToRest.CodeGen`), as `linqtorest-ts` was. The model
+   document has no notion of `[Flags]` enums, so a flags enum is generated as the union of its member names, like
+   any other enum (the assembly-based generator emitted `string`). The TypeScript client keeps one runtime set class
+   with every write method (each checks `writes`); the exported `RestSet<D, P, W>` type only exposes the allowed ones.
+8. **Formatting:** the model document is indented by two spaces, with every object or array that fits in 120 columns
    on one line, so each property is one line in diffs.
 
 ## Open questions

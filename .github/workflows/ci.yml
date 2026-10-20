@@ -117,16 +117,18 @@ jobs:
       - name: Audit
         run: npm audit --audit-level=high
 
-      - name: Generated models are current
+      # The sample's model must match its sets; the golden test models are checked by the .NET tests.
+      - name: Exported models and generated clients are current
         working-directory: .
         run: |
-          dotnet build samples/Shop.Contracts
-          dotnet build tests/LinqToRest.TestContracts
-          dotnet build src/LinqToRest.TypeScript
-          generate() { dotnet run --project src/LinqToRest.TypeScript --no-build -- "$@" --check; }
-          generate --assembly artifacts/bin/LinqToRest.TestContracts/debug/LinqToRest.TestContracts.dll --name Shop --import ../src/index.js --out clients/typescript/test/shop.generated.ts
-          generate --assembly artifacts/bin/Shop.Contracts/debug/Shop.Contracts.dll --name Shop --import ../src/index.js --out clients/typescript/test-e2e/shop.generated.ts
-          generate --assembly artifacts/bin/Shop.Contracts/debug/Shop.Contracts.dll --name Shop --out samples/shop-ts/shop.generated.ts
+          dotnet build samples/Shop.Api
+          dotnet build src/LinqToRest.CodeGen
+          dotnet run --project samples/Shop.Api --no-build -- --Database:Provider=Sqlite --export-linqtorest-model model.json
+          git diff --exit-code samples/Shop.Api/model.json
+          generate() { dotnet run --project src/LinqToRest.CodeGen --no-build -- "$@" --check; }
+          generate ts --model tests/golden/model.json --name Shop --import ../src/index.js --out clients/typescript/test/shop.generated.ts
+          generate ts --model samples/Shop.Api/model.json --name Shop --import ../src/index.js --out clients/typescript/test-e2e/shop.generated.ts
+          generate ts --model samples/Shop.Api/model.json --name Shop --out samples/shop-ts/shop.generated.ts
 
       - name: End-to-end tests against samples/Shop.Api
         run: npm run test:e2e

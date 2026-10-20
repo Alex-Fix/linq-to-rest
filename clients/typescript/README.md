@@ -6,14 +6,17 @@ atomic batch. No runtime dependencies; ESM; Node ≥ 20 and modern browsers.
 
 ## Generate the model
 
-The DTO types and the client model come from your .NET contracts assembly, so they always match the server:
+The row types and the client model come from the model document your LinqToRest server exports
+(`ExportLinqToRestModelAsync`), so they always match the server:
 
 ```sh
-dotnet tool install LinqToRest.TypeScript   # provides the linqtorest-ts command
-dotnet linqtorest-ts --assembly Shop.Contracts/bin/Debug/net10.0/Shop.Contracts.dll --name Shop --out src/shop.generated.ts
+dotnet tool install LinqToRest.CodeGen   # provides the linqtorest-gen command
+dotnet linqtorest-gen ts --model ../Shop.Api/model.json --name Shop --out src/shop.generated.ts
 ```
 
-Add `--check` in CI to fail when the file is stale. The tool warns about `decimal` and `long` members: JavaScript
+Each set only offers the writes the server allows: `add` needs inserts, `update` updates and `remove` deletes; the
+others are compile errors (and throw at run time if called anyway). Add `--check` in CI to fail when the file is
+stale. The tool warns about `decimal` and `long` members: JavaScript
 numbers keep about 15 significant digits and are exact only up to 2^53.
 
 ## Query
@@ -71,6 +74,6 @@ for saves, the affected `entities`); other failures throw `RestHttpError`.
 - Dates, times, `Guid` and binary values are ISO 8601 / canonical strings, never `Date` objects.
 - `transport: "post"` sends queries to `POST {set}/$query` instead of HTTP `QUERY`, for infrastructure that blocks
   unknown methods. Browser apps on another origin need CORS on the API for the method, `Content-Type` and auth headers.
-- One context per unit of work (a form, a page): tracked DTOs are plain objects in an identity map.
+- One context per unit of work (a form, a page): tracked rows are plain objects in an identity map.
 
 MIT licensed.

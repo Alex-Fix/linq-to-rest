@@ -2,9 +2,9 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <PackAsTool>true</PackAsTool>
-    <ToolCommandName>linqtorest-ts</ToolCommandName>
-    <RootNamespace>LinqToRest.TypeScript</RootNamespace>
-    <Description>Generates TypeScript DTO types and the LinqToRest client model from a .NET contracts assembly.</Description>
+    <ToolCommandName>linqtorest-gen</ToolCommandName>
+    <RootNamespace>LinqToRest.CodeGen</RootNamespace>
+    <Description>Generates LinqToRest clients (C# and TypeScript) from a model document exported by a LinqToRest server.</Description>
   </PropertyGroup>
 
   <ItemGroup>
