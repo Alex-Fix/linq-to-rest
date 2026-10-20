@@ -156,7 +156,12 @@ Where the implementation differs from the sections above, this list wins.
    tree; "category with subcategories" filters with `categoryId in [ids]` computed from that tree.
 5. **Ports:** Catalog.Api listens on 5095 in Development, the React dev server on 5173 and Blazor on 5174 (the CORS
    origins).
-6. **Sample tests** run Catalog.Api's own `Program` through `WebApplicationFactory` (`Microsoft.AspNetCore.Mvc.Testing`)
+6. **Editor saves start from the row as loaded.** Each save builds a fresh unit of work, attaches the product and
+   images as the editor first loaded them (concurrency token included), applies the form and saves one batch, so a
+   change made elsewhere comes back as 412; "reload and reapply" reloads the row and applies the same form again.
+   Errors are shown against the entity (`code` at `pointer`), not the field: batch value errors point at
+   `/operations/N/values`, a library gap now on the roadmap (Milestone 2).
+7. **Sample tests** run Catalog.Api's own `Program` through `WebApplicationFactory` (`Microsoft.AspNetCore.Mvc.Testing`)
    on a throwaway SQLite file; read-only checks share one API, writes get their own.
 
 ## Open questions

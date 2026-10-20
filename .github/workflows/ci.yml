@@ -100,7 +100,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: clients/typescript/package-lock.json
+          cache-dependency-path: |
+            clients/typescript/package-lock.json
+            samples/Catalog/catalog-web/package-lock.json
 
       - name: Install
         run: npm ci
@@ -116,6 +118,13 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # The React catalog sample builds against the client just built (file: dependency).
+      - name: Catalog web app (format, lint, type-check, build)
+        working-directory: samples/Catalog/catalog-web
+        run: |
+          npm ci
+          npm run check
 
       # Proves the benchmarks still run; timings aren't compared on shared runners.
       - name: Benchmarks
@@ -139,6 +148,7 @@ jobs:
           generate ts --model samples/Shop.Api/model.json --name Shop --import ../src/index.js --out clients/typescript/test-e2e/shop.generated.ts
           generate ts --model samples/Shop.Api/model.json --name Shop --out samples/shop-ts/shop.generated.ts
           generate cs --model samples/Shop.Api/model.json --namespace Shop.Client --context ShopContext --out samples/Shop.Client/ShopContext.generated.cs
+          generate ts --model samples/Catalog/Catalog.Api/model.json --name Catalog --out samples/Catalog/catalog-web/src/catalog.generated.ts
           generate cs --model samples/Catalog/Catalog.Api/model.json --namespace Catalog.Client --context CatalogContext --out samples/Catalog/Catalog.Client/CatalogContext.generated.cs
 
       - name: End-to-end tests against samples/Shop.Api
