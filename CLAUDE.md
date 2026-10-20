@@ -4,15 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-LinqToRest covers both ends of a .NET REST API. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` — read it
-before changing behaviour or the wire contract.
+LinqToRest covers both ends of a .NET REST API. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md`, with the
+model reworked by `docs/plans/2026-10-20-entity-sets-design.md` (which wins where they differ) — read them before
+changing behaviour or the wire contract.
 
-- **Client:** a `RestDataContext` of `DtoSet<T>` (our own `IQueryable<T>` / `IQueryProvider` — never EF's)
+- **Server:** EF Core entities configured as sets (`IEntitySetConfiguration<TEntity>`), exposing only the members,
+  computed values and navigations they opt in; sets are read-only until `AllowWrites(...)`. Validates each query tree
+  against that model and translates it onto the entities; applies batches in one transaction.
+- **Model document:** the server exports its model as versioned JSON (`RestModel`); clients are generated from it.
+- **Client:** a generated `RestDataContext` of `RestSet<T>` (our own `IQueryable<T>` / `IQueryProvider` — never EF's)
   translates LINQ into a JSON expression tree sent with HTTP **QUERY**; full unit of work (change tracking,
   identity map) saved as one atomic `POST /$batch`.
-- **Server:** validates the tree against the shared DTO model and translates it onto EF Core entities, each DTO
-  being the default projection of an entity; applies batches in one transaction.
-- **Shared:** DTOs (`IDto`) configured EF-style (`IDtoTypeConfiguration<T>`), used by both ends.
 
 Every query body and batch reaching the server is untrusted — see the `security` skill.
 
@@ -21,11 +23,13 @@ Every query body and batch reaching the server is untrusted — see the `securit
 ```
 LinqToRest.slnx                 solution (+ global.json, Directory.Build.props, Directory.Packages.props)
 src/
-  LinqToRest.Abstractions/      IDto, model builder, query AST + JSON contract, batch/cursor contracts (BCL only)
-  LinqToRest.Client/            RestDataContext, DtoSet<T>, RestQueryProvider, change tracker (BCL only)
-  LinqToRest.Server/            DTO→entity mapping, AST → Expression, batch executor, policies, endpoints (EF Core)
+  LinqToRest.Abstractions/      RestModel (model document), query AST + JSON contract, batch/cursor contracts (BCL only)
+  LinqToRest.Client/            RestDataContext, RestSet<T>, ClientModel, RestQueryProvider, change tracker (BCL only)
+  LinqToRest.Server/            entity sets, AST → Expression, batch executor, policies, endpoints, model export (EF Core)
+  LinqToRest.CodeGen/           linqtorest-gen: C# and TypeScript clients from a model document (not packable)
 clients/typescript/              npm package "linqtorest": TypeScript client (same wire protocol, golden-tested)
-samples/                        Shop.Contracts, Shop.Api (EF Core SQLite, API key), Shop.Console (client) — not packable
+samples/                        Shop.Api (EF Core SQLite, API key, model.json), Shop.Client (generated), Shop.Console,
+                                shop-ts — not packable
 tests/                          xUnit v3, one project per package + Server.IntegrationTests (SQLite) + EndToEnd.Tests
                                 (EndToEnd links the integration tests' Shop/*.cs)
 benchmarks/                     BenchmarkDotNet suites for every src/ project (not packable)
@@ -52,9 +56,12 @@ artifacts/                      gitignored: all build output (no per-project bin
   benchmarks (results in `artifacts/typescript-bench.json`). Request bodies
   must match `tests/golden/*.json`, which the .NET client tests also assert (`LINQTOREST_UPDATE_GOLDEN=1` regenerates
   them from the .NET client). Conventions: `typescript-client` skill.
-- Generated TypeScript models (never edit by hand): `dotnet run --project src/LinqToRest.TypeScript -- --assembly
-  <Contracts.dll> --name Shop [--import ../src/index.js] --out <file>`; CI runs it with `--check` for
-  `clients/typescript/test`, `clients/typescript/test-e2e` and `samples/shop-ts`.
+- Model document: `dotnet run --project samples/Shop.Api -- --export-linqtorest-model samples/Shop.Api/model.json`
+  (golden copy for tests: `tests/golden/model.json`).
+- Generated clients (never edit by hand): `dotnet run --project src/LinqToRest.CodeGen -- ts --model <model.json>
+  --name Shop [--import ../src/index.js] --out <file>` and `... -- cs --model <model.json> --namespace <ns> --context
+  <Name>Context --out <file>`; CI re-exports the model and runs both with `--check` for every checked-in generated
+  file.
 
 ## Rules
 
@@ -64,8 +71,9 @@ artifacts/                      gitignored: all build output (no per-project bin
    `Expression` nodes itself — never deserialized .NET expressions, `System.Linq.Dynamic.Core`, Roslyn scripting or
    `Expression.Compile()` on the request path. (The client may compile/evaluate captured variables: that's the
    developer's own code.)
-3. **DTO is the boundary.** Entities are never serialized. Sorting is opt-in per member; writes only go through
-   members bound directly in the default projection. Every size is limited (body, depth, nodes, page, batch…).
+3. **The exposed set is the boundary.** Only configured entity members exist on the wire; entities are never
+   serialized. Sorting is opt-in per member; sets are read-only until `AllowWrites(...)`, and writes only go through
+   members bound with `Property(...)`. Every size is limited (body, depth, nodes, page, batch, model…).
 4. **Wire contract and public API are versioned.** The JSON contract carries `"v"`; breaking changes to it or to
    packable `src/` APIs need explicit approval and a design-doc update.
 5. **Free and open.** Free/open-source dependencies only; Abstractions and Client stay BCL-only.

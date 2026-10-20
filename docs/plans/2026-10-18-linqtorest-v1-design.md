@@ -1,5 +1,5 @@
 # LinqToRest v1 — design
-Status: approved, implemented (see Implementation notes) · Date: 2026-10-18
+Status: approved, implemented (see Implementation notes; model superseded by `2026-10-20-entity-sets-design.md`) · Date: 2026-10-18
 
 ## Problem
 
@@ -399,6 +399,11 @@ Where the implementation differs from the sections above, this list wins.
 10. **Testing.** End-to-end tests host the server with the ASP.NET Core test server directly instead of
    `WebApplicationFactory`, and share the integration tests' shop through linked source files. Integration tests
    capture the executed SQL to prove projections run in the database.
+11. **Entity sets (2026-10-20).** `docs/plans/2026-10-20-entity-sets-design.md` replaces the shared DTO model:
+   `IDto`, `IDtoTypeConfiguration<T>`, `DtoModelBuilder` and `IDtoMapping<TDto, TEntity>` give way to entity sets
+   configured on the server (`IEntitySetConfiguration<TEntity>`, explicit opt-in per member), an exported model
+   document and generated clients. Sets are read-only until `AllowWrites(...)`, and `$batch` is mapped only when one
+   is writable. The query, `$batch` and cursor wire contracts are unchanged.
 
 ## Open questions
 

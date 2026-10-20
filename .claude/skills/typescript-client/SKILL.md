@@ -1,11 +1,12 @@
 ---
 name: typescript-client
-description: Conventions for the LinqToRest TypeScript client (clients/typescript, npm package linqtorest) and its generator (src/LinqToRest.TypeScript, linqtorest-ts) — deferred proxy lambdas and .NET-identical JSON, golden files, the unit of work, generated models, tooling (strict TypeScript, ESLint, Prettier, Vitest type tests, e2e against Shop.Api). Use when changing anything under clients/typescript, samples/shop-ts, tests/golden or src/LinqToRest.TypeScript, or when a protocol change must reach both clients.
+description: Conventions for the LinqToRest TypeScript client (clients/typescript, npm package linqtorest) and its generator (src/LinqToRest.CodeGen, linqtorest-gen ts) — deferred proxy lambdas and .NET-identical JSON, golden files, the unit of work, generated models, tooling (strict TypeScript, ESLint, Prettier, Vitest type tests, e2e against Shop.Api). Use when changing anything under clients/typescript, samples/shop-ts, tests/golden or src/LinqToRest.CodeGen, or when a protocol change must reach both clients.
 ---
 
 # TypeScript client
 
-Design: `docs/plans/2026-10-18-typescript-client-design.md` (implementation notes at the end).
+Design: `docs/plans/2026-10-18-typescript-client-design.md` (implementation notes at the end), with the model and
+generator input changed by `docs/plans/2026-10-20-entity-sets-design.md`.
 
 ## Rules
 
@@ -17,16 +18,19 @@ Design: `docs/plans/2026-10-18-typescript-client-design.md` (implementation note
   variables are allocated in the .NET order: collection variable first, then its `where` filters, then the body.
   `and`/`or`/`concat` chains flatten like C#'s `&&`/`||`/string `+`. Never build nodes eagerly in a builder method.
 - **No runtime dependencies, no dynamic code** (`eval`, `new Function`). Plain JSON values only; dates are strings.
-- **DTOs stay plain objects.** Tracking uses snapshots and an identity map, never proxies on results.
-- **Types enforce what they can** (operand types, sortable members, readonly keys/tokens/computed members) and
+- **Results stay plain objects.** Tracking uses snapshots and an identity map, never proxies on results.
+- **Types enforce what they can** (operand types, sortable members, readonly keys/tokens/computed members, `add` /
+  `remove` only on sets whose `writes` allow them) and
   `test/types.test-d.ts` proves it with `@ts-expect-error`; everything else is checked at runtime before a request.
 
 ## Generated models
 
-- `*.generated.ts` files come from `linqtorest-ts`; never edit them, and they're excluded from Prettier and ESLint.
-- `clients/typescript/test/shop.generated.ts` is also the generator's snapshot (`tests/LinqToRest.TypeScript.UnitTests`).
-- After changing `tests/LinqToRest.TestContracts`, `samples/Shop.Contracts` or the emitter, regenerate all three
-  files (commands in CLAUDE.md); CI fails on stale ones.
+- `*.generated.ts` files come from `linqtorest-gen ts` reading a model document; never edit them, and they're
+  excluded from Prettier and ESLint.
+- `clients/typescript/test/shop.generated.ts` is also the generator's snapshot (`tests/LinqToRest.CodeGen.UnitTests`),
+  generated from `tests/golden/model.json`; `test-e2e` and `samples/shop-ts` use `samples/Shop.Api/model.json`.
+- After changing a set configuration, the golden model or the emitter, re-export the model and regenerate every
+  generated file (commands in CLAUDE.md); CI fails on stale ones.
 
 ## Tooling
 
