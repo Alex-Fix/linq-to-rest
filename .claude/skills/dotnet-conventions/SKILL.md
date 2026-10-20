@@ -61,6 +61,12 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
   them non-packable. Keep them simple — they're documentation, and people copy them.
 - Run: `dotnet run --project samples/Shop.Api --urls http://localhost:5080` (Development, key `dev-acme-key`), then
   `dotnet run --project samples/Shop.Console`.
+- `samples/Catalog/` is the realistic sample: `Catalog.Api` (SQLite default, role policies, dev-only JWT login, CORS,
+  `model.json`), `Catalog.Client` (generated), `Catalog.Blazor` (WebAssembly; trimmed Release publish in CI, with
+  `Catalog.Client` as a trimmer root until the client is trim-safe) and `catalog-web` (React, see the
+  `typescript-client` skill). Its README lists which screen shows which feature; keep it true.
+- `tests/LinqToRest.Samples.Tests` runs `Catalog.Api`'s own `Program` (`WebApplicationFactory`) on a throwaway
+  SQLite file and checks the sample's claims (role filters, unexposed columns, write rules, CORS, `model.json`).
 
 ## Tests (`tests/`)
 - `tests/Directory.Build.props` adds xUnit v3, `OutputType=Exe`, `IsPackable=false`, global `using Xunit`.

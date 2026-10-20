@@ -29,9 +29,10 @@ src/
   LinqToRest.CodeGen/           linqtorest-gen (dotnet tool): C# and TypeScript clients from a model document
 clients/typescript/              npm package "linqtorest": TypeScript client (same wire protocol, golden-tested)
 samples/                        Shop.Api (EF Core SQLite, API key, model.json), Shop.Client (generated), Shop.Console,
-                                shop-ts — not packable
+                                shop-ts: the minimal sample. Catalog/ (Catalog.Api, Catalog.Client, Catalog.Blazor,
+                                catalog-web): the realistic one. Not packable
 tests/                          xUnit v3, one project per package + Server.IntegrationTests (SQLite) + EndToEnd.Tests
-                                (EndToEnd links the integration tests' Shop/*.cs)
+                                (EndToEnd links the integration tests' Shop/*.cs) + Samples.Tests (the catalog sample)
 benchmarks/                     BenchmarkDotNet suites for every src/ project (not packable)
 docs/plans/                     approved design docs (written by the `brainstorming` skill)
 artifacts/                      gitignored: all build output (no per-project bin/obj)

@@ -29,8 +29,11 @@ generator input changed by `docs/plans/2026-10-20-entity-sets-design.md`.
   excluded from Prettier and ESLint.
 - `clients/typescript/test/shop.generated.ts` is also the generator's snapshot (`tests/LinqToRest.CodeGen.UnitTests`),
   generated from `tests/golden/model.json`; `test-e2e` and `samples/shop-ts` use `samples/Shop.Api/model.json`.
+- `samples/Catalog/catalog-web` (React + Vite) uses `src/catalog.generated.ts` from `samples/Catalog/Catalog.Api/model.json`
+  and depends on the local client (`file:`), so build `clients/typescript` first. It follows the same tooling rules
+  (`npm run check`: Prettier, ESLint strict + React hooks, `tsc`, Vite build).
 - After changing a set configuration, the golden model or the emitter, re-export the model and regenerate every
-  generated file (commands in CLAUDE.md); CI fails on stale ones.
+  generated file (commands in CLAUDE.md and `samples/Catalog/README.md`); CI fails on stale ones.
 
 ## Tooling
 

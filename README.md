@@ -27,6 +27,9 @@ shop.Products.Add(new Product { Name = "Cube", Price = 9.5m, Category = puzzles 
 await shop.SaveChangesAsync();      // one atomic batch
 ```
 
+For a realistic app (roles, a category tree, React and Blazor front ends) see [`samples/Catalog`](samples/Catalog/README.md);
+what comes next is in the [roadmap](docs/plans/2026-10-20-roadmap.md).
+
 Design and rationale: [`docs/plans/2026-10-18-linqtorest-v1-design.md`](docs/plans/2026-10-18-linqtorest-v1-design.md),
 with the model reworked by [`docs/plans/2026-10-20-entity-sets-design.md`](docs/plans/2026-10-20-entity-sets-design.md).
 
@@ -255,7 +258,18 @@ only, as the tests and sample do.
 ## Deployment notes
 
 - **HTTP QUERY**: some proxies, WAFs and CDNs reject unknown methods. Allow `QUERY` on the API routes, or send the same
-  body to `POST /api/{set}/$query`. Browsers send a CORS preflight for QUERY.
+  body to `POST /api/{set}/$query`.
+- **CORS**: browsers always preflight `QUERY` (it isn't a "simple" method) and requests with `application/json` or an
+  `Authorization` header. A front end on another origin needs the API to allow its origin, the methods and those
+  headers; never allow any origin together with credentials:
+
+  ```csharp
+  builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
+      .WithOrigins("https://shop.example")
+      .WithMethods("QUERY", "POST")
+      .WithHeaders("Content-Type", "Authorization")));
+  app.UseCors();
+  ```
 - **OpenAPI**: OpenAPI 3.1 (what ASP.NET Core 10's `AddOpenApi()` generates) can't describe QUERY, so the QUERY route is
   excluded from descriptions; `POST {set}/$query` and `POST $batch` carry full metadata. The sample serves the
   document and a Scalar UI at `/scalar/v1` in Development.
@@ -273,6 +287,7 @@ docker compose -f samples/docker-compose.yml up -d                   # PostgreSQ
 dotnet run --project samples/Shop.Api --urls http://localhost:5080   # Development: API key dev-acme-key, Scalar at /scalar/v1
 dotnet run --project samples/Shop.Api --urls http://localhost:5080 -- --Database:Provider=Sqlite   # without Docker
 dotnet run --project samples/Shop.Console                          # the generated C# client (samples/Shop.Client)
+dotnet run --project samples/Catalog/Catalog.Api                   # the realistic sample: see samples/Catalog/README.md
 dotnet run --project samples/Shop.Api -- --Database:Provider=Sqlite --export-linqtorest-model model.json   # after changing a set
 (cd clients/typescript && npm ci && npm run check && npm run test:e2e)   # TypeScript client
 (cd samples/shop-ts && npm install && npm start)                         # TypeScript sample (API running)
