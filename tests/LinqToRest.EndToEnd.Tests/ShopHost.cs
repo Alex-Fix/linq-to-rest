@@ -1,5 +1,4 @@
 using LinqToRest.Client;
-using LinqToRest.Modeling;
 using LinqToRest.Server.Hosting;
 using LinqToRest.Server.IntegrationTests.Shop;
 using Microsoft.AspNetCore.Builder;
@@ -8,20 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace LinqToRest.EndToEnd.Tests;
 
-/// <summary>The client's view of the shop API.</summary>
-public sealed class ShopClient(RestDataContextOptions<ShopClient> options) : RestDataContext(options)
-{
-    public RestSet<ProductDto> Products => Set<ProductDto>();
-    public RestSet<CategoryDto> Categories => Set<CategoryDto>();
-}
-
 /// <summary>A seeded shop server and a factory of client contexts talking to it over the test server.</summary>
 public sealed class ShopHost : IAsyncDisposable
 {
-    /// <summary>The shop's exported model bound to the client classes, as a generated context binds its own.</summary>
-    private static readonly ClientModel Model = ClientModel.Bind(
-        RestModel.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Shop", "model.json"))),
-        new Dictionary<string, Type> { ["products"] = typeof(ProductDto), ["categories"] = typeof(CategoryDto), ["orderLines"] = typeof(OrderLineDto) });
     private readonly WebApplication _app;
     private readonly IAsyncDisposable? _database;
 
@@ -66,7 +54,7 @@ public sealed class ShopHost : IAsyncDisposable
             http.DefaultRequestHeaders.Add("X-Read-Only", "1");
         }
 
-        return new ShopClient(new RestDataContextOptions<ShopClient>(Model, http));
+        return new ShopClient(new RestDataContextOptions<ShopClient>(ShopClient.Model, http));
     }
 
     public async ValueTask DisposeAsync()

@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <!-- The DTO model shared by the .NET client tests, the golden files and the generated TypeScript test model. -->
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\LinqToRest.Abstractions\LinqToRest.Abstractions.csproj" />
-  </ItemGroup>
-</Project>

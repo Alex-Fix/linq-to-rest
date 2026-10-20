@@ -285,7 +285,12 @@ Where the implementation differs from the sections above, this list wins.
    document has no notion of `[Flags]` enums, so a flags enum is generated as the union of its member names, like
    any other enum (the assembly-based generator emitted `string`). The TypeScript client keeps one runtime set class
    with every write method (each checks `writes`); the exported `RestSet<D, P, W>` type only exposes the allowed ones.
-8. **Formatting:** the model document is indented by two spaces, with every object or array that fits in 120 columns
+8. **Generated C# clients:** the generated context's static `Model` replaces `RestDataContext.Model`, which is
+   gone (an instance property of the same name would make `context.Model` ambiguous). Generated files: the client
+   tests' `ShopContext` (golden model, also the generator's C# snapshot), the end-to-end tests' `ShopClient` (the
+   integration shop's model) and the benchmarks' `BenchmarkShop` (golden model, in its own namespace so it doesn't
+   shadow the linked shop entities). CI checks them with `--check`.
+9. **Formatting:** the model document is indented by two spaces, with every object or array that fits in 120 columns
    on one line, so each property is one line in diffs.
 
 ## Open questions

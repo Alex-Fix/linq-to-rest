@@ -7,9 +7,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The same shop (entities, sets, policies, seed, exported model) as the server integration tests. -->
+    <!-- The same shop (entities, sets, policies, seed) as the server integration tests; the client is generated from its model.json. -->
     <Compile Include="..\LinqToRest.Server.IntegrationTests\Shop\*.cs" LinkBase="Shop" />
-    <Content Include="..\LinqToRest.Server.IntegrationTests\Shop\model.json" Link="Shop\model.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

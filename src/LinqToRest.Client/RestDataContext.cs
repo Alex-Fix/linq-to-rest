@@ -23,9 +23,6 @@ public abstract class RestDataContext
         Provider = new RestQueryProvider(this);
     }
 
-    /// <summary>Gets the model, bound to the client classes.</summary>
-    public ClientModel Model => Options.Model;
-
     internal RestDataContextOptions Options { get; }
 
     internal RestQueryProvider Provider { get; }
@@ -40,7 +37,7 @@ public abstract class RestDataContext
     {
         if (!_sets.TryGetValue(typeof(TEntity), out var set))
         {
-            var type = Model.FindSet(typeof(TEntity)) ?? throw new InvalidOperationException($"{typeof(TEntity).Name} isn't the class of a set in the model.");
+            var type = Options.Model.FindSet(typeof(TEntity)) ?? throw new InvalidOperationException($"{typeof(TEntity).Name} isn't the class of a set in the model.");
             set = new RestSet<TEntity>(this, type, Provider);
             _sets.Add(typeof(TEntity), set);
         }

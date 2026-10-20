@@ -19,6 +19,80 @@ public sealed class GeneratorTests
     }
 
     [Fact]
+    public async Task CSharp_output_for_the_golden_model_is_the_client_tests_context()
+    {
+        var expected = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "csharp", "Shop.generated.cs"), TestContext.Current.CancellationToken);
+        var model = RestModel.Parse(await File.ReadAllBytesAsync(GoldenModel, TestContext.Current.CancellationToken));
+
+        var actual = new CSharpEmitter(model, "LinqToRest.Client.UnitTests", "ShopContext", "model.json").Emit();
+
+        Assert.Equal(expected.ReplaceLineEndings("\n"), actual);
+    }
+
+    [Fact]
+    public void CSharp_check_passes_for_an_up_to_date_file_and_fails_for_a_stale_one()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.cs");
+        string[] args = ["cs", "--model", GoldenModel, "--namespace", "Shop.Client", "--context", "ShopContext", "--out", path];
+        try
+        {
+            var (written, _, _) = Run(args);
+            var (current, _, _) = Run([.. args, "--check"]);
+            File.AppendAllText(path, "// edited\n");
+            var (stale, _, errors) = Run([.. args, "--check"]);
+
+            Assert.Equal((0, 0, 1), (written, current, stale));
+            Assert.Contains("out of date", errors, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void CSharp_maps_every_scalar_type()
+    {
+        var text = new CSharpEmitter(KindsModel(), "Kinds.Client", "KindsContext", "test.json").Emit();
+
+        Assert.Contains("namespace Kinds.Client;", text, StringComparison.Ordinal);
+        Assert.Contains("    public int Id { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public bool? Flag { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public DateTimeOffset? At { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public TimeSpan Duration { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public byte[]? Blob { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public TimeOnly Time { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public byte Small { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public List<int> Numbers { get; set; } = [];\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public Access Access { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public long Big { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public RestSet<Kinds> Kinds => Set<Kinds>();\n", text, StringComparison.Ordinal);
+        Assert.Contains("public static IHttpClientBuilder AddKindsContext(", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CSharp_escapes_keyword_enum_members()
+    {
+        var model = RestModel.Parse(KindsJson.Replace("[\"Read\", \"Write\"]", "[\"read\", \"class\"]", StringComparison.Ordinal));
+
+        var text = new CSharpEmitter(model, "Kinds.Client", "KindsContext", "test.json").Emit();
+
+        Assert.Contains("    read,\n    @class,\n", text, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("\"name\": \"kinds\"", "\"name\": \"model\"", "would be the property KindsContext.Model")]
+    [InlineData("\"name\": \"small\"", "\"name\": \"kinds\"", "would be named like its class Kinds")]
+    public void CSharp_rejects_names_that_would_clash(string find, string replace, string message)
+    {
+        var model = RestModel.Parse(KindsJson.Replace(find, replace, StringComparison.Ordinal));
+
+        var error = Assert.Throws<GeneratorException>(() => new CSharpEmitter(model, "Kinds.Client", "KindsContext", "test.json").Emit());
+
+        Assert.Contains(message, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Check_passes_for_an_up_to_date_file_and_fails_for_a_stale_one()
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ts");
@@ -54,6 +128,9 @@ public sealed class GeneratorTests
     [InlineData(new[] { "ts", "--model", "missing.json", "--name", "Shop", "--out", "x.ts" }, 1, "doesn't exist")]
     [InlineData(new[] { "ts", "--model", "a.json", "--bogus" }, 2, "Usage")]
     [InlineData(new[] { "ts", "--name", "Shop", "--out", "x.ts" }, 2, "Usage")]
+    [InlineData(new[] { "cs", "--model", "a.json", "--name", "Shop", "--out", "x.cs" }, 2, "Usage")]
+    [InlineData(new[] { "cs", "--model", "a.json", "--namespace", "Shop", "--out", "x.cs" }, 2, "Usage")]
+    [InlineData(new[] { "ts", "--model", "a.json", "--name", "Shop", "--context", "C", "--out", "x.ts" }, 2, "Usage")]
     public void Rejects_bad_arguments(string[] args, int expected, string message)
     {
         var (code, _, errors) = Run(args);
@@ -121,7 +198,9 @@ public sealed class GeneratorTests
         return (code, output.ToString(), errors.ToString());
     }
 
-    private static RestModel KindsModel() => RestModel.Parse("""
+    private static RestModel KindsModel() => RestModel.Parse(KindsJson);
+
+    private const string KindsJson = """
         {
           "v": 1,
           "enums": {"Access": ["Read", "Write"]},
@@ -142,5 +221,5 @@ public sealed class GeneratorTests
             ]
           }]
         }
-        """);
+        """;
 }

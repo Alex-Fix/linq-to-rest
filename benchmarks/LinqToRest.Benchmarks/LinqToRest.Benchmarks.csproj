@@ -22,6 +22,5 @@
     <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
     <ProjectReference Include="..\..\src\LinqToRest.Server\LinqToRest.Server.csproj" />
     <ProjectReference Include="..\..\src\LinqToRest.CodeGen\LinqToRest.CodeGen.csproj" />
-    <ProjectReference Include="..\..\tests\LinqToRest.TestContracts\LinqToRest.TestContracts.csproj" />
   </ItemGroup>
 </Project>

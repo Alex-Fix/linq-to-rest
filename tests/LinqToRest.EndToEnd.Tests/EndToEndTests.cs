@@ -132,8 +132,8 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     public async Task New_dtos_get_generated_keys_and_their_references()
     {
         var shop = Host.Client();
-        var category = new CategoryDto { Name = "Puzzles" };
-        var cube = new ProductDto { Name = "Cube", Price = 9.5m, Status = ProductStatus.Active, Category = category };
+        var category = new Category { Name = "Puzzles" };
+        var cube = new Product { Name = "Cube", Price = 9.5m, Status = ProductStatus.Active, Category = category };
         shop.Categories.Add(category);
         shop.Products.Add(cube);
 
@@ -189,7 +189,7 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     public async Task Rows_of_another_tenant_are_not_found()
     {
         var otherTenant = Host.Client(tenant: 2);
-        otherTenant.Products.Update(new ProductDto { Id = 1, Name = "Mine now", Version = new Guid("00000001-0000-0000-0000-000000000000") });
+        otherTenant.Products.Update(new Product { Id = 1, Name = "Mine now", Version = new Guid("00000001-0000-0000-0000-000000000000") });
 
         var error = await Assert.ThrowsAsync<RestSaveException>(() => otherTenant.SaveChangesAsync(Token));
 
@@ -201,7 +201,7 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     public async Task Denied_writes_are_forbidden()
     {
         var readOnly = Host.Client(readOnly: true);
-        readOnly.Products.Add(new ProductDto { Name = "Nope" });
+        readOnly.Products.Add(new Product { Name = "Nope" });
 
         var error = await Assert.ThrowsAsync<RestSaveException>(() => readOnly.SaveChangesAsync(Token));
 

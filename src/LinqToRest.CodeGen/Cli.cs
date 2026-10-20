@@ -7,18 +7,22 @@ internal static class Cli
 {
     private const string Usage = """
         Usage: linqtorest-gen ts --model <model.json> --name <Name> --out <file.ts> [--import <module>] [--check]
+               linqtorest-gen cs --model <model.json> --namespace <Namespace> --context <Context> --out <file.cs> [--check]
 
-          ts          Generate a TypeScript client.
-          --model     The model document a LinqToRest server exported (ExportLinqToRestModelAsync).
-          --name      The prefix of the generated context: Shop -> createShop(), ShopContext, shopModel.
-          --out       The file to write.
-          --import    The module the generated file imports from (default: linqtorest).
-          --check     Write nothing; exit 1 when the file differs (for CI).
+          ts           Generate a TypeScript client.
+          cs           Generate a C# client: classes, the context and its Add<Context> registration.
+          --model      The model document a LinqToRest server exported (ExportLinqToRestModelAsync).
+          --name       ts: the prefix of the generated context: Shop -> createShop(), ShopContext, shopModel.
+          --import     ts: the module the generated file imports from (default: linqtorest).
+          --namespace  cs: the namespace of the generated types.
+          --context    cs: the context class name, for example ShopContext.
+          --out        The file to write.
+          --check      Write nothing; exit 1 when the file differs (for CI).
         """;
 
     public static int Run(IReadOnlyList<string> args, TextWriter output, TextWriter errors)
     {
-        if (args.Count == 0 || args[0] != "ts")
+        if (args.Count == 0 || args[0] is not ("ts" or "cs"))
         {
             errors.WriteLine(Usage);
             return 2;
@@ -33,7 +37,7 @@ internal static class Cli
                 case "--check":
                     check = true;
                     break;
-                case "--model" or "--name" or "--out" or "--import" when index + 1 < args.Count:
+                case "--model" or "--name" or "--out" or "--import" or "--namespace" or "--context" when index + 1 < args.Count:
                     options[args[index]] = args[++index];
                     break;
                 default:
@@ -42,20 +46,35 @@ internal static class Cli
             }
         }
 
-        if (!options.TryGetValue("--model", out var modelPath) || !options.TryGetValue("--name", out var name) || !options.TryGetValue("--out", out var path))
+        var typeScript = args[0] == "ts";
+        string[] required = typeScript ? ["--model", "--name", "--out"] : ["--model", "--namespace", "--context", "--out"];
+        string[] allowed = [.. required, .. typeScript ? ["--import"] : Array.Empty<string>()];
+        if (!required.All(options.ContainsKey) || !options.Keys.All(allowed.Contains))
         {
             errors.WriteLine(Usage);
             return 2;
         }
 
+        var modelPath = options["--model"];
+        var path = options["--out"];
+
         try
         {
             var model = Load(modelPath);
-            var emitter = new TypeScriptEmitter(model, name, options.GetValueOrDefault("--import", "linqtorest"), Path.GetFileName(modelPath));
-            var text = emitter.Emit();
-            foreach (var warning in emitter.Warnings)
+            var source = Path.GetFileName(modelPath);
+            string text;
+            if (typeScript)
             {
-                errors.WriteLine($"warning: {warning}");
+                var emitter = new TypeScriptEmitter(model, options["--name"], options.GetValueOrDefault("--import", "linqtorest"), source);
+                text = emitter.Emit();
+                foreach (var warning in emitter.Warnings)
+                {
+                    errors.WriteLine($"warning: {warning}");
+                }
+            }
+            else
+            {
+                text = new CSharpEmitter(model, options["--namespace"], options["--context"], source).Emit();
             }
 
             if (check)
