@@ -259,6 +259,29 @@ All breaking, approved here.
 `LinqToRest.TestContracts` is removed; client tests use code generated from the golden model. CI re-exports
 `samples/Shop.Api/model.json`, regenerates every generated file with `--check`, and fails on any difference.
 
+## Implementation notes
+
+Where the implementation differs from the sections above, this list wins.
+
+1. **Steps 3–5 landed together.** The server can't keep `IDtoMapping` once sets are configured on entities, and
+   `DtoSetPolicy<TDto, TEntity>` needs a DTO type the server no longer has, so entity sets, the server internals and
+   the policy rename are one change. The client keeps its DTO model until step 7; the wire is the same, so the
+   end-to-end tests run unchanged in between.
+2. **Validation needs the EF Core model**, which needs a `DbContext`, so `AddLinqToRest` registers the server model as
+   a singleton built from DI, and `MapLinqToRest` resolves it: a bad configuration still fails at startup.
+3. **Members:** key properties are exposed automatically and come first, in key order; the other members keep the
+   order they were configured in. `Property(...)` takes nullability from the EF Core model. `Computed(...)` values of
+   reference type are nullable unless marked `IsRequired()` (the expression's nullability can't be inferred);
+   collections are never null. Navigation targets must be the only set of their entity type. `WithForeignKey` must
+   name an exposed property that is the EF Core foreign key of that navigation.
+4. **Scalar type names:** `byte` is `uint8` (it's unsigned), not `int8`.
+5. **Two golden models.** `tests/golden/model.json` comes from sets in `tests/LinqToRest.Server.UnitTests/Golden` that
+   mirror the client test contracts, so the golden request bodies stay unchanged.
+   `tests/LinqToRest.Server.IntegrationTests/Shop/model.json` is the integration shop's model, which the end-to-end
+   client is generated from. Both are rewritten with `LINQTOREST_UPDATE_GOLDEN=1`.
+6. **Formatting:** the model document is indented by two spaces, with every object or array that fits in 120 columns
+   on one line, so each property is one line in diffs.
+
 ## Open questions
 
 - Ship `linqtorest-gen` as a `dotnet tool` package?

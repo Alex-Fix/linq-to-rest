@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using LinqToRest.Modeling;
 using LinqToRest.Protocol;
 using LinqToRest.Server.Internal;
+using LinqToRest.Server.Mapping;
 
 namespace LinqToRest.Server.Query;
 
@@ -37,36 +38,35 @@ internal sealed partial class QueryBinder
         return new ValueShape(row.Add(Value(node, scope, null, MemberUse.Select)));
     }
 
-    /// <summary>The full DTO: every scalar and primitive-collection member, plus included navigations.</summary>
+    /// <summary>The full row: every scalar and primitive-collection member, plus included navigations.</summary>
     public Shape DefaultShape(EntityBound entity, Row row, IncludeTree? includes)
     {
         int? presence = entity.NeedsLifting ? row.Add(Presence(entity)) : null;
         var fields = new List<KeyValuePair<string, Shape>>();
-        foreach (var property in entity.Mapping.DtoType.Properties)
+        foreach (var property in entity.Mapping.Properties)
         {
-            fields.Add(new(property.WireName, new ValueShape(row.Add(PropertyValue(entity, property)))));
+            fields.Add(new(property.Name, new ValueShape(row.Add(PropertyValue(entity, property)))));
         }
 
         foreach (var (navigation, children) in includes?.Children ?? [])
         {
-            fields.Add(new(navigation.WireName, NavigationShape(entity, navigation, row, children)));
+            fields.Add(new(navigation.Name, NavigationShape(entity, navigation, row, children)));
         }
 
         return new ObjectShape(fields, presence);
     }
 
-    private Shape NavigationShape(EntityBound entity, DtoNavigation navigation, Row row, IncludeTree children)
+    private Shape NavigationShape(EntityBound entity, SetNavigation navigation, Row row, IncludeTree children)
     {
         if (!navigation.IsCollection)
         {
             return DefaultShape(Reference(entity, navigation), row, children);
         }
 
-        var map = entity.Mapping.Navigations[navigation];
-        var parameter = Expression.Parameter(map.Target.EntityType, NextParameterName());
+        var parameter = Expression.Parameter(navigation.Target.EntityType, NextParameterName());
         var elementRow = new Row(parameter);
-        var element = DefaultShape(new EntityBound(parameter, map.Target, null, isNullable: false), elementRow, children);
-        return new CollectionShape(row.Add(RowsList(CollectionSource(entity, map), elementRow, map.Target)), element);
+        var element = DefaultShape(new EntityBound(parameter, navigation.Target, null, isNullable: false), elementRow, children);
+        return new CollectionShape(row.Add(RowsList(CollectionSource(entity, navigation), elementRow, navigation.Target)), element);
     }
 
     private CollectionShape Map(LambdaNode node, Scope scope, Row row)
@@ -156,9 +156,9 @@ internal sealed partial class QueryBinder
 /// <summary>The navigations to include, as a tree.</summary>
 internal sealed class IncludeTree
 {
-    public Dictionary<DtoNavigation, IncludeTree> Children { get; } = [];
+    public Dictionary<SetNavigation, IncludeTree> Children { get; } = [];
 
-    public static IncludeTree Parse(IReadOnlyList<MemberNode> paths, DtoType root, int maxPathDepth)
+    public static IncludeTree Parse(IReadOnlyList<MemberNode> paths, SetMapping root, int maxPathDepth)
     {
         var tree = new IncludeTree();
         foreach (var path in paths)

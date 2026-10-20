@@ -70,7 +70,7 @@ public sealed class ServerFixture : IDisposable
         _connection.Open();
         var services = new ServiceCollection();
         services.AddDbContext<ShopDbContext>(options => options.UseSqlite(_connection), ServiceLifetime.Transient);
-        services.AddLinqToRest(ShopModel.Create(), options => options.UseDbContext<ShopDbContext>().AddMappingsFromAssembly(typeof(ServerFixture).Assembly));
+        services.AddLinqToRest(options => options.UseDbContext<ShopDbContext>().AddSetsFromAssembly(typeof(ServerFixture).Assembly));
         _services = services.BuildServiceProvider();
         Server = _services.GetRequiredService<ServerModel>();
         using var db = NewDbContext();

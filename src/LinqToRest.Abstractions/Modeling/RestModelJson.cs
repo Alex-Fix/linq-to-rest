@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Text;
 using System.Text.Json;
 
 namespace LinqToRest.Modeling;
@@ -10,6 +11,7 @@ internal static class RestModelJson
     internal const int MaxSets = 1000;
     internal const int MaxMembers = 1000;
     internal const int MaxEnums = 1000;
+    private const int LineWidth = 120;
 
     public static RestModel Read(ReadOnlySpan<byte> utf8Json)
     {
@@ -37,7 +39,7 @@ internal static class RestModelJson
     public static byte[] Write(RestModel model, bool indented)
     {
         var buffer = new ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = indented, IndentSize = 2 }))
+        using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
             writer.WriteNumber("v", RestModel.Version);
@@ -62,8 +64,69 @@ internal static class RestModelJson
             writer.WriteEndObject();
         }
 
-        return buffer.WrittenSpan.ToArray();
+        if (!indented)
+        {
+            return buffer.WrittenSpan.ToArray();
+        }
+
+        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        var output = new StringBuilder();
+        Format(document.RootElement, output, 0, 0);
+        return Encoding.UTF8.GetBytes(output.ToString());
     }
+
+    /// <summary>Indents by two spaces, keeping any object or array that fits in <see cref="LineWidth"/> on one line.</summary>
+    /// <param name="element">The value to write.</param>
+    /// <param name="output">The output.</param>
+    /// <param name="indent">The indentation of the line the value starts on.</param>
+    /// <param name="column">The column the value starts at.</param>
+    private static void Format(JsonElement element, StringBuilder output, int indent, int column)
+    {
+        var compact = Compact(element);
+        if (element.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array) || column + compact.Length <= LineWidth)
+        {
+            output.Append(compact);
+            return;
+        }
+
+        var (open, close) = element.ValueKind == JsonValueKind.Object ? ('{', '}') : ('[', ']');
+        output.Append(open).Append('\n');
+        var first = true;
+        foreach (var (name, value) in Children(element))
+        {
+            if (!first)
+            {
+                output.Append(",\n");
+            }
+
+            first = false;
+            output.Append(' ', indent + 2);
+            if (name is not null)
+            {
+                output.Append(name).Append(": ");
+            }
+
+            Format(value, output, indent + 2, indent + 2 + (name?.Length + 2 ?? 0));
+        }
+
+        output.Append('\n').Append(' ', indent).Append(close);
+    }
+
+    private static string Compact(JsonElement element)
+    {
+        if (element.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
+        {
+            return element.GetRawText();
+        }
+
+        var parts = Children(element).Select(child => (child.Name is null ? "" : child.Name + ": ") + Compact(child.Value));
+        return element.ValueKind == JsonValueKind.Object ? "{" + string.Join(", ", parts) + "}" : "[" + string.Join(", ", parts) + "]";
+    }
+
+    private static IEnumerable<(string? Name, JsonElement Value)> Children(JsonElement element) =>
+        element.ValueKind == JsonValueKind.Object
+            ? element.EnumerateObject().Select(property => ((string?)JsonSerializer.Serialize(property.Name), property.Value))
+            : element.EnumerateArray().Select(item => ((string?)null, item));
 
     private static RestModel ReadModel(JsonElement root)
     {

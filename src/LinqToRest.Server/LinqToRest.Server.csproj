@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Description>Serves LinqToRest queries and batches from EF Core, with DTOs as default projections of entities.</Description>
+    <Description>Serves LinqToRest queries and batches from EF Core entities exposed as sets, and exports the model clients are generated from.</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="LinqToRest.Server.IntegrationTests" />
+    <InternalsVisibleTo Include="LinqToRest.Server.UnitTests" />
   </ItemGroup>
 
   <ItemGroup>

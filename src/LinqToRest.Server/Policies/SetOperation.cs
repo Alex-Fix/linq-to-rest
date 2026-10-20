@@ -1,7 +1,7 @@
 namespace LinqToRest.Server.Policies;
 
 /// <summary>An operation a policy can allow or deny.</summary>
-public enum DtoOperation
+public enum SetOperation
 {
     /// <summary>A query.</summary>
     Read,

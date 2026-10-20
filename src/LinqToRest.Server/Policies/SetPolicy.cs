@@ -3,13 +3,12 @@ using System.Linq.Expressions;
 namespace LinqToRest.Server.Policies;
 
 /// <summary>
-/// Optional rules for one set, resolved from DI per request: which operations are allowed, which rows are visible,
-/// and server-owned values on insert and update.
+/// Optional rules for the sets of one entity type, resolved from DI per request: which operations are allowed,
+/// which rows are visible, and server-owned values on insert and update. A set's own write operations
+/// (<c>AllowWrites</c>) are checked first.
 /// </summary>
-/// <typeparam name="TDto">The DTO type.</typeparam>
 /// <typeparam name="TEntity">The entity type.</typeparam>
-public abstract class DtoSetPolicy<TDto, TEntity> : IDtoSetPolicy
-    where TDto : class, IDto
+public abstract class SetPolicy<TEntity> : ISetPolicy
     where TEntity : class
 {
     /// <summary>
@@ -25,7 +24,7 @@ public abstract class DtoSetPolicy<TDto, TEntity> : IDtoSetPolicy
     /// <param name="operation">The operation.</param>
     /// <param name="context">The request.</param>
     /// <returns><see langword="true"/> to allow it.</returns>
-    protected virtual ValueTask<bool> CanAsync(DtoOperation operation, PolicyContext context) => ValueTask.FromResult(true);
+    protected virtual ValueTask<bool> CanAsync(SetOperation operation, PolicyContext context) => ValueTask.FromResult(true);
 
     /// <summary>Sets server-owned values on a new entity, after client values were applied.</summary>
     /// <param name="entity">The new entity.</param>
@@ -41,20 +40,20 @@ public abstract class DtoSetPolicy<TDto, TEntity> : IDtoSetPolicy
     {
     }
 
-    LambdaExpression? IDtoSetPolicy.GetFilter(PolicyContext context) => Filter(context);
+    LambdaExpression? ISetPolicy.GetFilter(PolicyContext context) => Filter(context);
 
-    ValueTask<bool> IDtoSetPolicy.CanAsync(DtoOperation operation, PolicyContext context) => CanAsync(operation, context);
+    ValueTask<bool> ISetPolicy.CanAsync(SetOperation operation, PolicyContext context) => CanAsync(operation, context);
 
-    void IDtoSetPolicy.OnInsert(object entity, PolicyContext context) => OnInsert((TEntity)entity, context);
+    void ISetPolicy.OnInsert(object entity, PolicyContext context) => OnInsert((TEntity)entity, context);
 
-    void IDtoSetPolicy.OnUpdate(object entity, PolicyContext context) => OnUpdate((TEntity)entity, context);
+    void ISetPolicy.OnUpdate(object entity, PolicyContext context) => OnUpdate((TEntity)entity, context);
 }
 
-internal interface IDtoSetPolicy
+internal interface ISetPolicy
 {
     LambdaExpression? GetFilter(PolicyContext context);
 
-    ValueTask<bool> CanAsync(DtoOperation operation, PolicyContext context);
+    ValueTask<bool> CanAsync(SetOperation operation, PolicyContext context);
 
     void OnInsert(object entity, PolicyContext context);
 

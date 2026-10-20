@@ -34,9 +34,9 @@ public sealed class ShopHost : IAsyncDisposable
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddDbContext<ShopDbContext>(lease.Configure);
-        builder.Services.AddLinqToRest(Model, options => options
+        builder.Services.AddLinqToRest(options => options
             .UseDbContext<ShopDbContext>()
-            .AddMappingsFromAssembly(typeof(ShopHost).Assembly)
+            .AddSetsFromAssembly(typeof(ShopHost).Assembly)
             .AddPolicy<ProductPolicy>()
             .AddPolicy<CategoryPolicy>());
         var app = builder.Build();

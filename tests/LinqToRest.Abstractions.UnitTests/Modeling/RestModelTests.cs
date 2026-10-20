@@ -85,11 +85,14 @@ public sealed class RestModelTests
     }
 
     [Fact]
-    public void Indented_output_uses_two_spaces()
+    public void Indented_output_keeps_short_values_on_one_line()
     {
-        var json = new RestModel([Set("products", "Product", [Key("id")])]).ToJson();
+        var json = RestModel.Parse(DesignExample).ToJson().ReplaceLineEndings("\n");
 
-        Assert.StartsWith("{\n  \"v\": 1,\n  \"sets\": [", json.ReplaceLineEndings("\n"), StringComparison.Ordinal);
+        Assert.StartsWith("{\n  \"v\": 1,\n  \"enums\": {\"ProductStatus\": [\"Draft\", \"Active\", \"Retired\"]},\n  \"sets\": [\n    {\n      \"name\": \"products\",", json, StringComparison.Ordinal);
+        Assert.Contains("\n        {\"name\": \"id\", \"type\": \"int32\", \"sortable\": true},\n", json, StringComparison.Ordinal);
+        Assert.Contains("\n      \"key\": [\"id\"],\n", json, StringComparison.Ordinal);
+        Assert.DoesNotContain(json.Split('\n'), line => line.Length > 120);
     }
 
     [Theory]

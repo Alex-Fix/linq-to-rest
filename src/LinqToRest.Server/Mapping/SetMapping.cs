@@ -8,31 +8,53 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinqToRest.Server.Mapping;
 
-/// <summary>The validated mapping of one set: how each DTO member and navigation is computed from the entity.</summary>
-internal abstract class SetMapping(DtoType dtoType, Type entityType)
+/// <summary>One validated set: its exposed members, navigations and rules, each member as a lambda over the entity.</summary>
+internal abstract class SetMapping(RestSetModel model, Type entityType)
 {
-    public DtoType DtoType { get; } = dtoType;
+    private Dictionary<string, SetProperty> _properties = [];
+    private Dictionary<string, SetNavigation> _navigations = [];
+
+    /// <summary>Gets the set as described in the model document.</summary>
+    public RestSetModel Model { get; } = model;
+
+    public string Name => Model.Name;
 
     public Type EntityType { get; } = entityType;
 
-    public Type PolicyType { get; } = typeof(DtoSetPolicy<,>).MakeGenericType(dtoType.ClrType, entityType);
+    public Type PolicyType { get; } = typeof(SetPolicy<>).MakeGenericType(entityType);
 
-    /// <summary>Gets each member's value as a lambda over the entity.</summary>
-    public required IReadOnlyDictionary<DtoProperty, LambdaExpression> Bindings { get; init; }
+    public RestPaginationModel Pagination => Model.Pagination;
 
-    /// <summary>Gets the entity property of members assigned directly from one (the reverse binding writes use).</summary>
-    public required IReadOnlyDictionary<DtoProperty, PropertyInfo> EntityProperties { get; init; }
+    public IReadOnlyList<SetProperty> Properties { get; private set; } = [];
 
-    public IReadOnlyDictionary<DtoNavigation, NavigationMapping> Navigations { get; set; } = new Dictionary<DtoNavigation, NavigationMapping>();
+    public IReadOnlyList<SetNavigation> Navigations { get; private set; } = [];
+
+    public IReadOnlyList<SetProperty> Key { get; private set; } = [];
+
+    public SetProperty? ConcurrencyToken { get; private set; }
+
+    public SetProperty? FindProperty(string name) => _properties.GetValueOrDefault(name);
+
+    public SetNavigation? FindNavigation(string name) => _navigations.GetValueOrDefault(name);
+
+    public void Initialize(IReadOnlyList<SetProperty> properties, IReadOnlyList<SetNavigation> navigations)
+    {
+        Properties = properties;
+        Navigations = navigations;
+        _properties = properties.ToDictionary(property => property.Name, StringComparer.Ordinal);
+        _navigations = navigations.ToDictionary(navigation => navigation.Name, StringComparer.Ordinal);
+        Key = [.. Model.Key.Select(name => _properties[name])];
+        ConcurrencyToken = Model.ConcurrencyToken is { } token ? _properties[token] : null;
+    }
 
     /// <summary>Loads the tracked entity with the given key values, if it passes the policy filter.</summary>
     public abstract Task<object?> FindAsync(DbContext db, LambdaExpression? policyFilter, IReadOnlyList<object?> key, CancellationToken cancellationToken);
 
-    /// <summary><c>e =&gt; (e.Key1 == v1 &amp;&amp; …) || …</c> over the mapped key members, matching any of <paramref name="keys"/>.</summary>
+    /// <summary><c>e =&gt; (e.Key1 == v1 &amp;&amp; …) || …</c> over the key members, matching any of <paramref name="keys"/>.</summary>
     public LambdaExpression KeyPredicate(IReadOnlyList<IReadOnlyList<object?>> keys)
     {
         var entity = Expression.Parameter(EntityType, "e");
-        var members = DtoType.Key.Select(property => ExpressionHelpers.Inline(Bindings[property], entity)).ToList();
+        var members = Key.Select(property => ExpressionHelpers.Inline(property.Binding, entity)).ToList();
         Expression? predicate = null;
         foreach (var key in keys)
         {
@@ -49,10 +71,12 @@ internal abstract class SetMapping(DtoType dtoType, Type entityType)
     }
 
     public abstract Task<QueryResult> ExecuteAsync(DbContext db, QueryPlan plan, CancellationToken cancellationToken);
+
+    public override string ToString() => Name;
 }
 
-internal sealed class SetMapping<TEntity>(DtoType dtoType, Func<DbContext, IQueryable<TEntity>> source)
-    : SetMapping(dtoType, typeof(TEntity))
+internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQueryable<TEntity>> source)
+    : SetMapping(model, typeof(TEntity))
     where TEntity : class
 {
     private IQueryable<TEntity> Query(DbContext db) => source(db);
@@ -131,28 +155,73 @@ internal sealed class SetMapping<TEntity>(DtoType dtoType, Func<DbContext, IQuer
     }
 }
 
-/// <summary>A DTO navigation mapped to an entity navigation.</summary>
-internal sealed class NavigationMapping(LambdaExpression entity, PropertyInfo? entityProperty, SetMapping target)
+/// <summary>An exposed scalar or primitive-collection member.</summary>
+internal sealed class SetProperty
 {
-    /// <summary>Gets the entity navigation as a lambda over the declaring entity.</summary>
-    public LambdaExpression Entity { get; } = entity;
+    /// <summary>Gets the wire name.</summary>
+    public required string Name { get; init; }
 
-    /// <summary>Gets the entity navigation property when it's a direct member access (needed for batch refs).</summary>
-    public PropertyInfo? EntityProperty { get; } = entityProperty;
+    /// <summary>Gets the member's value as a lambda over the entity.</summary>
+    public required LambdaExpression Binding { get; init; }
 
-    public SetMapping Target { get; } = target;
+    /// <summary>Gets the entity property writes and key lookups use, for members bound directly to one.</summary>
+    public PropertyInfo? EntityProperty { get; init; }
+
+    /// <summary>Gets the value type (the collection type for collections).</summary>
+    public Type ClrType => Binding.ReturnType;
+
+    /// <summary>Gets the element type of a primitive collection.</summary>
+    public Type? ElementType { get; init; }
+
+    public bool IsCollection => ElementType is not null;
+
+    public required bool IsNullable { get; init; }
+
+    public bool IsWritable { get; init; }
+
+    public bool IsSortable { get; init; }
+
+    public bool IsFilterable { get; init; }
+
+    public override string ToString() => Name;
 }
 
-/// <summary>The DTO model, every set mapping and the server limits.</summary>
-internal sealed class ServerModel(DtoModel model, IReadOnlyDictionary<DtoType, SetMapping> mappings, Type contextType, Protocol.QueryLimits limits)
+/// <summary>An exposed navigation to another set.</summary>
+internal sealed class SetNavigation
 {
-    public DtoModel Model { get; } = model;
+    /// <summary>Gets the wire name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Gets the entity navigation as a lambda over the declaring entity.</summary>
+    public required LambdaExpression Entity { get; init; }
+
+    /// <summary>Gets the entity navigation property (batch refs set it).</summary>
+    public required PropertyInfo EntityProperty { get; init; }
+
+    public required SetMapping Target { get; init; }
+
+    public required bool IsCollection { get; init; }
+
+    public required bool IsNullable { get; init; }
+
+    /// <summary>Gets the exposed property holding the target's key, if configured.</summary>
+    public SetProperty? ForeignKey { get; init; }
+
+    public override string ToString() => Name;
+}
+
+/// <summary>Every set, the model document, the DbContext type and the server limits.</summary>
+internal sealed class ServerModel(RestModel model, IReadOnlyList<SetMapping> sets, Type contextType, Protocol.QueryLimits limits)
+{
+    private readonly Dictionary<string, SetMapping> _sets = sets.ToDictionary(set => set.Name, StringComparer.Ordinal);
+
+    public RestModel Model { get; } = model;
+
+    public IReadOnlyList<SetMapping> Sets { get; } = sets;
 
     public Type ContextType { get; } = contextType;
 
     public Protocol.QueryLimits Limits { get; } = limits;
 
-    public SetMapping? FindSet(string setName) => Model.FindSet(setName) is { } type ? mappings[type] : null;
-
-    public SetMapping Get(DtoType type) => mappings[type];
+    public SetMapping? FindSet(string setName) => _sets.GetValueOrDefault(setName);
 }

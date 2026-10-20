@@ -14,9 +14,8 @@ using Microsoft.EntityFrameworkCore;
 namespace LinqToRest.Server.Batch;
 
 /// <summary>
-/// Applies a batch in one transaction: validates every operation against the model, writes only through the direct
-/// member bindings of the default projection, saves once, re-reads changed rows through the projection (one query per
-/// set), and rolls
+/// Applies a batch in one transaction: validates every operation against the model, writes only through members
+/// exposed with <c>Property(...)</c>, saves once, re-reads changed rows through the set (one query per set), and rolls
 /// everything back on any failure.
 /// </summary>
 internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPolicies policies)
@@ -72,9 +71,9 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         var mapping = server.FindSet(operation.Set) ?? throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/set", operation);
         var kind = operation.Op switch
         {
-            BatchOperationKind.Insert => DtoOperation.Insert,
-            BatchOperationKind.Update => DtoOperation.Update,
-            _ => DtoOperation.Delete,
+            BatchOperationKind.Insert => SetOperation.Insert,
+            BatchOperationKind.Update => SetOperation.Update,
+            _ => SetOperation.Delete,
         };
         if (!await policies.CanAsync(mapping, kind).ConfigureAwait(false))
         {
@@ -82,7 +81,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         }
 
         object entity;
-        if (kind == DtoOperation.Insert)
+        if (kind == SetOperation.Insert)
         {
             if (operation.Key is not null || operation.Token is not null)
             {
@@ -98,14 +97,14 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         }
         else
         {
-            if (kind == DtoOperation.Delete && (operation.Values is not null || operation.Refs is not null))
+            if (kind == SetOperation.Delete && (operation.Values is not null || operation.Refs is not null))
             {
                 throw Invalid(ErrorCodes.InvalidBatch, location, operation);
             }
 
             entity = await LoadAsync(mapping, operation, location, cancellationToken).ConfigureAwait(false);
             CheckToken(mapping, entity, operation, location);
-            if (kind == DtoOperation.Delete)
+            if (kind == SetOperation.Delete)
             {
                 db.Remove(entity);
             }
@@ -122,13 +121,13 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
 
     private async Task<object> LoadAsync(SetMapping mapping, BatchOperation operation, string location, CancellationToken cancellationToken)
     {
-        var key = mapping.DtoType.Key;
+        var key = mapping.Key;
         if (operation.Key is null || operation.Key.Count != key.Count)
         {
             throw Invalid(ErrorCodes.InvalidBatch, $"{location}/key", operation);
         }
 
-        var values = key.Select(property => operation.Key.TryGetValue(property.WireName, out var value)
+        var values = key.Select(property => operation.Key.TryGetValue(property.Name, out var value)
                 ? JsonValues.Read(value, property.ClrType, $"{location}/key")
                 : throw Invalid(ErrorCodes.InvalidBatch, $"{location}/key", operation))
             .ToList();
@@ -146,7 +145,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
 
     private void CheckToken(SetMapping mapping, object entity, BatchOperation operation, string location)
     {
-        if (mapping.DtoType.ConcurrencyToken is not { } token)
+        if (mapping.ConcurrencyToken is not { } token)
         {
             if (operation.Token is not null)
             {
@@ -162,12 +161,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         }
 
         var expected = JsonValues.Read(element, token.ClrType, $"{location}/token");
-        var property = db.Entry(entity).Property(mapping.EntityProperties[token].Name);
-        if (!property.Metadata.IsConcurrencyToken)
-        {
-            throw new InvalidOperationException($"{mapping.EntityType.Name}.{property.Metadata.Name} is the concurrency token of {mapping.DtoType} but isn't one in the EF Core model. Configure it with IsConcurrencyToken() or IsRowVersion().");
-        }
-
+        var property = db.Entry(entity).Property(token.EntityProperty!.Name);
         if (!TokensEqual(property.CurrentValue, expected))
         {
             throw Concurrency([operation.Id]);
@@ -181,7 +175,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
     {
         foreach (var (name, element) in operation.Values ?? new Dictionary<string, JsonElement>())
         {
-            var property = mapping.DtoType.FindProperty(name) ?? throw Invalid(ErrorCodes.UnknownMember, $"{location}/values", operation);
+            var property = mapping.FindProperty(name) ?? throw Invalid(ErrorCodes.UnknownMember, $"{location}/values", operation);
             if (!property.IsWritable)
             {
                 throw Invalid(ErrorCodes.NotWritable, $"{location}/values", operation);
@@ -193,7 +187,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
                 throw Invalid(ErrorCodes.TypeMismatch, $"{location}/values", operation);
             }
 
-            mapping.EntityProperties[property].SetValue(entity, value);
+            property.EntityProperty!.SetValue(entity, value);
         }
     }
 
@@ -201,27 +195,26 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
     {
         foreach (var (name, target) in operation.Refs ?? new Dictionary<string, string>())
         {
-            var navigation = mapping.DtoType.Navigations.FirstOrDefault(navigation => navigation.ForeignKey?.WireName == name);
-            var map = navigation is null ? null : mapping.Navigations[navigation];
-            if (map?.EntityProperty is null || operation.Values?.ContainsKey(name) == true
-                || !_applied.TryGetValue(target, out var referenced) || referenced.Operation.Op != BatchOperationKind.Insert || referenced.Mapping != map.Target)
+            var navigation = mapping.Navigations.FirstOrDefault(navigation => navigation.ForeignKey?.Name == name);
+            if (navigation is null || operation.Values?.ContainsKey(name) == true
+                || !_applied.TryGetValue(target, out var referenced) || referenced.Operation.Op != BatchOperationKind.Insert || referenced.Mapping != navigation.Target)
             {
                 throw Invalid(ErrorCodes.InvalidBatch, $"{location}/refs", operation);
             }
 
-            map.EntityProperty.SetValue(entity, referenced.Entity);
+            navigation.EntityProperty.SetValue(entity, referenced.Entity);
         }
 
         // A foreign key written by value must point at a row the caller can see.
-        foreach (var navigation in mapping.DtoType.Navigations)
+        foreach (var navigation in mapping.Navigations)
         {
-            if (navigation.ForeignKey is not { } foreignKey || operation.Values?.TryGetValue(foreignKey.WireName, out var element) != true
+            if (navigation.ForeignKey is not { } foreignKey || operation.Values?.TryGetValue(foreignKey.Name, out var element) != true
                 || JsonValues.Read(element, foreignKey.ClrType, $"{location}/values") is not { } value)
             {
                 continue;
             }
 
-            var target = mapping.Navigations[navigation].Target;
+            var target = navigation.Target;
             if (await target.FindAsync(db, policies.Filter(target), [value], cancellationToken).ConfigureAwait(false) is null)
             {
                 throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values", operation);
@@ -237,11 +230,11 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         foreach (var set in written.GroupBy(applied => applied.Mapping))
         {
             var mapping = set.Key;
-            var keys = set.Select(applied => (IReadOnlyList<object?>)[.. mapping.DtoType.Key.Select(property => mapping.EntityProperties[property].GetValue(applied.Entity))]).ToList();
+            var keys = set.Select(applied => (IReadOnlyList<object?>)[.. mapping.Key.Select(property => property.EntityProperty!.GetValue(applied.Entity))]).ToList();
             var root = Expression.Parameter(mapping.EntityType, "e");
             var row = new Row(root);
             var shape = new QueryBinder(server, policies).DefaultShape(new EntityBound(root, mapping, null, isNullable: false), row, null);
-            var keyIndexes = mapping.DtoType.Key.Select(property => row.Add(ExpressionHelpers.Inline(mapping.Bindings[property], root))).ToList();
+            var keyIndexes = mapping.Key.Select(property => row.Add(ExpressionHelpers.Inline(property.Binding, root))).ToList();
             var plan = new QueryPlan
             {
                 PolicyFilter = policies.Filter(mapping),

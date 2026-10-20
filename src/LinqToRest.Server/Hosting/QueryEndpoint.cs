@@ -21,14 +21,14 @@ internal static partial class QueryEndpoint
             var body = await RequestBody.ReadAsync(context.Request, server.Limits.MaxBodyBytes).ConfigureAwait(false);
             var request = QueryJson.Read(body, server.Limits);
             var policies = new RequestPolicies(new PolicyContext(context));
-            if (!await policies.CanAsync(mapping, DtoOperation.Read).ConfigureAwait(false))
+            if (!await policies.CanAsync(mapping, SetOperation.Read).ConfigureAwait(false))
             {
                 throw new RequestException(StatusCodes.Status403Forbidden, ErrorCodes.Forbidden, "");
             }
 
             var plan = QueryCompiler.Compile(server, mapping, request, policies);
             var db = (DbContext)context.RequestServices.GetRequiredService(server.ContextType);
-            var result = await ProviderRejections.GuardAsync(context, mapping.DtoType.SetName, () => mapping.ExecuteAsync(db, plan, context.RequestAborted)).ConfigureAwait(false);
+            var result = await ProviderRejections.GuardAsync(context, mapping.Name, () => mapping.ExecuteAsync(db, plan, context.RequestAborted)).ConfigureAwait(false);
             await WriteAsync(context.Response, plan.Shape, result).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is ProtocolException or RequestException)

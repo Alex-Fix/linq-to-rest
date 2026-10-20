@@ -1,8 +1,10 @@
 using System.Text.Json;
 using LinqToRest.Protocol;
+using LinqToRest.Server.Mapping;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LinqToRest.Server.Hosting;
 
@@ -28,6 +30,9 @@ public static class LinqToRestEndpointRouteBuilderExtensions
     public static RouteGroupBuilder MapLinqToRest(this IEndpointRouteBuilder endpoints, string prefix = "")
     {
         ArgumentNullException.ThrowIfNull(endpoints);
+
+        // Builds and validates the model now, so a bad set configuration fails at startup.
+        _ = endpoints.ServiceProvider.GetRequiredService<ServerModel>();
         var group = endpoints.MapGroup(prefix);
         group.MapMethods("{set}", QueryMethod, QueryEndpoint.HandleAsync)
             .ExcludeFromDescription();

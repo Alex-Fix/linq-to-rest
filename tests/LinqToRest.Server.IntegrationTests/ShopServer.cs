@@ -51,9 +51,9 @@ public sealed class ShopServer : IAsyncDisposable
                 options.AddInterceptors(interceptor);
             }
         });
-        builder.Services.AddLinqToRest(ShopModel.Create(), options =>
+        builder.Services.AddLinqToRest(options =>
         {
-            options.UseDbContext<ShopDbContext>().AddMappingsFromAssembly(typeof(ShopServer).Assembly);
+            options.UseDbContext<ShopDbContext>().AddSetsFromAssembly(typeof(ShopServer).Assembly);
             configure?.Invoke(options);
         });
 
