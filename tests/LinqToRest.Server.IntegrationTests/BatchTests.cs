@@ -59,6 +59,28 @@ public abstract class BatchTests(ShopDatabase database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Each_written_row_comes_back_for_its_own_operation()
+    {
+        var response = await BatchOkAsync("""
+            {"v":1,"operations":[
+              {"id":"a","op":"insert","set":"categories","values":{"name":"Puzzles"}},
+              {"id":"g1","op":"update","set":"categories","key":{"id":2},"values":{"name":"Toys"}},
+              {"id":"b","op":"insert","set":"categories","values":{"name":"Maps"}},
+              {"id":"n","op":"update","set":"categories","key":{"id":1},"values":{"name":"Novels"}},
+              {"id":"g2","op":"update","set":"categories","key":{"id":2},"values":{"name":"Board games"}}]}
+            """);
+
+        var values = response.GetProperty("results").EnumerateArray()
+            .Select(result => (result.GetProperty("id").GetString(), result.GetProperty("value").GetProperty("name").GetString()))
+            .ToList();
+        Assert.Equal([("a", "Puzzles"), ("g1", "Board games"), ("b", "Maps"), ("n", "Novels"), ("g2", "Board games")], values);
+
+        var ids = response.GetProperty("results").EnumerateArray().Select(result => result.GetProperty("value").GetProperty("id").GetInt32()).ToList();
+        Assert.Equal([2, 1, 2], [ids[1], ids[3], ids[4]]);
+        Assert.NotEqual(ids[0], ids[2]);
+    }
+
+    [Fact]
     public async Task Update_writes_only_sent_members_and_returns_the_new_token()
     {
         var response = await BatchOkAsync($$"""

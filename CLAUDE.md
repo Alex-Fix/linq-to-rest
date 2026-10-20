@@ -28,6 +28,7 @@ clients/typescript/              npm package "linqtorest": TypeScript client (sa
 samples/                        Shop.Contracts, Shop.Api (EF Core SQLite, API key), Shop.Console (client) — not packable
 tests/                          xUnit v3, one project per package + Server.IntegrationTests (SQLite) + EndToEnd.Tests
                                 (EndToEnd links the integration tests' Shop/*.cs)
+benchmarks/                     BenchmarkDotNet suites for every src/ project (not packable)
 docs/plans/                     approved design docs (written by the `brainstorming` skill)
 artifacts/                      gitignored: all build output (no per-project bin/obj)
 ```
@@ -43,8 +44,12 @@ artifacts/                      gitignored: all build output (no per-project bin
   `dotnet jb inspectcode LinqToRest.slnx --format=Text --output=- --no-build` (~15s+; drop `--no-build` if not
   just built; `--include="src/Foo/**"` to narrow)
 - Add a project: `dotnet sln LinqToRest.slnx add --solution-folder src <path>` (or `samples` / `tests`)
+- Benchmarks: `dotnet run -c Release --project benchmarks/LinqToRest.Benchmarks -- --filter '*Query*' [--job short]`
+  (results in `artifacts/benchmarks/`). Changes to hot paths (reading, binding, execution, writing, client
+  translation/materialization/tracking) need a before/after run of the affected suites.
 - TypeScript client (`cd clients/typescript`): `npm ci`, then `npm run check` (Prettier, ESLint strict type-checked,
-  `tsc`, Vitest incl. type tests, build) and `npm run test:e2e` (starts `samples/Shop.Api` on SQLite). Request bodies
+  `tsc`, Vitest incl. type tests, build) and `npm run test:e2e` (starts `samples/Shop.Api` on SQLite); `npm run bench` runs the Vitest
+  benchmarks (results in `artifacts/typescript-bench.json`). Request bodies
   must match `tests/golden/*.json`, which the .NET client tests also assert (`LINQTOREST_UPDATE_GOLDEN=1` regenerates
   them from the .NET client). Conventions: `typescript-client` skill.
 - Generated TypeScript models (never edit by hand): `dotnet run --project src/LinqToRest.TypeScript -- --assembly

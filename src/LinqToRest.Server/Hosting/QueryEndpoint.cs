@@ -54,6 +54,13 @@ internal static partial class QueryEndpoint
     {
         response.ContentType = "application/json";
         await using var writer = new Utf8JsonWriter(response.BodyWriter);
+        Write(writer, shape, result);
+        await writer.FlushAsync(response.HttpContext.RequestAborted).ConfigureAwait(false);
+    }
+
+    /// <summary>Writes <c>{"items":[…],"nextCursor"?,"totalCount"?}</c>.</summary>
+    internal static void Write(Utf8JsonWriter writer, Shape shape, QueryResult result)
+    {
         writer.WriteStartObject();
         writer.WriteStartArray("items");
         foreach (var row in result.Rows)
@@ -73,6 +80,5 @@ internal static partial class QueryEndpoint
         }
 
         writer.WriteEndObject();
-        await writer.FlushAsync(response.HttpContext.RequestAborted).ConfigureAwait(false);
     }
 }

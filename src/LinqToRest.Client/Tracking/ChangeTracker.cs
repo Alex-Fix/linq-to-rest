@@ -147,7 +147,7 @@ internal sealed class ChangeTracker
         for (var index = 0; index < entry.Type.Navigations.Count; index++)
         {
             var navigation = entry.Type.Navigations[index];
-            if (navigation.IsCollection && !Entry.SameItems(navigation.PropertyInfo.GetValue(entry.Entity), entry.NavigationSnapshot[index]))
+            if (navigation.IsCollection && !Entry.SameItems(entry.Accessors.Navigations[index](entry.Entity), entry.NavigationSnapshot[index]))
             {
                 throw new NotSupportedException($"Items were added to or removed from {navigation}. Set the foreign key of the child DTO instead.");
             }
@@ -157,7 +157,7 @@ internal sealed class ChangeTracker
         for (var index = 0; index < entry.Type.Properties.Count; index++)
         {
             var property = entry.Type.Properties[index];
-            if (property.IsWritable && (entry.Forced.Contains(property) || !Entry.SameValue(property.PropertyInfo.GetValue(entry.Entity), entry.Snapshot[index])))
+            if (property.IsWritable && (entry.Forced.Contains(property) || !Entry.SameValue(entry.Accessors.Properties[index](entry.Entity), entry.Snapshot[index])))
             {
                 entry.Modified.Add(property);
             }
@@ -177,7 +177,7 @@ internal sealed class ChangeTracker
                 continue;
             }
 
-            var target = navigation.PropertyInfo.GetValue(entry.Entity);
+            var target = entry.Accessors.Navigations[index](entry.Entity);
             var original = entry.NavigationSnapshot.Length > 0 ? entry.NavigationSnapshot[index] : null;
             if (target is null)
             {
@@ -217,6 +217,8 @@ internal sealed class Entry(object entity, DtoType type)
 
     public DtoType Type { get; } = type;
 
+    public Accessors Accessors { get; } = Accessors.For(type);
+
     public EntityState State { get; set; }
 
     public EntityKey? Key { get; set; }
@@ -235,13 +237,17 @@ internal sealed class Entry(object entity, DtoType type)
 
     public void TakeSnapshot()
     {
-        Snapshot = [.. Type.Properties.Select(property => Copy(property.PropertyInfo.GetValue(Entity)))];
-        NavigationSnapshot = [.. Type.Navigations.Select(navigation => Copy(navigation.PropertyInfo.GetValue(Entity)))];
+        Snapshot = [.. Accessors.Properties.Select(get => Copy(get(Entity)))];
+        NavigationSnapshot = [.. Accessors.Navigations.Select(get => Copy(get(Entity)))];
     }
 
     public object? Original(DtoProperty property) => Snapshot[IndexOf(property)];
 
-    public void ResetSnapshot(DtoProperty property) => Snapshot[IndexOf(property)] = Copy(property.PropertyInfo.GetValue(Entity));
+    public void ResetSnapshot(DtoProperty property)
+    {
+        var index = IndexOf(property);
+        Snapshot[index] = Copy(Accessors.Properties[index](Entity));
+    }
 
     public static bool SameValue(object? current, object? snapshot) => current switch
     {
@@ -284,7 +290,7 @@ internal readonly struct EntityKey(DtoType type, object?[] values) : IEquatable<
     public object?[] Values { get; } = values;
 
     public static EntityKey Of(object entity, DtoType type) =>
-        new(type, [.. type.Key.Select(property => property.PropertyInfo.GetValue(entity))]);
+        new(type, [.. Accessors.For(type).Key.Select(get => get(entity))]);
 
     public bool Equals(EntityKey other) => Type == other.Type && Values.SequenceEqual(other.Values);
 

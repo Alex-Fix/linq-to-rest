@@ -309,8 +309,12 @@ internal sealed class NodeTranslator(DtoType root)
             : throw NotSupported(call, "This string.Equals overload can't be translated.");
     }
 
-    private CallNode In(Expression item, IEnumerable values) =>
-        new(QueryOperators.In, [Translate(item), new ListNode([.. values.Cast<object?>().Select(value => Literal(value, item))])]);
+    private CallNode In(Expression item, IEnumerable values)
+    {
+        // The items are elements of one encoded array rather than a document each.
+        var list = JsonValues.ToElement(values.Cast<object?>().Select(value => Sendable(value, item)).ToList());
+        return new(QueryOperators.In, [Translate(item), new ListNode([.. list.EnumerateArray().Select(element => new LiteralNode(element))])]);
+    }
 
     private QueryNode ConcatArgument(Expression argument)
     {
@@ -409,11 +413,14 @@ internal sealed class NodeTranslator(DtoType root)
             ? Flatten(nested, type)
             : [side]);
 
-    private static LiteralNode Literal(object? value, Expression expression) => value switch
+    private static LiteralNode Literal(object? value, Expression expression) => LiteralNode.From(Sendable(value, expression));
+
+    /// <summary>The value as it's encoded on the wire (a char as a string); throws for values that can't be sent.</summary>
+    private static object? Sendable(object? value, Expression expression) => value switch
     {
-        null => LiteralNode.From(null),
-        char character => LiteralNode.From(character.ToString()),
-        _ when ScalarTypes.IsScalar(value.GetType()) => LiteralNode.From(value),
+        null => null,
+        char character => character.ToString(),
+        _ when ScalarTypes.IsScalar(value.GetType()) => value,
         _ => throw NotSupported(expression, $"Values of type {value.GetType().Name} can't be sent."),
     };
 

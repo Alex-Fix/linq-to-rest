@@ -24,12 +24,24 @@ public class RestDataContextOptions
     /// <summary>Gets the HTTP client.</summary>
     public HttpClient HttpClient { get; }
 
-    /// <summary>Gets the JSON options used to read results (camelCase, enums by name, no numbers as strings).</summary>
-    public JsonSerializerOptions SerializerOptions { get; } = new(JsonSerializerDefaults.Web)
+    /// <summary>
+    /// Gets the JSON options used to read results (camelCase, enums by name, no numbers as strings). They're shared by
+    /// every context and read-only, so serialization metadata is built once rather than per context.
+    /// </summary>
+    public JsonSerializerOptions SerializerOptions { get; } = SharedSerializerOptions;
+
+    private static readonly JsonSerializerOptions SharedSerializerOptions = CreateSerializerOptions();
+
+    private static JsonSerializerOptions CreateSerializerOptions()
     {
-        NumberHandling = JsonNumberHandling.Strict,
-        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
-    };
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            NumberHandling = JsonNumberHandling.Strict,
+            Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
+        };
+        options.MakeReadOnly(populateMissingResolver: true);
+        return options;
+    }
 }
 
 /// <summary>Options for a specific context type, so each context resolves its own from DI.</summary>

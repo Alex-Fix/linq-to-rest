@@ -28,15 +28,21 @@ internal abstract class SetMapping(DtoType dtoType, Type entityType)
     /// <summary>Loads the tracked entity with the given key values, if it passes the policy filter.</summary>
     public abstract Task<object?> FindAsync(DbContext db, LambdaExpression? policyFilter, IReadOnlyList<object?> key, CancellationToken cancellationToken);
 
-    /// <summary><c>e =&gt; e.Key1 == v1 &amp;&amp; …</c> over the mapped key members.</summary>
-    public LambdaExpression KeyPredicate(IReadOnlyList<object?> key)
+    /// <summary><c>e =&gt; (e.Key1 == v1 &amp;&amp; …) || …</c> over the mapped key members, matching any of <paramref name="keys"/>.</summary>
+    public LambdaExpression KeyPredicate(IReadOnlyList<IReadOnlyList<object?>> keys)
     {
         var entity = Expression.Parameter(EntityType, "e");
+        var members = DtoType.Key.Select(property => ExpressionHelpers.Inline(Bindings[property], entity)).ToList();
         Expression? predicate = null;
-        for (var index = 0; index < DtoType.Key.Count; index++)
+        foreach (var key in keys)
         {
-            var member = ExpressionHelpers.Inline(Bindings[DtoType.Key[index]], entity);
-            predicate = ExpressionHelpers.AndAlso(predicate, Expression.Equal(member, ExpressionHelpers.Parameter(key[index], member.Type)));
+            Expression? equal = null;
+            for (var index = 0; index < members.Count; index++)
+            {
+                equal = ExpressionHelpers.AndAlso(equal, Expression.Equal(members[index], ExpressionHelpers.Parameter(key[index], members[index].Type)));
+            }
+
+            predicate = predicate is null ? equal! : Expression.OrElse(predicate, equal!);
         }
 
         return Expression.Lambda(predicate!, entity);
@@ -59,7 +65,7 @@ internal sealed class SetMapping<TEntity>(DtoType dtoType, Func<DbContext, IQuer
             query = query.Where(filter);
         }
 
-        return await query.Where((Expression<Func<TEntity, bool>>)KeyPredicate(key)).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        return await query.Where((Expression<Func<TEntity, bool>>)KeyPredicate([key])).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<QueryResult> ExecuteAsync(DbContext db, QueryPlan plan, CancellationToken cancellationToken)

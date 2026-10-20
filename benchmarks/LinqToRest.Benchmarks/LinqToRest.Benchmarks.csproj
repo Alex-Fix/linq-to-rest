@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The integration tests' shop (entities, DTOs, mappings, policies); its test-only database helpers stay out. -->
+    <Compile Include="..\..\tests\LinqToRest.Server.IntegrationTests\Shop\*.cs" Exclude="..\..\tests\LinqToRest.Server.IntegrationTests\Shop\ShopDatabase.cs" LinkBase="Shop" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
+    <ProjectReference Include="..\..\src\LinqToRest.Server\LinqToRest.Server.csproj" />
+    <ProjectReference Include="..\..\src\LinqToRest.TypeScript\LinqToRest.TypeScript.csproj" />
+    <ProjectReference Include="..\..\tests\LinqToRest.TestContracts\LinqToRest.TestContracts.csproj" />
+  </ItemGroup>
+</Project>

@@ -45,6 +45,13 @@ dotnet_diagnostic.CA1707.severity = none
 [*.{ts,js,json}]
 indent_size = 2
 
+# Benchmarks: BenchmarkDotNet owns the lifetime of benchmark classes ([GlobalSetup]/[GlobalCleanup]).
+[benchmarks/**.cs]
+dotnet_diagnostic.CA1001.severity = none
+# [Params] properties must be public and settable for BenchmarkDotNet to assign them.
+resharper_member_can_be_private_global_highlighting = none
+resharper_auto_property_can_be_made_get_only_global_highlighting = none
+
 [*.{sln,slnx}]
 indent_style = tab
 

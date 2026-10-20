@@ -19,5 +19,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="$(MSBuildProjectName).UnitTests" />
+    <InternalsVisibleTo Include="LinqToRest.Benchmarks" />
   </ItemGroup>
 </Project>

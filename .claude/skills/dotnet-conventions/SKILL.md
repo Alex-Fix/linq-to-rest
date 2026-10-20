@@ -76,6 +76,19 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
 - Results that differ between providers are a library bug (for example, unordered collections) unless the database
   defines them differently (collation, null ordering). Then the test uses values both providers agree on.
 
+## Benchmarks (`benchmarks/`)
+- `LinqToRest.Benchmarks`: BenchmarkDotNet console app, Release only, not packable; one class per suite
+  (`QueryReading`, `QueryBinding`, `QueryExecution`, `QueryEndpointRequest`, `BatchExecution`, `ClientTranslation`,
+  `ClientMaterialization`, `ChangeDetection`, `JsonValuesCodec`, `Generator`), every one with `[MemoryDiagnoser]`.
+  It reuses `LinqToRest.TestContracts` and links the integration tests' `Shop/*.cs`; `src/` projects grant it
+  `InternalsVisibleTo`. Setup stays out of the measured method; no network (stub handlers, in-process test server).
+- Run one suite: `dotnet run -c Release --project benchmarks/LinqToRest.Benchmarks -- --filter '*QueryBinding*'`.
+  Results land in `artifacts/benchmarks/results/`. Add `--job short` while iterating and `--profiler EP` for an
+  EventPipe trace (`*.speedscope.json`) to find the hotspot.
+- A hot-path change keeps only a clear gain (≥ 5% time or fewer allocations, nothing else slower), measured in the
+  same session before and after; re-run when the untouched cases move too, since the machine is noisy. Put the
+  before/after numbers in the commit message. CI runs every suite with `--job dry` only.
+
 ## Commands
 - Test: `dotnet test --solution LinqToRest.slnx` (Microsoft Testing Platform via `global.json`); one project:
   `dotnet test --project tests/<Project>`
