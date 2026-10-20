@@ -2,13 +2,16 @@
 
 [![ci](https://github.com/Alex-Fix/linq-to-rest/actions/workflows/ci.yml/badge.svg)](https://github.com/Alex-Fix/linq-to-rest/actions/workflows/ci.yml)
 
-LinqToRest covers both ends of a .NET REST API with one set of shared DTOs:
+LinqToRest covers both ends of a .NET REST API:
 
-- **Client** — write LINQ and unit-of-work code against a `RestDataContext`. Queries are translated into a JSON
-  expression tree and sent with HTTP `QUERY`; `SaveChangesAsync` sends every insert, update and delete as one
+- **Server** — exposes EF Core entities as sets: only the members, computed values and navigations you configure are
+  reachable, and a set is read-only until it allows writes. It validates each query against that model, runs it on
+  EF Core, and applies batches in one transaction. Entities never leave the server.
+- **Model document** — the server exports what it exposes as versioned JSON; the C# and TypeScript clients are
+  generated from it, so they always match.
+- **Client** — write LINQ and unit-of-work code against a generated `RestDataContext`. Queries are translated into a
+  JSON expression tree and sent with HTTP `QUERY`; `SaveChangesAsync` sends every insert, update and delete as one
   atomic `POST /$batch`.
-- **Server** — validates those trees against the DTO model and runs them on EF Core, where each DTO is the default
-  projection of an entity. Entities never leave the server; batches run in one transaction.
 
 ```csharp
 var games = await shop.Products
@@ -20,91 +23,66 @@ var games = await shop.Products
 
 var chess = await shop.Products.FirstAsync(p => p.Name == "Chess");
 chess.Price += 1;
-shop.Products.Add(new ProductDto { Name = "Cube", Price = 9.5m, Category = puzzles });
+shop.Products.Add(new Product { Name = "Cube", Price = 9.5m, Category = puzzles });
 await shop.SaveChangesAsync();      // one atomic batch
 ```
 
-Design and rationale: [`docs/plans/2026-10-18-linqtorest-v1-design.md`](docs/plans/2026-10-18-linqtorest-v1-design.md).
+Design and rationale: [`docs/plans/2026-10-18-linqtorest-v1-design.md`](docs/plans/2026-10-18-linqtorest-v1-design.md),
+with the model reworked by [`docs/plans/2026-10-20-entity-sets-design.md`](docs/plans/2026-10-20-entity-sets-design.md).
 
 ## Packages
 
 | Package | Contents | Dependencies |
 |---|---|---|
-| `LinqToRest.Abstractions` | `IDto`, the EF-style DTO model builder, query tree and wire contracts | BCL only |
-| `LinqToRest.Client` | `RestDataContext`, `DtoSet<T>`, LINQ provider, change tracking | `Microsoft.Extensions.Http` |
-| `LinqToRest.Server` | DTO → entity mappings, query and batch execution, policies, endpoints | EF Core, ASP.NET Core |
-| `LinqToRest.TypeScript` | `linqtorest-ts` .NET tool: generates the TypeScript model from your contracts | — |
+| `LinqToRest.Abstractions` | The model document (`RestModel`), query tree and wire contracts | BCL only |
+| `LinqToRest.Client` | `RestDataContext`, `RestSet<T>`, `ClientModel`, LINQ provider, change tracking | `Microsoft.Extensions.Http` |
+| `LinqToRest.Server` | Entity sets, query and batch execution, policies, endpoints, model export | EF Core, ASP.NET Core |
+| `LinqToRest.CodeGen` | `linqtorest-gen` .NET tool: generates the C# and TypeScript clients from the model document | — |
 | npm `linqtorest` | TypeScript client: typed queries and unit of work (see [its README](clients/typescript/README.md)) | none |
 
 Targets .NET 10 (`HttpMethod.Query` and `HttpMethods.Query` are built in).
 
 ## Quick start
 
-### 1. Shared contracts
+### 1. Server: expose entities as sets
 
 ```csharp
-public sealed class ProductDto : IDto
+public sealed class ProductSet : IEntitySetConfiguration<Product>
 {
-    public int Id { get; set; }
-    public string Name { get; set; } = "";
-    public decimal Price { get; set; }
-    public Guid Version { get; set; }
-    public int? CategoryId { get; set; }
-    public CategoryDto? Category { get; set; }
-    public List<string> Tags { get; set; } = [];
-}
-
-public sealed class ProductConfiguration : IDtoTypeConfiguration<ProductDto>
-{
-    public void Configure(DtoTypeBuilder<ProductDto> b)
+    public void Configure(EntitySetBuilder<Product> b)
     {
-        b.ToSet("products").HasKey(d => d.Id).HasConcurrencyToken(d => d.Version);
-        b.HasOne(d => d.Category).WithForeignKey(d => d.CategoryId);
-        b.Property(d => d.Price).IsSortable();          // sorting is opt-in
-        b.Property(d => d.Tags).IsReadOnly();           // computed on the server
+        b.ToSet("products").AllowWrites(WriteOperations.All);   // read-only unless you allow writes
+        b.Property(p => p.Name);                                // the key is exposed automatically
+        b.Property(p => p.Price).IsSortable();                  // sorting is opt-in
+        b.HasConcurrencyToken(p => p.Version);
+        b.Property(p => p.CategoryId);
+        b.Computed("tags", p => p.Tags.Select(t => t.Value).ToList());   // read-only, computed in SQL
+        b.HasOne(p => p.Category).WithForeignKey(p => p.CategoryId);    // to another configured set
+        b.HasMany(p => p.Lines);
         b.HasPagination(p => p.DefaultPageSize(20).MaxPageSize(100));
     }
 }
 
-DtoModel model = new DtoModelBuilder().ApplyConfigurationsFromAssembly(typeof(ProductDto).Assembly).Build();
-```
-
-Every DTO member is selectable and filterable unless configured otherwise (`IsNotFilterable()`); members are
-writable unless they're keys, concurrency tokens or `IsReadOnly()`. `Build()` validates the model and fails fast.
-
-### 2. Server
-
-```csharp
-public sealed class ProductMapping : IDtoMapping<ProductDto, Product>
-{
-    public void Configure(DtoMappingBuilder<ProductDto, Product> m)
-    {
-        m.Project(p => new ProductDto
-        {
-            Id = p.Id, Name = p.Name, Price = p.Price, Version = p.Version, CategoryId = p.CategoryId,
-            Tags = p.Tags.Select(t => t.Value).ToList(),
-        });
-        m.HasOne(d => d.Category, p => p.Category);
-    }
-}
-
-builder.Services.AddLinqToRest(model, o => o
+builder.Services.AddLinqToRest(o => o
     .UseDbContext<ShopDbContext>()
-    .AddMappingsFromAssembly(typeof(ProductMapping).Assembly)
+    .AddSetsFromAssembly(typeof(ProductSet).Assembly)
     .AddPolicy<ProductPolicy>()
     .Limits(l => l.MaxNodes = 200));
 
 app.MapLinqToRest("/api").RequireAuthorization();   // QUERY /api/{set}, POST /api/{set}/$query, POST /api/$batch
 ```
 
-Mappings are validated at startup: every member must be assigned, and writable members, keys and tokens must be
-assigned directly from an entity property of the same type. That direct binding is the only way writes reach
-an entity.
+Only what a set configures exists on the wire: an entity column you don't expose (`TenantId`, `PasswordHash`, one
+added next month) can't be selected, filtered, sorted or written. Exposed properties are filterable unless
+`IsNotFilterable()`, and writable when the set allows inserts or updates, unless they're keys, tokens or
+`IsReadOnly()`. `$batch` is only mapped when some set allows writes, and an operation a set doesn't allow is refused
+with 403 `operation_not_allowed` before anything runs. `MapLinqToRest` validates every set against the EF Core model
+and fails at startup on a mistake.
 
 Policies decide per request which rows are visible and which operations are allowed:
 
 ```csharp
-public sealed class ProductPolicy : DtoSetPolicy<ProductDto, Product>
+public sealed class ProductPolicy : SetPolicy<Product>
 {
     protected override Expression<Func<Product, bool>> Filter(PolicyContext c)
     {
@@ -112,25 +90,43 @@ public sealed class ProductPolicy : DtoSetPolicy<ProductDto, Product>
         return p => p.TenantId == tenant;           // reads, counts, cursors, navigations, updates, deletes
     }
 
-    protected override ValueTask<bool> CanAsync(DtoOperation op, PolicyContext c) => ValueTask.FromResult(op == DtoOperation.Read || c.User.IsInRole("editor"));
+    protected override ValueTask<bool> CanAsync(SetOperation op, PolicyContext c) => ValueTask.FromResult(op == SetOperation.Read || c.User.IsInRole("editor"));
 
     protected override void OnInsert(Product e, PolicyContext c) => e.TenantId = c.User.FindFirstValue("tenant")!;
 }
 ```
 
 Rows hidden by a filter behave as missing: updates and deletes get 404, and hidden navigation targets read as
-`null`. Filters don't apply inside your own projection expressions (`CategoryName = p.Category.Name` reads the
-category regardless of the category policy), so keep computed members within what the DTO's set may show.
+`null`. Filters don't apply inside your own `Computed` expressions (`p => p.Category!.Name` reads the category
+regardless of the category policy), so keep computed values within what the set may show.
+
+### 2. Export the model and generate the clients
+
+```csharp
+var app = builder.Build();
+if (Array.IndexOf(args, "--export-linqtorest-model") is var export and >= 0)
+{
+    await app.ExportLinqToRestModelAsync(args[export + 1]);   // in the real host: same services and EF Core model
+    return;
+}
+```
+
+```sh
+dotnet run --project Shop.Api -- --export-linqtorest-model model.json
+dotnet linqtorest-gen cs --model Shop.Api/model.json --namespace Shop.Client --context ShopContext --out Shop.Client/ShopContext.generated.cs
+dotnet linqtorest-gen ts --model Shop.Api/model.json --name Shop --out web/src/shop.generated.ts
+```
+
+Check the model and the generated files in, and run the same commands with `--check` in CI. The model document lists
+sets, members, types and the writes each set allows, nothing about entities or expressions.
+`MapLinqToRest(...).WithModelEndpoint()` also serves it at `GET /api/$model` (off by default).
 
 ### 3. Client
 
-```csharp
-public sealed class ShopClient(RestDataContextOptions<ShopClient> options) : RestDataContext(options)
-{
-    public DtoSet<ProductDto> Products => Set<ProductDto>();
-}
+The generated `ShopContext` has a `RestSet<T>` per set, the classes of its rows, and a registration extension:
 
-services.AddRestDataContext<ShopClient>(model, http => http.BaseAddress = new("https://shop.example/api/"))
+```csharp
+services.AddShopContext(http => http.BaseAddress = new("https://shop.example/api/"))
     .AddHttpMessageHandler<AuthHandler>();          // a normal IHttpClientBuilder
 ```
 
@@ -148,15 +144,14 @@ date parts, `Any`/`All`/`Count`/`Sum`/`Min`/`Max`/`Average`/`Select`/`Where` on 
 | `FirstAsync`, `SingleAsync`, `CountAsync`, `AnyAsync` (+ `OrDefault`, `LongCount`, predicate overloads) | Fetch only what they need. |
 | `Include`, `After`, `AsNoTracking` | LinqToRest operators. |
 
-Queries never run synchronously. Full-DTO results are tracked (identity map); projections aren't. Change tracked DTOs
-and call `SaveChangesAsync`: inserts get their generated keys, every saved DTO gets its new concurrency token and
-computed members. Failures throw `RestSaveException` / `RestConcurrencyException` and leave the tracked state as it was.
+Queries never run synchronously. Full-row results are tracked (identity map); projections aren't. Change tracked rows
+and call `SaveChangesAsync`: inserts get their generated keys, every saved row gets its new concurrency token and
+computed values. `Add`, `Update` and `Remove` throw right away on a set that doesn't allow that write. Failures throw
+`RestSaveException` / `RestConcurrencyException` and leave the tracked state as it was.
 
 ### 4. TypeScript client
 
-```sh
-dotnet linqtorest-ts --assembly Shop.Contracts.dll --name Shop --out web/src/shop.generated.ts
-```
+Generated from the same model document (step 2); each set only offers the writes the server allows.
 
 ```ts
 const shop = createShop({ baseUrl: "https://shop.example/api/" });
@@ -202,7 +197,7 @@ The list is closed: anything else is rejected.
   {"id":"o3","op":"delete","set":"products","key":{"id":9},"token":"…"}]}
 ```
 
-→ `{"results":[{"id":"o0","value":{…}},…]}`, each value re-read through the default projection.
+→ `{"results":[{"id":"o0","value":{…}},…]}`, each value re-read through its set.
 
 Errors are `application/problem+json` with a stable `code`, a JSON `pointer` into the request, and `limit` or
 `operationId(s)` where relevant. They never contain the rejected value.
@@ -210,7 +205,7 @@ Errors are `application/problem+json` with a stable `code`, a JSON `pointer` int
 | Status | Codes |
 |---|---|
 | 400 | `invalid_json` `unknown_node` `bad_arity` `unknown_member` `not_filterable` `not_sortable` `not_writable` `type_mismatch` `invalid_cursor` `cursor_nullable_sort` `limit_exceeded` `unsupported_version` `invalid_query` `invalid_batch` |
-| 403 / 404 | `forbidden` / `not_found` |
+| 403 / 404 | `forbidden`, `operation_not_allowed` / `not_found` |
 | 409 / 412 | `conflict` (constraint violation) / `concurrency_conflict` |
 | 415 | `unsupported_media_type` |
 
@@ -265,7 +260,7 @@ only, as the tests and sample do.
   excluded from descriptions; `POST {set}/$query` and `POST $batch` carry full metadata. The sample serves the
   document and a Scalar UI at `/scalar/v1` in Development.
 - **Concurrency tokens** must be EF Core concurrency tokens (`IsConcurrencyToken()` / `IsRowVersion()`); the server
-  refuses a token that isn't one.
+  refuses to start with one that isn't.
 
 ## Development
 
@@ -277,7 +272,8 @@ dotnet tool restore && dotnet jb inspectcode LinqToRest.slnx --format=Text --out
 docker compose -f samples/docker-compose.yml up -d                   # PostgreSQL for the sample
 dotnet run --project samples/Shop.Api --urls http://localhost:5080   # Development: API key dev-acme-key, Scalar at /scalar/v1
 dotnet run --project samples/Shop.Api --urls http://localhost:5080 -- --Database:Provider=Sqlite   # without Docker
-dotnet run --project samples/Shop.Console
+dotnet run --project samples/Shop.Console                          # the generated C# client (samples/Shop.Client)
+dotnet run --project samples/Shop.Api -- --Database:Provider=Sqlite --export-linqtorest-model model.json   # after changing a set
 (cd clients/typescript && npm ci && npm run check && npm run test:e2e)   # TypeScript client
 (cd samples/shop-ts && npm install && npm start)                         # TypeScript sample (API running)
 ```

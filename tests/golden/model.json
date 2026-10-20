@@ -1,0 +1,57 @@
+{
+  "v": 1,
+  "enums": {"ProductStatus": ["Draft", "Active"]},
+  "sets": [
+    {
+      "name": "categories",
+      "type": "CategoryDto",
+      "key": ["id"],
+      "writes": ["insert", "update", "delete"],
+      "pagination": {"modes": ["cursor"], "defaultPageSize": 2, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "id", "type": "int32", "sortable": true},
+        {"name": "name", "type": "string", "writable": true}
+      ],
+      "navigations": []
+    },
+    {
+      "name": "orderLines",
+      "type": "OrderLineDto",
+      "key": ["id"],
+      "writes": ["insert", "update", "delete"],
+      "pagination": {"modes": ["offset"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "id", "type": "int32", "sortable": true},
+        {"name": "sku", "type": "string", "writable": true},
+        {"name": "quantity", "type": "int32", "writable": true},
+        {"name": "unitPrice", "type": "decimal", "writable": true}
+      ],
+      "navigations": []
+    },
+    {
+      "name": "products",
+      "type": "ProductDto",
+      "key": ["id"],
+      "concurrencyToken": "version",
+      "writes": ["insert", "update", "delete"],
+      "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "id", "type": "int32", "sortable": true},
+        {"name": "name", "type": "string", "writable": true},
+        {"name": "description", "type": "string", "nullable": true, "writable": true},
+        {"name": "price", "type": "decimal", "writable": true, "sortable": true},
+        {"name": "status", "type": "ProductStatus", "writable": true},
+        {"name": "version", "type": "guid"},
+        {"name": "createdAt", "type": "dateTime"},
+        {"name": "releasedOn", "type": "dateOnly", "nullable": true, "writable": true},
+        {"name": "categoryId", "type": "int32", "nullable": true, "writable": true},
+        {"name": "tags", "type": "string", "collection": true},
+        {"name": "categoryName", "type": "string", "nullable": true}
+      ],
+      "navigations": [
+        {"name": "category", "target": "categories", "nullable": true, "foreignKey": ["categoryId"]},
+        {"name": "lines", "target": "orderLines", "collection": true}
+      ]
+    }
+  ]
+}

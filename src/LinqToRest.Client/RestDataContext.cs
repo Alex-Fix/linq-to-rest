@@ -7,7 +7,7 @@ using LinqToRest.Protocol;
 namespace LinqToRest.Client;
 
 /// <summary>
-/// A unit of work over a LinqToRest API: query its sets with LINQ, change the tracked DTOs, and save everything
+/// A unit of work over a LinqToRest API: query its sets with LINQ, change the tracked entities, and save everything
 /// atomically with <see cref="SaveChangesAsync"/>.
 /// </summary>
 public abstract class RestDataContext
@@ -23,44 +23,41 @@ public abstract class RestDataContext
         Provider = new RestQueryProvider(this);
     }
 
-    /// <summary>Gets the shared DTO model.</summary>
-    public DtoModel Model => Options.Model;
-
     internal RestDataContextOptions Options { get; }
 
     internal RestQueryProvider Provider { get; }
 
     internal ChangeTracker Tracker { get; } = new();
 
-    /// <summary>Gets the set of a DTO type.</summary>
-    /// <typeparam name="TDto">The DTO type.</typeparam>
+    /// <summary>Gets the set of an entity type.</summary>
+    /// <typeparam name="TEntity">The entity type.</typeparam>
     /// <returns>The set.</returns>
-    public DtoSet<TDto> Set<TDto>()
-        where TDto : class, IDto
+    public RestSet<TEntity> Set<TEntity>()
+        where TEntity : class
     {
-        if (!_sets.TryGetValue(typeof(TDto), out var set))
+        if (!_sets.TryGetValue(typeof(TEntity), out var set))
         {
-            var type = Model.FindType(typeof(TDto)) ?? throw new InvalidOperationException($"{typeof(TDto).Name} isn't part of the DTO model.");
-            set = new DtoSet<TDto>(this, type, Provider);
-            _sets.Add(typeof(TDto), set);
+            var type = Options.Model.FindSet(typeof(TEntity)) ?? throw new InvalidOperationException($"{typeof(TEntity).Name} isn't the class of a set in the model.");
+            set = new RestSet<TEntity>(this, type, Provider);
+            _sets.Add(typeof(TEntity), set);
         }
 
-        return (DtoSet<TDto>)set;
+        return (RestSet<TEntity>)set;
     }
 
-    /// <summary>Gets the tracking information of a DTO.</summary>
-    /// <param name="dto">The DTO.</param>
-    /// <typeparam name="TDto">The DTO type.</typeparam>
+    /// <summary>Gets the tracking information of an entity.</summary>
+    /// <param name="entity">The entity.</param>
+    /// <typeparam name="TEntity">The entity type.</typeparam>
     /// <returns>The entry.</returns>
-    public EntityEntry<TDto> Entry<TDto>(TDto dto)
-        where TDto : class, IDto
+    public EntityEntry<TEntity> Entry<TEntity>(TEntity entity)
+        where TEntity : class
     {
-        ArgumentNullException.ThrowIfNull(dto);
-        return new EntityEntry<TDto>(Tracker, Set<TDto>().Type, dto);
+        ArgumentNullException.ThrowIfNull(entity);
+        return new EntityEntry<TEntity>(Tracker, Set<TEntity>().Type, entity);
     }
 
     /// <summary>
-    /// Sends every insert, update and delete as one atomic batch. On success the tracked DTOs get their generated
+    /// Sends every insert, update and delete as one atomic batch. On success the tracked entities get their generated
     /// keys, new concurrency tokens and computed members; on failure nothing is written and the tracked state stays
     /// as it was.
     /// </summary>
@@ -71,6 +68,11 @@ public abstract class RestDataContext
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         Tracker.DetectChanges();
+        foreach (var modified in Tracker.Entries.Where(entry => entry.State == EntityState.Modified))
+        {
+            ChangeTracker.RequireWrite(modified.Type, WriteOperations.Update, "updates");
+        }
+
         var ordered = Order([.. Tracker.Entries.Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)]);
         if (ordered.Count == 0)
         {
@@ -139,7 +141,7 @@ public abstract class RestDataContext
 
             if (!visiting.Add(entry))
             {
-                throw new InvalidOperationException($"New {entry.Type} DTOs reference each other in a cycle; save them in separate batches.");
+                throw new InvalidOperationException($"New {entry.Type} entities reference each other in a cycle; save them in separate batches.");
             }
 
             foreach (var target in entry.References.Values.Where(target => target.State == EntityState.Added))
@@ -164,7 +166,7 @@ public abstract class RestDataContext
     {
         var type = entry.Type;
         var refs = entry.References.Count == 0 ? null : entry.References.ToDictionary(pair => pair.Key.WireName, pair => ids[pair.Value], StringComparer.Ordinal);
-        IEnumerable<DtoProperty> written = entry.State == EntityState.Added ? type.Properties.Where(property => property.IsWritable) : entry.Modified;
+        IEnumerable<ClientProperty> written = entry.State == EntityState.Added ? type.Properties.Where(property => property.IsWritable) : entry.Modified;
         var values = entry.State == EntityState.Deleted
             ? null
             : written.Where(property => !entry.References.ContainsKey(property))

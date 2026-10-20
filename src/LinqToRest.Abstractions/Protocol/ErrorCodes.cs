@@ -12,7 +12,7 @@ public static class ErrorCodes
     /// <summary>An operator got the wrong number of arguments.</summary>
     public const string BadArity = "bad_arity";
 
-    /// <summary>A member path doesn't resolve to a DTO member or lambda variable.</summary>
+    /// <summary>A member path doesn't resolve to an exposed member or lambda variable.</summary>
     public const string UnknownMember = "unknown_member";
 
     /// <summary>The member can't be filtered.</summary>
@@ -50,6 +50,9 @@ public static class ErrorCodes
 
     /// <summary>A policy denied the operation.</summary>
     public const string Forbidden = "forbidden";
+
+    /// <summary>The set doesn't allow the batch operation (insert, update or delete).</summary>
+    public const string OperationNotAllowed = "operation_not_allowed";
 
     /// <summary>The batch violates a database constraint (for example a unique index).</summary>
     public const string Conflict = "conflict";

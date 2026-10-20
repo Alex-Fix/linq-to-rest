@@ -7,7 +7,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The same shop (entities, DTOs, configurations, mappings, policies, seed) as the server integration tests. -->
+    <!-- The same shop (entities, sets, policies, seed) as the server integration tests; the client is generated from its model.json. -->
     <Compile Include="..\LinqToRest.Server.IntegrationTests\Shop\*.cs" LinkBase="Shop" />
   </ItemGroup>
 

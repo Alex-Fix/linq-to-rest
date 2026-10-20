@@ -1,9 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="NSubstitute" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LinqToRest.Server\LinqToRest.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\golden\model.json" Link="golden\model.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\golden\model.json')" />
   </ItemGroup>
 </Project>

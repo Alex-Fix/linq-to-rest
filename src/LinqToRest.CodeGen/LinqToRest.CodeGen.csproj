@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>linqtorest-gen</ToolCommandName>
+    <RootNamespace>LinqToRest.CodeGen</RootNamespace>
+    <Description>Generates LinqToRest clients (C# and TypeScript) from a model document exported by a LinqToRest server.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LinqToRest.Abstractions\LinqToRest.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

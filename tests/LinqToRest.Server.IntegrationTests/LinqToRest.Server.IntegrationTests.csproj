@@ -7,6 +7,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Shop\model.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\LinqToRest.Server\LinqToRest.Server.csproj" />
   </ItemGroup>
 </Project>

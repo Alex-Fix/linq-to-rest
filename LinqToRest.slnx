@@ -14,15 +14,15 @@
 	<Folder Name="/samples/">
 		<File Path="samples/Directory.Build.props" />
 		<Project Path="samples/Shop.Api/Shop.Api.csproj" />
+		<Project Path="samples/Shop.Client/Shop.Client.csproj" />
 		<Project Path="samples/Shop.Console/Shop.Console.csproj" />
-		<Project Path="samples/Shop.Contracts/Shop.Contracts.csproj" />
 	</Folder>
 	<Folder Name="/src/">
 		<File Path="src/Directory.Build.props" />
 		<Project Path="src/LinqToRest.Abstractions/LinqToRest.Abstractions.csproj" />
 		<Project Path="src/LinqToRest.Client/LinqToRest.Client.csproj" />
 		<Project Path="src/LinqToRest.Server/LinqToRest.Server.csproj" />
-		<Project Path="src/LinqToRest.TypeScript/LinqToRest.TypeScript.csproj" />
+		<Project Path="src/LinqToRest.CodeGen/LinqToRest.CodeGen.csproj" />
 	</Folder>
 	<Folder Name="/tests/">
 		<File Path="tests/Directory.Build.props" />
@@ -31,7 +31,6 @@
 		<Project Path="tests/LinqToRest.EndToEnd.Tests/LinqToRest.EndToEnd.Tests.csproj" />
 		<Project Path="tests/LinqToRest.Server.IntegrationTests/LinqToRest.Server.IntegrationTests.csproj" />
 		<Project Path="tests/LinqToRest.Server.UnitTests/LinqToRest.Server.UnitTests.csproj" />
-		<Project Path="tests/LinqToRest.TestContracts/LinqToRest.TestContracts.csproj" />
-		<Project Path="tests/LinqToRest.TypeScript.UnitTests/LinqToRest.TypeScript.UnitTests.csproj" />
+		<Project Path="tests/LinqToRest.CodeGen.UnitTests/LinqToRest.CodeGen.UnitTests.csproj" />
 	</Folder>
 </Solution>

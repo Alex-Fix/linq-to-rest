@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LinqToRest.CodeGen\LinqToRest.CodeGen.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The generator's snapshot: the TypeScript test model must be exactly its output for the golden model. -->
+    <None Include="..\..\clients\typescript\test\shop.generated.ts" Link="typescript\shop.generated.ts" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\golden\model.json" Link="golden\model.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The C# snapshot: the client tests' context must be exactly the output for the golden model. -->
+    <None Include="..\LinqToRest.Client.UnitTests\Shop.generated.cs" Link="csharp\Shop.generated.cs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

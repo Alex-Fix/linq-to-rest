@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createContext, type DtoSet, RestHttpError, RestQueryError } from "../src/index.js";
+import { createContext, type RestSet, RestHttpError, RestQueryError } from "../src/index.js";
 import type { CategoryDto, CategoryProxy } from "./shop.generated.js";
 import { shop } from "./stub.js";
 
@@ -187,7 +187,7 @@ describe("query translation", () => {
       },
     };
     const context = createContext(model, { baseUrl: "https://shop.test/api/", fetch: http.fetch });
-    const set = context.categories as DtoSet<CategoryDto, CategoryProxy>;
+    const set = context.categories as RestSet<CategoryDto, CategoryProxy>;
 
     await expect(
       set

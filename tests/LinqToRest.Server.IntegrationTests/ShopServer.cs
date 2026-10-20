@@ -5,6 +5,7 @@ using System.Text.Json;
 using LinqToRest.Server.Hosting;
 using LinqToRest.Server.IntegrationTests.Shop;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,7 +37,9 @@ public sealed class ShopServer : IAsyncDisposable
         ShopDatabase database,
         Action<LinqToRestServerBuilder>? configure = null,
         Action<WebApplication>? pipeline = null,
-        IInterceptor? interceptor = null)
+        IInterceptor? interceptor = null,
+        Action<LinqToRestServerBuilder>? sets = null,
+        Action<RouteGroupBuilder>? endpoints = null)
     {
         var lease = await database.CreateAsync();
         var builder = WebApplication.CreateBuilder();
@@ -51,15 +54,25 @@ public sealed class ShopServer : IAsyncDisposable
                 options.AddInterceptors(interceptor);
             }
         });
-        builder.Services.AddLinqToRest(ShopModel.Create(), options =>
+        builder.Services.AddLinqToRest(options =>
         {
-            options.UseDbContext<ShopDbContext>().AddMappingsFromAssembly(typeof(ShopServer).Assembly);
+            options.UseDbContext<ShopDbContext>();
+            if (sets is null)
+            {
+                options.AddSetsFromAssembly(typeof(ShopServer).Assembly);
+            }
+            else
+            {
+                sets(options);
+            }
+
             configure?.Invoke(options);
         });
 
         var app = builder.Build();
         pipeline?.Invoke(app);
-        app.MapLinqToRest("/api");
+        var group = app.MapLinqToRest("/api");
+        endpoints?.Invoke(group);
         await app.StartAsync();
 
         using (var scope = app.Services.CreateScope())

@@ -1,5 +1,5 @@
 import { readProblem, RestConcurrencyError, RestHttpError, RestSaveError } from "./errors.js";
-import { findSet, type Model, type NavigationModel, type SetModel } from "./model.js";
+import { findSet, requireWrite, type Model, type NavigationModel, type SetModel } from "./model.js";
 import type { Transport } from "./transport.js";
 
 /** The tracking state of a DTO. */
@@ -102,6 +102,7 @@ export class ChangeTracker {
   }
 
   add(entity: object, set: SetModel): void {
+    requireWrite(set, "insert", "inserts");
     const existing = this.entries.get(entity);
     if (existing !== undefined) {
       throw new Error(`This ${set.name} DTO is already tracked as ${existing.state}.`);
@@ -131,6 +132,7 @@ export class ChangeTracker {
   }
 
   update(entity: object, set: SetModel): void {
+    requireWrite(set, "update", "updates");
     const entry = this.attach(entity, set);
     for (const member of set.members.filter((candidate) => candidate.writable)) {
       entry.forced.add(member.name);
@@ -138,13 +140,14 @@ export class ChangeTracker {
   }
 
   remove(entity: object, set: SetModel): void {
-    const entry = this.attach(entity, set);
-    if (entry.state === "added") {
-      this.detach(entry);
+    const tracked = this.entries.get(entity);
+    if (tracked?.state === "added") {
+      this.detach(tracked);
       return;
     }
 
-    entry.state = "deleted";
+    requireWrite(set, "delete", "deletes");
+    this.attach(entity, set).state = "deleted";
   }
 
   detach(entry: Entry): void {
@@ -276,6 +279,10 @@ export async function saveChanges(
   signal: AbortSignal | undefined,
 ): Promise<number> {
   tracker.detectChanges();
+  for (const entry of tracker.all().filter((candidate) => candidate.state === "modified")) {
+    requireWrite(entry.set, "update", "updates");
+  }
+
   const ordered = order(
     tracker.all().filter((entry) => entry.state === "added" || entry.state === "modified" || entry.state === "deleted"),
   );

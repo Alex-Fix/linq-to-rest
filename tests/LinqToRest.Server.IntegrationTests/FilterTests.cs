@@ -78,6 +78,8 @@ public abstract class FilterTests(ShopFixture shop)
     public static readonly TheoryData<string, string, string> Rejected = new()
     {
         { """{"eq":[{"member":"nope"},1]}""", "unknown_member", "/filter/eq/0" },
+        { """{"eq":[{"member":"tenantId"},1]}""", "unknown_member", "/filter/eq/0" },
+        { """{"eq":[{"member":"category/tenantId"},1]}""", "unknown_member", "/filter/eq/0" },
         { """{"eq":[{"member":"name/length"},1]}""", "unknown_member", "/filter/eq/0" },
         { """{"eq":[{"member":"lines/quantity"},1]}""", "unknown_member", "/filter/eq/0" },
         { """{"eq":[{"var":"q"},1]}""", "unknown_member", "/filter/eq/0" },

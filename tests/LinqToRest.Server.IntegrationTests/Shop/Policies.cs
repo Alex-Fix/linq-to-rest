@@ -10,7 +10,7 @@ public static class Tenant
         int.TryParse(context.HttpContext.Request.Headers["X-Tenant"], out var tenant) ? tenant : 0;
 }
 
-public sealed class ProductPolicy : DtoSetPolicy<ProductDto, Product>
+public sealed class ProductPolicy : SetPolicy<Product>
 {
     protected override Expression<Func<Product, bool>> Filter(PolicyContext context)
     {
@@ -18,10 +18,10 @@ public sealed class ProductPolicy : DtoSetPolicy<ProductDto, Product>
         return product => product.TenantId == tenant;
     }
 
-    protected override ValueTask<bool> CanAsync(DtoOperation operation, PolicyContext context)
+    protected override ValueTask<bool> CanAsync(SetOperation operation, PolicyContext context)
     {
         var headers = context.HttpContext.Request.Headers;
-        var denied = operation == DtoOperation.Read ? headers.ContainsKey("X-No-Read") : headers.ContainsKey("X-Read-Only");
+        var denied = operation == SetOperation.Read ? headers.ContainsKey("X-No-Read") : headers.ContainsKey("X-Read-Only");
         return ValueTask.FromResult(!denied);
     }
 
@@ -35,7 +35,7 @@ public sealed class ProductPolicy : DtoSetPolicy<ProductDto, Product>
     protected override void OnUpdate(Product entity, PolicyContext context) => entity.Description ??= $"updated for tenant {Tenant.Of(context)}";
 }
 
-public sealed class CategoryPolicy : DtoSetPolicy<CategoryDto, Category>
+public sealed class CategoryPolicy : SetPolicy<Category>
 {
     protected override Expression<Func<Category, bool>> Filter(PolicyContext context)
     {

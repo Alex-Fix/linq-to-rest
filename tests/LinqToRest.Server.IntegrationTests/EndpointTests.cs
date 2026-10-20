@@ -1,6 +1,9 @@
 using System.Data.Common;
 using System.Net;
 using System.Text;
+using LinqToRest.Server.Hosting;
+using LinqToRest.Server.IntegrationTests.Shop;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -112,6 +115,59 @@ public abstract class EndpointTests(ShopFixture shop)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("not_sortable", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, form.StatusCode);
+    }
+
+    [Fact]
+    public async Task Batch_is_not_mapped_when_no_set_allows_writes()
+    {
+        await using var server = await ShopServer.StartAsync(shop.Database, sets: options => options.AddSet<Category>(b => b.ToSet("categories").Property(c => c.Name)));
+
+        using var batch = await server.Client.PostAsync(
+            new Uri("/api/$batch", UriKind.Relative),
+            new StringContent("""{"v":1,"operations":[{"id":"c","op":"insert","set":"categories","values":{}}]}""", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+        var categories = await server.QueryOkAsync("categories", """{"v":1}""");
+
+        // Only QUERY {set} matches the path now, so routing answers 405.
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, batch.StatusCode);
+        Assert.Equal(3, categories.GetProperty("items").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Model_endpoint_serves_the_model_with_an_etag()
+    {
+        await using var server = await ShopServer.StartAsync(shop.Database, endpoints: group => group.WithModelEndpoint());
+        var expected = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Shop", "model.json"), TestContext.Current.CancellationToken);
+
+        using var response = await server.Client.GetAsync(new Uri("/api/$model", UriKind.Relative), TestContext.Current.CancellationToken);
+        using var again = new HttpRequestMessage(HttpMethod.Get, "/api/$model");
+        again.Headers.IfNoneMatch.Add(response.Headers.ETag!);
+        using var notModified = await server.Client.SendAsync(again, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(expected.ReplaceLineEndings("\n"), await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(HttpStatusCode.NotModified, notModified.StatusCode);
+    }
+
+    [Fact]
+    public async Task Model_endpoint_is_off_by_default()
+    {
+        using var response = await shop.Server.Client.GetAsync(new Uri("/api/$model", UriKind.Relative), TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Model_endpoint_follows_the_group_conventions()
+    {
+        await using var server = await ShopServer.StartAsync(shop.Database, endpoints: group => group
+            .WithModelEndpoint()
+            .AddEndpointFilter((_, _) => ValueTask.FromResult<object?>(Results.StatusCode(StatusCodes.Status401Unauthorized))));
+
+        using var response = await server.Client.GetAsync(new Uri("/api/$model", UriKind.Relative), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]

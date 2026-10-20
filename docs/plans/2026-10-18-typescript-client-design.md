@@ -167,6 +167,10 @@ const cheap = await shop.products
    projects xUnit executables.
 7. **The sample** runs as TypeScript directly (`node main.ts`, Node ≥ 22.18); the end-to-end tests start
    `Shop.Api` from a Vitest global setup rather than a separate CI script.
+8. **Generator input (2026-10-20).** `docs/plans/2026-10-20-entity-sets-design.md` replaces the contracts assembly with
+   an exported model document: the generator becomes `linqtorest-gen ts --model <model.json>` in
+   `src/LinqToRest.CodeGen`, `DtoSet` is renamed `RestSet`, and each set's type only offers `add` / `remove` when its
+   `writes` allow them. `tests/LinqToRest.TestContracts` is replaced by `tests/golden/model.json`.
 
 ## Open questions
 

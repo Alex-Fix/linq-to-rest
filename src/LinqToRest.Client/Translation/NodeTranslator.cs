@@ -8,9 +8,9 @@ using LinqToRest.Protocol;
 namespace LinqToRest.Client.Translation;
 
 /// <summary>Translates lambda bodies into query nodes. Anything outside the closed node list throws locally.</summary>
-internal sealed class NodeTranslator(DtoType root)
+internal sealed class NodeTranslator(ClientSet root)
 {
-    private readonly Dictionary<ParameterExpression, (string? Variable, DtoType? Type)> _parameters = [];
+    private readonly Dictionary<ParameterExpression, (string? Variable, ClientSet? Type)> _parameters = [];
     private int _variables;
 
     public QueryNode Predicate(LambdaExpression lambda)
@@ -25,7 +25,7 @@ internal sealed class NodeTranslator(DtoType root)
         var body = StripConvert(lambda.Body);
         if (!TryPath(body, out var path, out var target) || (navigation ? target.Navigation is null : target.Property is not { IsCollection: false }))
         {
-            throw NotSupported(lambda.Body, navigation ? "Include needs a navigation, such as d => d.Category." : "Sort by a scalar DTO member, such as d => d.Price.");
+            throw NotSupported(lambda.Body, navigation ? "Include needs a navigation, such as d => d.Category." : "Sort by a scalar entity member, such as d => d.Price.");
         }
 
         return path;
@@ -112,7 +112,7 @@ internal sealed class NodeTranslator(DtoType root)
                 when declaring == typeof(DateTime) || declaring == typeof(DateTimeOffset) || declaring == typeof(DateOnly) || declaring == typeof(TimeOnly):
                 return new CallNode(char.ToLowerInvariant(member.Member.Name[0]) + member.Member.Name[1..], [Translate(inner)]);
             default:
-                throw NotSupported(member, $"{declaring.Name}.{member.Member.Name} isn't part of the DTO model or a supported function.");
+                throw NotSupported(member, $"{declaring.Name}.{member.Member.Name} isn't part of the entity model or a supported function.");
         }
     }
 
@@ -212,7 +212,7 @@ internal sealed class NodeTranslator(DtoType root)
                 return In(arguments[^1], items);
             }
 
-            // d.Tags.Contains(x) on a primitive collection of the DTO.
+            // d.Tags.Contains(x) on a primitive collection of the entity.
             if (call.Object is not null && arguments.Count == 1)
             {
                 var (contains, element, where) = Source(call.Object, null);
@@ -275,7 +275,7 @@ internal sealed class NodeTranslator(DtoType root)
 
         if (!TryPath(source, out var path, out var target) || target is { Property.IsCollection: false } or { Navigation.IsCollection: false })
         {
-            throw NotSupported(source, "Lambdas need a collection member of the DTO, such as d => d.Lines.");
+            throw NotSupported(source, "Lambdas need a collection member of the entity, such as d => d.Lines.");
         }
 
         var elementType = target.Navigation?.Target;
@@ -322,7 +322,7 @@ internal sealed class NodeTranslator(DtoType root)
         return argument is MethodCallExpression { Method.Name: nameof(ToString), Arguments.Count: 0, Object: { } target } ? Translate(target) : Translate(argument);
     }
 
-    private bool TryPath(Expression expression, out MemberNode path, out (DtoProperty? Property, DtoNavigation? Navigation) target)
+    private bool TryPath(Expression expression, out MemberNode path, out (ClientProperty? Property, ClientNavigation? Navigation) target)
     {
         var members = new Stack<MemberInfo>();
         var current = expression;
@@ -366,7 +366,7 @@ internal sealed class NodeTranslator(DtoType root)
             }
             else
             {
-                throw NotSupported(expression, $"{type.ClrType.Name}.{member.Name} isn't part of the DTO model.");
+                throw NotSupported(expression, $"{type.ClrType.Name}.{member.Name} isn't a member of the model.");
             }
         }
 

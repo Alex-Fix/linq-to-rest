@@ -1,25 +1,16 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using LinqToRest.Modeling;
 
 namespace LinqToRest.Client.UnitTests;
 
-public sealed class ShopContext(RestDataContextOptions<ShopContext> options) : RestDataContext(options)
-{
-    public DtoSet<ProductDto> Products => Set<ProductDto>();
-    public DtoSet<CategoryDto> Categories => Set<CategoryDto>();
-}
-
 public static class Shop
 {
-    public static readonly DtoModel Model = TestModel.Create();
-
     public static (ShopContext Context, StubHandler Http) Create()
     {
         var http = new StubHandler();
         var client = new HttpClient(http) { BaseAddress = new Uri("https://shop.test/api/") };
-        return (new ShopContext(new RestDataContextOptions<ShopContext>(Model, client)), http);
+        return (new ShopContext(new RestDataContextOptions<ShopContext>(ShopContext.Model, client)), http);
     }
 }
 

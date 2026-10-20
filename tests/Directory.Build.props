@@ -5,8 +5,8 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
-  <!-- Test projects (named *Tests): xUnit v3 on Microsoft Testing Platform (runs as an executable). Helper libraries
-       such as LinqToRest.TestContracts stay plain class libraries. -->
+  <!-- Test projects (named *Tests): xUnit v3 on Microsoft Testing Platform (runs as an executable); any helper library
+       would stay a plain class library. -->
   <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('Tests'))">
     <OutputType>Exe</OutputType>
   </PropertyGroup>

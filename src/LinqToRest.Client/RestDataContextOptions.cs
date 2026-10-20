@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using LinqToRest.Modeling;
 
 namespace LinqToRest.Client;
 
@@ -8,9 +7,9 @@ namespace LinqToRest.Client;
 public class RestDataContextOptions
 {
     /// <summary>Creates the options.</summary>
-    /// <param name="model">The shared DTO model.</param>
+    /// <param name="model">The model, bound to the client classes.</param>
     /// <param name="httpClient">The client; its base address is the API root and must end with <c>/</c>.</param>
-    protected RestDataContextOptions(DtoModel model, HttpClient httpClient)
+    protected RestDataContextOptions(ClientModel model, HttpClient httpClient)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(httpClient);
@@ -18,8 +17,8 @@ public class RestDataContextOptions
         HttpClient = httpClient;
     }
 
-    /// <summary>Gets the shared DTO model.</summary>
-    public DtoModel Model { get; }
+    /// <summary>Gets the model, bound to the client classes.</summary>
+    public ClientModel Model { get; }
 
     /// <summary>Gets the HTTP client.</summary>
     public HttpClient HttpClient { get; }
@@ -50,9 +49,9 @@ public sealed class RestDataContextOptions<TContext> : RestDataContextOptions
     where TContext : RestDataContext
 {
     /// <summary>Creates the options.</summary>
-    /// <param name="model">The shared DTO model.</param>
+    /// <param name="model">The model, bound to the client classes.</param>
     /// <param name="httpClient">The client; its base address is the API root and must end with <c>/</c>.</param>
-    public RestDataContextOptions(DtoModel model, HttpClient httpClient)
+    public RestDataContextOptions(ClientModel model, HttpClient httpClient)
         : base(model, httpClient)
     {
     }

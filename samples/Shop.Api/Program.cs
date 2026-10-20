@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using Shop.Api;
-using Shop.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<ShopDbContext>(options =>
@@ -32,14 +31,24 @@ builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document,
     document.Security = [new OpenApiSecurityRequirement { [new OpenApiSecuritySchemeReference(ApiKeyAuthentication.SchemeName, document)] = [] }];
     return Task.CompletedTask;
 }));
-builder.Services.AddLinqToRest(ShopModel.Create(), options => options
+builder.Services.AddLinqToRest(options => options
     .UseDbContext<ShopDbContext>()
-    .AddMappingsFromAssembly(typeof(ProductMapping).Assembly)
+    .AddSetsFromAssembly(typeof(ProductSet).Assembly)
     .AddPolicy<ProductPolicy>()
     .AddPolicy<CategoryPolicy>()
     .Limits(limits => limits.MaxNodes = 200));
 
 var app = builder.Build();
+
+// Writes the model clients are generated from, then exits:
+// dotnet run --project samples/Shop.Api -- --Database:Provider=Sqlite --export-linqtorest-model model.json
+// (dotnet run starts in samples/Shop.Api, so the path is relative to it).
+if (Array.IndexOf(args, "--export-linqtorest-model") is var export and >= 0)
+{
+    await app.ExportLinqToRestModelAsync(args[export + 1]);
+    return;
+}
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ShopDbContext>();

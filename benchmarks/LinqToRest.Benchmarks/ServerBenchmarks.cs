@@ -158,7 +158,7 @@ public class QueryEndpointRequest
         builder.WebHost.UseTestServer();
         builder.Logging.ClearProviders();
         builder.Services.AddDbContext<ShopDbContext>(options => options.UseSqlite(_connection));
-        builder.Services.AddLinqToRest(ShopModel.Create(), options => options.UseDbContext<ShopDbContext>().AddMappingsFromAssembly(typeof(ServerFixture).Assembly));
+        builder.Services.AddLinqToRest(options => options.UseDbContext<ShopDbContext>().AddSetsFromAssembly(typeof(ServerFixture).Assembly));
         _app = builder.Build();
         _app.MapLinqToRest("/api");
         await _app.StartAsync();

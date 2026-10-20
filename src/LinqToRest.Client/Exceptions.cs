@@ -46,7 +46,7 @@ public class RestSaveException : Exception
     /// <summary>Gets the JSON pointer of the rejected part of the batch.</summary>
     public string? Location { get; }
 
-    /// <summary>Gets the tracked DTOs whose operations were rejected.</summary>
+    /// <summary>Gets the tracked entities whose operations were rejected.</summary>
     public IReadOnlyList<object> Entities { get; }
 }
 

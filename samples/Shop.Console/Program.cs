@@ -1,19 +1,19 @@
 using LinqToRest.Client;
 using Microsoft.Extensions.DependencyInjection;
-using Shop.Console;
-using Shop.Contracts;
+using Shop.Client;
 
 // Start samples/Shop.Api first (dotnet run --project samples/Shop.Api --urls http://localhost:5080).
 var api = new Uri(args.Length > 0 ? args[0] : "http://localhost:5080/api/");
 var services = new ServiceCollection();
-services.AddRestDataContext<ShopClient>(ShopModel.Create(), http =>
+// ShopContext and its classes are generated from Shop.Api's model.json (see Shop.Client).
+services.AddShopContext(http =>
 {
     http.BaseAddress = api;
     http.DefaultRequestHeaders.Add("X-Api-Key", "dev-acme-key");
 });
 await using var provider = services.BuildServiceProvider();
 await using var scope = provider.CreateAsyncScope();
-var shop = scope.ServiceProvider.GetRequiredService<ShopClient>();
+var shop = scope.ServiceProvider.GetRequiredService<ShopContext>();
 
 // LINQ runs on the server: filter, sort, project.
 var cheapGames = await shop.Products

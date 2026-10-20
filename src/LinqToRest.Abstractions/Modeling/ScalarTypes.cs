@@ -1,6 +1,6 @@
 namespace LinqToRest.Modeling;
 
-/// <summary>The CLR types LinqToRest accepts for DTO scalar properties and literals.</summary>
+/// <summary>The CLR types LinqToRest accepts for scalar members and literals, and their model-document names.</summary>
 public static class ScalarTypes
 {
     private static readonly HashSet<Type> Supported =
@@ -9,6 +9,29 @@ public static class ScalarTypes
         typeof(decimal), typeof(string), typeof(Guid), typeof(DateTime), typeof(DateTimeOffset), typeof(DateOnly),
         typeof(TimeOnly), typeof(TimeSpan), typeof(byte[]),
     ];
+
+    private static readonly Dictionary<Type, string> NamesByType = new()
+    {
+        [typeof(bool)] = "bool",
+        [typeof(byte)] = "uint8",
+        [typeof(short)] = "int16",
+        [typeof(int)] = "int32",
+        [typeof(long)] = "int64",
+        [typeof(float)] = "float32",
+        [typeof(double)] = "float64",
+        [typeof(decimal)] = "decimal",
+        [typeof(string)] = "string",
+        [typeof(Guid)] = "guid",
+        [typeof(DateTime)] = "dateTime",
+        [typeof(DateTimeOffset)] = "dateTimeOffset",
+        [typeof(DateOnly)] = "dateOnly",
+        [typeof(TimeOnly)] = "timeOnly",
+        [typeof(TimeSpan)] = "timeSpan",
+        [typeof(byte[])] = "bytes",
+    };
+
+    private static readonly Dictionary<string, Type> TypesByName =
+        NamesByType.ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
 
     private static readonly HashSet<Type> Numeric =
     [
@@ -68,5 +91,26 @@ public static class ScalarTypes
         return type.IsInterface && type.GetGenericArguments().Length == 1 && type.IsAssignableFrom(typeof(List<>).MakeGenericType(element))
             ? element
             : null;
+    }
+
+    /// <summary>
+    /// Returns the model-document name of a supported non-enum scalar (for example <c>int32</c> for
+    /// <see cref="int"/>), ignoring nullability.
+    /// </summary>
+    /// <param name="type">The scalar type.</param>
+    /// <returns>The name, or <see langword="null"/> for enums and unsupported types.</returns>
+    public static string? GetName(Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        return NamesByType.GetValueOrDefault(Nullable.GetUnderlyingType(type) ?? type);
+    }
+
+    /// <summary>Returns the CLR type for a model-document scalar name (for example <see cref="int"/> for <c>int32</c>).</summary>
+    /// <param name="name">The scalar name.</param>
+    /// <returns>The type, or <see langword="null"/> when <paramref name="name"/> isn't a scalar name.</returns>
+    public static Type? FromName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        return TypesByName.GetValueOrDefault(name);
     }
 }

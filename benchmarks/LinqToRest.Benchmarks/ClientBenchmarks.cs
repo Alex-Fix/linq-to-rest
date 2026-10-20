@@ -1,34 +1,12 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 using BenchmarkDotNet.Attributes;
+using LinqToRest.Benchmarks.Client;
 using LinqToRest.Client;
 using LinqToRest.Client.Translation;
 using LinqToRest.Protocol;
-using LinqToRest.TestContracts;
 
 namespace LinqToRest.Benchmarks;
-
-public sealed class BenchmarkShop(RestDataContextOptions<BenchmarkShop> options) : RestDataContext(options)
-{
-    public DtoSet<ProductDto> Products => Set<ProductDto>();
-
-    /// <summary>A context whose HTTP calls answer with <paramref name="response"/>, without a network.</summary>
-    public static BenchmarkShop Create(byte[] response) =>
-        new(new RestDataContextOptions<BenchmarkShop>(SharedModel, new HttpClient(new CannedHandler(response)) { BaseAddress = new Uri("https://shop.test/api/") }));
-
-    private static readonly Modeling.DtoModel SharedModel = TestModel.Create();
-
-    private sealed class CannedHandler(byte[] response) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            var content = new ByteArrayContent(response);
-            content.Headers.ContentType = new("application/json");
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
-        }
-    }
-}
 
 /// <summary>LINQ → query tree → JSON body, including captured-variable evaluation.</summary>
 public class ClientTranslation

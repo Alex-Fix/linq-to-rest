@@ -21,10 +21,14 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
   exception for Client). EF Core and ASP.NET Core belong in `LinqToRest.Server`, samples and tests.
 
 ## Package boundaries
-- `Abstractions`: model (`IDto`, builders, `DtoModel`), AST node types, wire contracts (query, response, batch,
-  cursor), error codes. No HTTP, no EF, no LINQ translation.
-- `Client`: LINQ → AST, HTTP transport (QUERY, `$batch`), materialization, change tracking. Never references Server.
-- `Server`: mapping, type checking, AST → `Expression`, batch executor, policies, endpoints. Never references Client.
+- `Abstractions`: `RestModel` (the CLR-free model document: parse, write, limits), AST node types, wire contracts
+  (query, response, batch, cursor), error codes. No HTTP, no EF, no LINQ translation, no CLR binding.
+- `Client`: `ClientModel` (binds a `RestModel` to generated classes), LINQ → AST, HTTP transport (QUERY, `$batch`),
+  materialization, change tracking. Never references Server.
+- `Server`: entity set configuration (`IEntitySetConfiguration<T>`), model production and export, type checking,
+  AST → `Expression`, batch executor, policies, endpoints. Never references Client.
+- `CodeGen` (`linqtorest-gen`, a dotnet tool): reads a model document, writes C# or TypeScript clients. References
+  Abstractions only.
 - Anything both ends need (e.g. a node type, a cursor format, an error code) goes in Abstractions.
 
 ## Library projects (`src/`)
@@ -34,7 +38,7 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
 - Keep the public surface small: `internal` by default, `sealed` classes unless designed for inheritance,
   `InternalsVisibleTo` for test projects instead of making things public.
 - Server expression building: `System.Linq.Expressions` nodes only, from the type-checked AST. Resolve members via
-  `DtoModel` / mappings, never `Type.GetProperty(clientString)`. No `Expression.Compile()` on the request path.
+  the server model built from set configurations, never `Type.GetProperty(clientString)`. No `Expression.Compile()` on the request path.
   The client may compile captured-variable subtrees (developer code).
 - JSON: System.Text.Json with a strict source-generated `JsonSerializerContext` for batch contracts; the query tree is
   read from a size-capped `JsonDocument` by a hand-written reader that enforces the limits while building nodes.
@@ -51,8 +55,9 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
 - Time: inject `TimeProvider` if anything needs "now"; tests use `FakeTimeProvider`.
 
 ## Samples (`samples/`)
-- `Shop.Contracts` (DTOs + configuration), `Shop.Api` (EF Core SQLite, API-key auth, tenant policies,
-  `RequireAuthorization`), `Shop.Console` (client: query, cursor paging, save). `samples/Directory.Build.props` makes
+- `Shop.Api` (EF Core SQLite, entity sets, API-key auth, tenant policies, `RequireAuthorization`, checked-in
+  `model.json` exported with `--export-linqtorest-model`), `Shop.Client` (generated C# context, never edited by
+  hand), `Shop.Console` (client: query, cursor paging, save). `samples/Directory.Build.props` makes
   them non-packable. Keep them simple — they're documentation, and people copy them.
 - Run: `dotnet run --project samples/Shop.Api --urls http://localhost:5080` (Development, key `dev-acme-key`), then
   `dotnet run --project samples/Shop.Console`.
@@ -65,7 +70,10 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
   LINQ-to-Objects over the same data **and** that nothing evaluated on the client. LINQ-to-Objects alone isn't proof.
 - `LinqToRest.EndToEnd.Tests`: the server on the ASP.NET Core test server (`UseTestServer`) + the real client (query →
   modify → save → re-query, status codes, ProblemDetails, typed client exceptions). It links the integration tests'
-  `Shop/*.cs` (entities, DTOs, mappings, policies, seed) instead of copying them.
+  `Shop/*.cs` (entities, set configurations, policies, seed) instead of copying them, and uses the client generated
+  from `tests/golden/model.json`.
+- `LinqToRest.CodeGen.UnitTests`: generator output for both targets is golden-tested against the checked-in
+  generated files.
 - To prove an expression runs in SQL, assert on `ShopServer.Sql` (every executed command), not just on results.
 - Every limit gets a test at and just past its boundary.
 - Provider coverage: integration and end-to-end test classes are `abstract` and take a `ShopFixture` / `ShopDatabase`;
@@ -80,7 +88,7 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
 - `LinqToRest.Benchmarks`: BenchmarkDotNet console app, Release only, not packable; one class per suite
   (`QueryReading`, `QueryBinding`, `QueryExecution`, `QueryEndpointRequest`, `BatchExecution`, `ClientTranslation`,
   `ClientMaterialization`, `ChangeDetection`, `JsonValuesCodec`, `Generator`), every one with `[MemoryDiagnoser]`.
-  It reuses `LinqToRest.TestContracts` and links the integration tests' `Shop/*.cs`; `src/` projects grant it
+  It uses the client generated from `tests/golden/model.json` and links the integration tests' `Shop/*.cs`; `src/` projects grant it
   `InternalsVisibleTo`. Setup stays out of the measured method; no network (stub handlers, in-process test server).
 - Run one suite: `dotnet run -c Release --project benchmarks/LinqToRest.Benchmarks -- --filter '*QueryBinding*'`.
   Results land in `artifacts/benchmarks/results/`. Add `--job short` while iterating and `--profiler EP` for an

@@ -3,7 +3,7 @@ using System.Linq.Expressions;
 
 namespace LinqToRest.Client;
 
-/// <summary>A query composed from a <see cref="DtoSet{TDto}"/>.</summary>
+/// <summary>A query composed from a <see cref="RestSet{TEntity}"/>.</summary>
 internal sealed class RestQueryable<T>(RestQueryProvider provider, Expression expression) : IOrderedQueryable<T>
 {
     public Type ElementType => typeof(T);

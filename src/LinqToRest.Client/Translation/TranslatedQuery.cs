@@ -1,13 +1,12 @@
 using System.Linq.Expressions;
-using LinqToRest.Modeling;
 using LinqToRest.Protocol;
 
 namespace LinqToRest.Client.Translation;
 
 /// <summary>A LINQ query translated into the parts of a <see cref="QueryRequest"/>.</summary>
-internal sealed class TranslatedQuery(DtoType type)
+internal sealed class TranslatedQuery(ClientSet type)
 {
-    public DtoType Type { get; } = type;
+    public ClientSet Type { get; } = type;
 
     public List<QueryNode> Filters { get; } = [];
 
@@ -51,9 +50,9 @@ internal sealed class TranslatedQuery(DtoType type)
             expression = call.Arguments[0];
         }
 
-        if (expression is not ConstantExpression { Value: IDtoSet set })
+        if (expression is not ConstantExpression { Value: IRestSet set })
         {
-            throw new NotSupportedException("LinqToRest queries must start from a DtoSet of a RestDataContext.");
+            throw new NotSupportedException("LinqToRest queries must start from a RestSet of a RestDataContext.");
         }
 
         var query = new TranslatedQuery(set.Type);
@@ -138,7 +137,7 @@ internal sealed class TranslatedQuery(DtoType type)
     }
 }
 
-internal interface IDtoSet
+internal interface IRestSet
 {
-    DtoType Type { get; }
+    ClientSet Type { get; }
 }

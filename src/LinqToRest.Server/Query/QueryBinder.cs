@@ -11,8 +11,8 @@ using LinqToRest.Server.Policies;
 namespace LinqToRest.Server.Query;
 
 /// <summary>
-/// Type-checks query nodes against the DTO model and builds expressions over entities from them. Only the closed node
-/// list is accepted; every member is resolved through the mapping, never by reflection on client strings.
+/// Type-checks query nodes against the set model and builds expressions over entities from them. Only the closed node
+/// list is accepted; every member is resolved through the set configuration, never by reflection on client strings.
 /// </summary>
 internal sealed partial class QueryBinder(ServerModel server, RequestPolicies policies)
 {
@@ -49,8 +49,8 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
                 throw UnknownMember(node);
             }
 
-            var type = entity.Mapping.DtoType;
-            if (type.FindProperty(segments[index]) is { } property)
+            var set = entity.Mapping;
+            if (set.FindProperty(segments[index]) is { } property)
             {
                 if (!last)
                 {
@@ -60,14 +60,14 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
                 CheckUse(property, use, node);
                 if (property.IsCollection)
                 {
-                    var source = GuardSequence(entity, ExpressionHelpers.StripMaterialization(ExpressionHelpers.Inline(entity.Mapping.Bindings[property], entity.Expression)), property.ElementType!);
+                    var source = GuardSequence(entity, ExpressionHelpers.StripMaterialization(ExpressionHelpers.Inline(property.Binding, entity.Expression)), property.ElementType!);
                     return new CollectionBound(source, property.ElementType!, null, PropertyValue(entity, property));
                 }
 
                 return new ValueBound(PropertyValue(entity, property), property.IsNullable || entity.NeedsLifting);
             }
 
-            if (type.FindNavigation(segments[index]) is not { } navigation)
+            if (set.FindNavigation(segments[index]) is not { } navigation)
             {
                 throw UnknownMember(node);
             }
@@ -84,8 +84,7 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
                     throw UnknownMember(node);
                 }
 
-                var map = entity.Mapping.Navigations[navigation];
-                return new CollectionBound(CollectionSource(entity, map), map.Target.EntityType, map.Target, null);
+                return new CollectionBound(CollectionSource(entity, navigation), navigation.Target.EntityType, navigation.Target, null);
             }
 
             current = Reference(entity, navigation);
@@ -108,34 +107,33 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
 
     public string NextParameterName() => $"x{_parameters++}";
 
-    public EntityBound Reference(EntityBound entity, DtoNavigation navigation)
+    public EntityBound Reference(EntityBound entity, SetNavigation navigation)
     {
-        var map = entity.Mapping.Navigations[navigation];
-        var target = ExpressionHelpers.Inline(map.Entity, entity.Expression);
+        var target = ExpressionHelpers.Inline(navigation.Entity, entity.Expression);
         var guard = entity.Guard;
-        if (policies.Filter(map.Target) is { } predicate)
+        if (policies.Filter(navigation.Target) is { } predicate)
         {
             guard = ExpressionHelpers.AndAlso(guard, Expression.AndAlso(NotNull(target), ExpressionHelpers.Inline(predicate, target)));
         }
 
-        return new EntityBound(target, map.Target, guard, entity.IsNullable || navigation.IsNullable);
+        return new EntityBound(target, navigation.Target, guard, entity.IsNullable || navigation.IsNullable);
     }
 
-    public Expression CollectionSource(EntityBound entity, NavigationMapping map)
+    public Expression CollectionSource(EntityBound entity, SetNavigation navigation)
     {
-        var source = ExpressionHelpers.Inline(map.Entity, entity.Expression);
-        if (policies.Filter(map.Target) is { } predicate)
+        var source = ExpressionHelpers.Inline(navigation.Entity, entity.Expression);
+        if (policies.Filter(navigation.Target) is { } predicate)
         {
             source = Where(source, predicate);
         }
 
-        return GuardSequence(entity, source, map.Target.EntityType);
+        return GuardSequence(entity, source, navigation.Target.EntityType);
     }
 
     /// <summary>A member's value, lifted to nullable and guarded when it's read through an optional or filtered navigation.</summary>
-    public static Expression PropertyValue(EntityBound entity, DtoProperty property)
+    public static Expression PropertyValue(EntityBound entity, SetProperty property)
     {
-        var value = ExpressionHelpers.Inline(entity.Mapping.Bindings[property], entity.Expression);
+        var value = ExpressionHelpers.Inline(property.Binding, entity.Expression);
         if (!entity.NeedsLifting)
         {
             return value;
@@ -148,7 +146,7 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
     public static Expression Presence(EntityBound entity) => entity.Guard ?? NotNull(entity.Expression);
 
     /// <summary>
-    /// Projects each element to its row. DTO elements are ordered by their key: without an order, databases return
+    /// Projects each element to its row. Set rows are ordered by their key: without an order, databases return
     /// collection elements in any order (PostgreSQL does), so the same query could answer differently.
     /// </summary>
     public static Expression RowsList(Expression source, Row elementRow, SetMapping? elementMapping)
@@ -167,9 +165,9 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
     private static Expression OrderByKey(Expression source, Type elementType, SetMapping mapping)
     {
         var element = Expression.Parameter(elementType, "k");
-        for (var index = 0; index < mapping.DtoType.Key.Count; index++)
+        for (var index = 0; index < mapping.Key.Length; index++)
         {
-            var key = Expression.Lambda(ExpressionHelpers.Inline(mapping.Bindings[mapping.DtoType.Key[index]], element), element);
+            var key = Expression.Lambda(ExpressionHelpers.Inline(mapping.Key[index].Binding, element), element);
             var method = index == 0 ? EnumerableMethods.OrderBy : EnumerableMethods.ThenBy;
             source = Expression.Call(method.MakeGenericMethod(elementType, key.ReturnType), source, key);
         }
@@ -181,7 +179,7 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
 
     public static RequestException TypeMismatch(QueryNode node) => RequestException.Invalid(ErrorCodes.TypeMismatch, node.Location);
 
-    private static void CheckUse(DtoProperty property, MemberUse use, QueryNode node)
+    private static void CheckUse(SetProperty property, MemberUse use, QueryNode node)
     {
         if (use == MemberUse.Filter && !property.IsFilterable)
         {

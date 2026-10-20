@@ -1,11 +1,10 @@
 using System.Linq.Expressions;
 using LinqToRest.Server.Policies;
-using Shop.Contracts;
 
 namespace Shop.Api;
 
 /// <summary>Every row belongs to a tenant; callers only see and change their own.</summary>
-public sealed class ProductPolicy : DtoSetPolicy<ProductDto, Product>
+public sealed class ProductPolicy : SetPolicy<Product>
 {
     protected override Expression<Func<Product, bool>> Filter(PolicyContext context)
     {
@@ -20,7 +19,7 @@ public sealed class ProductPolicy : DtoSetPolicy<ProductDto, Product>
     }
 }
 
-public sealed class CategoryPolicy : DtoSetPolicy<CategoryDto, Category>
+public sealed class CategoryPolicy : SetPolicy<Category>
 {
     protected override Expression<Func<Category, bool>> Filter(PolicyContext context)
     {

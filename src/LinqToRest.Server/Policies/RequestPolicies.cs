@@ -6,16 +6,16 @@ namespace LinqToRest.Server.Policies;
 /// <summary>The policies of one request, resolved and evaluated at most once per set.</summary>
 internal sealed class RequestPolicies(PolicyContext context)
 {
-    private readonly Dictionary<SetMapping, IDtoSetPolicy?> _policies = [];
+    private readonly Dictionary<SetMapping, ISetPolicy?> _policies = [];
     private readonly Dictionary<SetMapping, LambdaExpression?> _filters = [];
 
     public PolicyContext Context { get; } = context;
 
-    public IDtoSetPolicy? Get(SetMapping mapping)
+    public ISetPolicy? Get(SetMapping mapping)
     {
         if (!_policies.TryGetValue(mapping, out var policy))
         {
-            policy = (IDtoSetPolicy?)Context.Services.GetService(mapping.PolicyType);
+            policy = (ISetPolicy?)Context.Services.GetService(mapping.PolicyType);
             _policies.Add(mapping, policy);
         }
 
@@ -33,6 +33,6 @@ internal sealed class RequestPolicies(PolicyContext context)
         return filter;
     }
 
-    public ValueTask<bool> CanAsync(SetMapping mapping, DtoOperation operation) =>
+    public ValueTask<bool> CanAsync(SetMapping mapping, SetOperation operation) =>
         Get(mapping)?.CanAsync(operation, Context) ?? ValueTask.FromResult(true);
 }

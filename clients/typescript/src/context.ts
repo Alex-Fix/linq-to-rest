@@ -1,5 +1,5 @@
 import type { EntityProxy } from "./expressions.js";
-import { findSet, type Model } from "./model.js";
+import { findSet, type Model, type WriteOperation } from "./model.js";
 import { Query, type QueryHost } from "./query.js";
 import { ChangeTracker, type EntityState, saveChanges } from "./tracking.js";
 import { type CallOptions, type ContextOptions, Transport } from "./transport.js";
@@ -18,29 +18,39 @@ export type WritableKeys<T> = {
 /** What `add` accepts: the writable members and navigations, each optional. */
 export type New<T> = { -readonly [K in WritableKeys<T>]?: T[K] };
 
-/** A set of DTOs: query it, and add, attach, update or remove DTOs to save with `saveChanges`. */
-export class DtoSet<D, P extends EntityProxy<D>> extends Query<D, P, D> {
-  /** Starts tracking a new DTO, inserted on save; returns it, typed as the full DTO (its key comes from the server). */
-  add(dto: New<D>): D {
-    this.host.tracker.add(dto, this.set);
-    return dto as D;
+/** A set at runtime: every write method exists and checks the set's `writes`; `RestSet` types only the allowed ones. */
+export class EntitySet<D, P extends EntityProxy<D>> extends Query<D, P, D> {
+  /** Starts tracking a new entity, inserted on save; returns it, typed as the full row (its key comes from the server). */
+  add(entity: New<D>): D {
+    this.host.tracker.add(entity, this.set);
+    return entity as D;
   }
 
-  /** Starts tracking an existing DTO as unchanged; later changes are saved. */
-  attach(dto: D): void {
-    this.host.tracker.attach(dto as object, this.set);
+  /** Starts tracking an existing entity as unchanged; later changes are saved. */
+  attach(entity: D): void {
+    this.host.tracker.attach(entity as object, this.set);
   }
 
-  /** Tracks an existing DTO with every writable member marked modified. */
-  update(dto: D): void {
-    this.host.tracker.update(dto as object, this.set);
+  /** Tracks an existing entity with every writable member marked modified. */
+  update(entity: D): void {
+    this.host.tracker.update(entity as object, this.set);
   }
 
-  /** Marks a DTO deleted on save (an added one is simply forgotten). */
-  remove(dto: D): void {
-    this.host.tracker.remove(dto as object, this.set);
+  /** Marks an entity deleted on save (an added one is simply forgotten). */
+  remove(entity: D): void {
+    this.host.tracker.remove(entity as object, this.set);
   }
 }
+
+/**
+ * A set of the API: query it, attach entities, and use the writes it allows (`W`) to save with `saveChanges`:
+ * `add` needs `"insert"`, `update` needs `"update"`, `remove` needs `"delete"`.
+ */
+export type RestSet<D, P extends EntityProxy<D>, W extends WriteOperation = never> = Query<D, P, D> &
+  Pick<EntitySet<D, P>, "attach"> &
+  ("insert" extends W ? Pick<EntitySet<D, P>, "add"> : unknown) &
+  ("update" extends W ? Pick<EntitySet<D, P>, "update"> : unknown) &
+  ("delete" extends W ? Pick<EntitySet<D, P>, "remove"> : unknown);
 
 /** The tracking information of one DTO. */
 export interface EntityEntry<D> {
@@ -50,14 +60,14 @@ export interface EntityEntry<D> {
   setModified(member: WritableKeys<D> & string, modified: boolean): void;
 }
 
-/** A unit of work over a LinqToRest API. Generated contexts add one `DtoSet` per set. */
+/** A unit of work over a LinqToRest API. Generated contexts add one `RestSet` per set. */
 export interface Context {
   /** Sends every insert, update and delete as one atomic batch; returns the number of operations. */
   saveChanges(options?: CallOptions): Promise<number>;
   entry<D extends object>(dto: D): EntityEntry<D>;
 }
 
-/** Creates a context with a `DtoSet` property per set of the model. Generated `create<Name>` functions call this. */
+/** Creates a context with a `RestSet` property per set of the model. Generated `create<Name>` functions call this. */
 export function createContext(model: Model, options: ContextOptions): Context & Record<string, unknown> {
   const host: QueryHost = { model, transport: new Transport(options), tracker: new ChangeTracker(model) };
   const context: Context & Record<string, unknown> = {
@@ -65,7 +75,7 @@ export function createContext(model: Model, options: ContextOptions): Context & 
     entry: <D extends object>(dto: D) => entry<D>(host.tracker, dto),
   };
   for (const name of Object.keys(model.sets)) {
-    context[name] = new DtoSet(host, findSet(model, name));
+    context[name] = new EntitySet(host, findSet(model, name));
   }
 
   return context;

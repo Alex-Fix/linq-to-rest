@@ -23,7 +23,7 @@ internal static class QueryCompiler
         var root = Expression.Parameter(mapping.EntityType, "e");
         var rootBound = new EntityBound(root, mapping, null, isNullable: false);
         var scope = new Scope(rootBound, ImmutableDictionary<string, Bound>.Empty);
-        var pagination = mapping.DtoType.Pagination;
+        var pagination = mapping.Pagination;
 
         var page = request.Page;
         var mode = page?.Mode ?? (pagination.Modes.HasFlag(PaginationModes.Offset) ? PageMode.Offset : PageMode.Cursor);
@@ -54,7 +54,7 @@ internal static class QueryCompiler
 
         var row = new Row(root);
         var shape = request.Select is null
-            ? binder.DefaultShape(rootBound, row, IncludeTree.Parse(request.Include, mapping.DtoType, server.Limits.MaxPathDepth))
+            ? binder.DefaultShape(rootBound, row, IncludeTree.Parse(request.Include, mapping, server.Limits.MaxPathDepth))
             : binder.Select(request.Select, scope, row);
 
         string? hash = null;
@@ -62,7 +62,7 @@ internal static class QueryCompiler
         IReadOnlyList<int> cursorIndexes = [];
         if (mode == PageMode.Cursor)
         {
-            hash = Cursor.HashSort(mapping.DtoType.SetName, sorts.Select(sort => (sort.Path, sort.Descending)));
+            hash = Cursor.HashSort(mapping.Name, sorts.Select(sort => (sort.Path, sort.Descending)));
             cursorIndexes = [.. sorts.Select(sort => row.Add(sort.Key.Body))];
             if (page?.After is { } after)
             {
@@ -113,9 +113,9 @@ internal static class QueryCompiler
         }
 
         // The key always ends the sort, so pages are deterministic and cursors identify one row.
-        foreach (var key in mapping.DtoType.Key.Where(key => sorts.TrueForAll(sort => sort.Path != key.WireName)))
+        foreach (var key in mapping.Key.Where(key => sorts.TrueForAll(sort => sort.Path != key.Name)))
         {
-            sorts.Add(new SortKey(Expression.Lambda(ExpressionHelpers.Inline(mapping.Bindings[key], root), root), false, key.WireName));
+            sorts.Add(new SortKey(Expression.Lambda(ExpressionHelpers.Inline(key.Binding, root), root), false, key.Name));
         }
 
         return sorts;

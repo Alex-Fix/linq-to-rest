@@ -1,29 +1,28 @@
-using System.Reflection;
 using BenchmarkDotNet.Attributes;
+using LinqToRest.CodeGen;
 using LinqToRest.Modeling;
-using LinqToRest.TypeScript;
 
 namespace LinqToRest.Benchmarks;
 
-/// <summary>linqtorest-ts: building the DTO model and emitting TypeScript.</summary>
+/// <summary>linqtorest-gen: reading the model document and emitting TypeScript.</summary>
 public class Generator
 {
-    private Assembly _assembly = null!;
-    private DtoModel _model = null!;
+    private byte[] _document = [];
+    private RestModel _model = null!;
 
-    [Params("test-contracts", "shop")]
-    public string Contracts { get; set; } = "test-contracts";
+    [Params("golden", "shop")]
+    public string Model { get; set; } = "golden";
 
     [GlobalSetup]
     public void Setup()
     {
-        _assembly = Contracts == "shop" ? typeof(Server.IntegrationTests.Shop.ShopModel).Assembly : typeof(TestContracts.ProductDto).Assembly;
-        _model = BuildModel();
+        _document = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, Model == "shop" ? "Shop" : "golden", "model.json"));
+        _model = ReadModel();
     }
 
     [Benchmark]
-    public DtoModel BuildModel() => new DtoModelBuilder().ApplyConfigurationsFromAssembly(_assembly).Build();
+    public RestModel ReadModel() => RestModel.Parse(_document);
 
     [Benchmark]
-    public string Emit() => new TypeScriptEmitter(_model, "Shop", "linqtorest", "Contracts").Emit();
+    public string EmitTypeScript() => new TypeScriptEmitter(_model, "Shop", "linqtorest", "model.json").Emit();
 }

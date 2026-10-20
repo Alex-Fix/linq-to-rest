@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { RestConcurrencyError } from "../src/index.js";
-import { shop } from "./stub.js";
+import { createContext, RestConcurrencyError, type RestSet } from "../src/index.js";
+import { type CategoryDto, type CategoryProxy, shopModel } from "./shop.generated.js";
+import { shop, StubFetch } from "./stub.js";
 
 const chess = () => ({
   id: 1,
@@ -189,5 +190,48 @@ describe("unit of work", () => {
     expect(() => {
       s.categories.attach({ id: 1, name: "B" });
     }).toThrow(/already tracked/);
+  });
+
+  describe("writes the set doesn't allow", () => {
+    const categories = (writes: readonly ("insert" | "update" | "delete")[]) => {
+      const http = new StubFetch();
+      const model = { sets: { categories: { ...shopModel.sets.categories, writes } } };
+      const context = createContext(model, { baseUrl: "https://shop.test/api/", fetch: http.fetch });
+      const set = context.categories as RestSet<CategoryDto, CategoryProxy, "insert" | "update" | "delete">;
+      return { context, set, http };
+    };
+
+    it("fail locally with the .NET client's messages", () => {
+      const { context, set } = categories([]);
+      const games = { id: 1, name: "Games" };
+
+      expect(() => set.add({ name: "Puzzles" })).toThrow("The set 'categories' doesn't allow inserts.");
+      expect(() => {
+        set.update(games);
+      }).toThrow("The set 'categories' doesn't allow updates.");
+      expect(() => {
+        set.remove(games);
+      }).toThrow("The set 'categories' doesn't allow deletes.");
+      expect(context.entry(games).state).toBe("detached");
+    });
+
+    it("forget an added entity without needing deletes", () => {
+      const { context, set } = categories(["insert"]);
+      const puzzles = set.add({ name: "Puzzles" });
+
+      set.remove(puzzles);
+
+      expect(context.entry(puzzles).state).toBe("detached");
+    });
+
+    it("reject a modified entity before anything is sent", async () => {
+      const { context, set, http } = categories(["insert"]);
+      const games = { id: 1, name: "Games" };
+      set.attach(games);
+      games.name = "Board games";
+
+      await expect(context.saveChanges()).rejects.toThrow("The set 'categories' doesn't allow updates.");
+      expect(http.requests).toHaveLength(0);
+    });
   });
 });

@@ -1,8 +1,8 @@
 using System.Buffers;
 using System.Text.Json;
 using BenchmarkDotNet.Attributes;
+using LinqToRest.Benchmarks.Client;
 using LinqToRest.Protocol;
-using LinqToRest.TestContracts;
 
 namespace LinqToRest.Benchmarks;
 

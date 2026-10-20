@@ -8,6 +8,5 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LinqToRest.Server\LinqToRest.Server.csproj" />
-    <ProjectReference Include="..\Shop.Contracts\Shop.Contracts.csproj" />
   </ItemGroup>
 </Project>
