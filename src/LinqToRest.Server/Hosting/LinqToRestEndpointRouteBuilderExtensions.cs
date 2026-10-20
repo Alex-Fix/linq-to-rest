@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LinqToRest.Modeling;
 using LinqToRest.Protocol;
 using LinqToRest.Server.Mapping;
 using Microsoft.AspNetCore.Builder;
@@ -21,8 +22,9 @@ public static class LinqToRestEndpointRouteBuilderExtensions
 
     /// <summary>
     /// Maps <c>QUERY {prefix}/{set}</c>, its equivalent <c>POST {prefix}/{set}/$query</c> (described in OpenAPI, which
-    /// can't describe QUERY), and <c>POST {prefix}/$batch</c>. Returns the route group, so standard endpoint
-    /// conventions such as <c>RequireAuthorization()</c> apply to every LinqToRest endpoint.
+    /// can't describe QUERY), and <c>POST {prefix}/$batch</c> when any set allows writes. Builds and validates the
+    /// sets, so a bad configuration fails here. Returns the route group, so standard endpoint conventions such as
+    /// <c>RequireAuthorization()</c> apply to every LinqToRest endpoint.
     /// </summary>
     /// <param name="endpoints">The endpoint route builder.</param>
     /// <param name="prefix">The route prefix, for example <c>/api</c>.</param>
@@ -31,8 +33,7 @@ public static class LinqToRestEndpointRouteBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        // Builds and validates the model now, so a bad set configuration fails at startup.
-        _ = endpoints.ServiceProvider.GetRequiredService<ServerModel>();
+        var server = endpoints.ServiceProvider.GetRequiredService<ServerModel>();
         var group = endpoints.MapGroup(prefix);
         group.MapMethods("{set}", QueryMethod, QueryEndpoint.HandleAsync)
             .ExcludeFromDescription();
@@ -48,6 +49,11 @@ public static class LinqToRestEndpointRouteBuilderExtensions
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status415UnsupportedMediaType);
+
+        if (server.Sets.All(set => set.Model.Writes == WriteOperations.None))
+        {
+            return group;
+        }
 
         // A parameter besides HttpContext keeps this a described endpoint rather than a bare RequestDelegate.
         group.MapPost("$batch", (HttpRequest request) => BatchEndpoint.HandleAsync(request.HttpContext))

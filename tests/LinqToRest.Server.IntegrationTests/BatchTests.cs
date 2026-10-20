@@ -193,6 +193,26 @@ public abstract class BatchTests(ShopDatabase database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Operation_the_set_does_not_allow_is_rejected_before_anything_runs()
+    {
+        var readOnly = await BatchProblemAsync(
+            """{"v":1,"operations":[{"id":"l","op":"insert","set":"orderLines","values":{}}]}""", HttpStatusCode.Forbidden);
+        var noDelete = await BatchProblemAsync("""
+            {"v":1,"operations":[
+              {"id":"c","op":"insert","set":"categories","values":{"name":"Maps"}},
+              {"id":"d","op":"delete","set":"categories","key":{"id":1}}]}
+            """, HttpStatusCode.Forbidden);
+
+        JsonAssert.Problem(readOnly, "operation_not_allowed", "/operations/0");
+        Assert.Equal("l", readOnly.GetProperty("operationId").GetString());
+        JsonAssert.Problem(noDelete, "operation_not_allowed", "/operations/1");
+        using var scope = Server.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShopDbContext>();
+        Assert.False(await db.Categories.AnyAsync(c => c.Name == "Maps", TestContext.Current.CancellationToken));
+        Assert.True(await db.Categories.AnyAsync(c => c.Id == 1, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Operation_limit_is_enforced()
     {
         var operations = string.Join(",", Enumerable.Range(0, 6).Select(i => "{\"id\":\"o" + i + "\",\"op\":\"insert\",\"set\":\"categories\",\"values\":{\"name\":\"C" + i + "\"}}"));

@@ -279,7 +279,9 @@ Where the implementation differs from the sections above, this list wins.
    mirror the client test contracts, so the golden request bodies stay unchanged.
    `tests/LinqToRest.Server.IntegrationTests/Shop/model.json` is the integration shop's model, which the end-to-end
    client is generated from. Both are rewritten with `LINQTOREST_UPDATE_GOLDEN=1`.
-6. **Formatting:** the model document is indented by two spaces, with every object or array that fits in 120 columns
+6. **No `$batch` without writable sets** means no handler: `POST {prefix}/$batch` then only matches the
+   `QUERY {prefix}/{set}` route by path, so ASP.NET Core routing answers 405 rather than 404.
+7. **Formatting:** the model document is indented by two spaces, with every object or array that fits in 120 columns
    on one line, so each property is one line in diffs.
 
 ## Open questions

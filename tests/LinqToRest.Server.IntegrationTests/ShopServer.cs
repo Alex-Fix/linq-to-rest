@@ -36,7 +36,8 @@ public sealed class ShopServer : IAsyncDisposable
         ShopDatabase database,
         Action<LinqToRestServerBuilder>? configure = null,
         Action<WebApplication>? pipeline = null,
-        IInterceptor? interceptor = null)
+        IInterceptor? interceptor = null,
+        Action<LinqToRestServerBuilder>? sets = null)
     {
         var lease = await database.CreateAsync();
         var builder = WebApplication.CreateBuilder();
@@ -53,7 +54,16 @@ public sealed class ShopServer : IAsyncDisposable
         });
         builder.Services.AddLinqToRest(options =>
         {
-            options.UseDbContext<ShopDbContext>().AddSetsFromAssembly(typeof(ShopServer).Assembly);
+            options.UseDbContext<ShopDbContext>();
+            if (sets is null)
+            {
+                options.AddSetsFromAssembly(typeof(ShopServer).Assembly);
+            }
+            else
+            {
+                sets(options);
+            }
+
             configure?.Invoke(options);
         });
 

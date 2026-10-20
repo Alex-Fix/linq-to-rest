@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Linq.Expressions;
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
+using LinqToRest.Modeling;
 using LinqToRest.Protocol;
 using LinqToRest.Server.Hosting;
 using LinqToRest.Server.Internal;
@@ -69,12 +70,19 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
     private async Task ApplyAsync(BatchOperation operation, string location, CancellationToken cancellationToken)
     {
         var mapping = server.FindSet(operation.Set) ?? throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/set", operation);
-        var kind = operation.Op switch
+        var (kind, write) = operation.Op switch
         {
-            BatchOperationKind.Insert => SetOperation.Insert,
-            BatchOperationKind.Update => SetOperation.Update,
-            _ => SetOperation.Delete,
+            BatchOperationKind.Insert => (SetOperation.Insert, WriteOperations.Insert),
+            BatchOperationKind.Update => (SetOperation.Update, WriteOperations.Update),
+            _ => (SetOperation.Delete, WriteOperations.Delete),
         };
+
+        // The set's own rules come first: a read-only set never reaches its policy or the database.
+        if (!mapping.Model.Allows(write))
+        {
+            throw Failure(StatusCodes.Status403Forbidden, ErrorCodes.OperationNotAllowed, location, operation);
+        }
+
         if (!await policies.CanAsync(mapping, kind).ConfigureAwait(false))
         {
             throw Failure(StatusCodes.Status403Forbidden, ErrorCodes.Forbidden, location, operation);

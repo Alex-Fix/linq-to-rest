@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Net;
 using System.Text;
+using LinqToRest.Server.IntegrationTests.Shop;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -112,6 +113,22 @@ public abstract class EndpointTests(ShopFixture shop)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("not_sortable", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, form.StatusCode);
+    }
+
+    [Fact]
+    public async Task Batch_is_not_mapped_when_no_set_allows_writes()
+    {
+        await using var server = await ShopServer.StartAsync(shop.Database, sets: options => options.AddSet<Category>(b => b.ToSet("categories").Property(c => c.Name)));
+
+        using var batch = await server.Client.PostAsync(
+            new Uri("/api/$batch", UriKind.Relative),
+            new StringContent("""{"v":1,"operations":[{"id":"c","op":"insert","set":"categories","values":{}}]}""", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+        var categories = await server.QueryOkAsync("categories", """{"v":1}""");
+
+        // Only QUERY {set} matches the path now, so routing answers 405.
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, batch.StatusCode);
+        Assert.Equal(3, categories.GetProperty("items").GetArrayLength());
     }
 
     [Fact]

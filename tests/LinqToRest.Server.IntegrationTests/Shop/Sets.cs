@@ -30,7 +30,7 @@ public sealed class CategorySet : IEntitySetConfiguration<Category>
 {
     public void Configure(EntitySetBuilder<Category> builder)
     {
-        builder.ToSet("categories").AllowWrites(WriteOperations.All);
+        builder.ToSet("categories").AllowWrites(WriteOperations.Insert | WriteOperations.Update);
         builder.Property(c => c.Name).IsSortable();
         builder.HasMany(c => c.Products);
         builder.HasPagination(p => p.Modes(PaginationModes.Cursor));
@@ -41,7 +41,7 @@ public sealed class OrderLineSet : IEntitySetConfiguration<OrderLine>
 {
     public void Configure(EntitySetBuilder<OrderLine> builder)
     {
-        builder.ToSet("orderLines").AllowWrites(WriteOperations.All);
+        builder.ToSet("orderLines");
         builder.Property(l => l.ProductId);
         builder.Property(l => l.Sku);
         builder.Property(l => l.Quantity);

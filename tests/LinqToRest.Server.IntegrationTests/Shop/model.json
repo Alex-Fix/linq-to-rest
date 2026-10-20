@@ -6,7 +6,7 @@
       "name": "categories",
       "type": "Category",
       "key": ["id"],
-      "writes": ["insert", "update", "delete"],
+      "writes": ["insert", "update"],
       "pagination": {"modes": ["cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
@@ -18,14 +18,14 @@
       "name": "orderLines",
       "type": "OrderLine",
       "key": ["id"],
-      "writes": ["insert", "update", "delete"],
+      "writes": [],
       "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
-        {"name": "productId", "type": "int32", "writable": true},
-        {"name": "sku", "type": "string", "writable": true},
-        {"name": "quantity", "type": "int32", "writable": true},
-        {"name": "unitPrice", "type": "decimal", "writable": true}
+        {"name": "productId", "type": "int32"},
+        {"name": "sku", "type": "string"},
+        {"name": "quantity", "type": "int32"},
+        {"name": "unitPrice", "type": "decimal"}
       ],
       "navigations": []
     },
