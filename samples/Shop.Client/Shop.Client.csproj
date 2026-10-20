@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- ShopContext.generated.cs comes from Shop.Api's model.json (linqtorest-gen cs); never edit it by hand. -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="..\Shop.Api\model.json" LogicalName="model.json" />
   </ItemGroup>
 </Project>

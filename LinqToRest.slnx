@@ -14,8 +14,8 @@
 	<Folder Name="/samples/">
 		<File Path="samples/Directory.Build.props" />
 		<Project Path="samples/Shop.Api/Shop.Api.csproj" />
+		<Project Path="samples/Shop.Client/Shop.Client.csproj" />
 		<Project Path="samples/Shop.Console/Shop.Console.csproj" />
-		<Project Path="samples/Shop.Contracts/Shop.Contracts.csproj" />
 	</Folder>
 	<Folder Name="/src/">
 		<File Path="src/Directory.Build.props" />

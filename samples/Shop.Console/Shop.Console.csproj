@@ -5,6 +5,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
-    <ProjectReference Include="..\Shop.Contracts\Shop.Contracts.csproj" />
+    <ProjectReference Include="..\Shop.Client\Shop.Client.csproj" />
   </ItemGroup>
 </Project>

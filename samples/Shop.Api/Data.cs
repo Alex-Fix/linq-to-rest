@@ -1,8 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Shop.Contracts;
 
 namespace Shop.Api;
+
+public enum ProductStatus
+{
+    Draft,
+    Active,
+    Retired,
+}
 
 public sealed class Category
 {

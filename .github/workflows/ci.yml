@@ -136,6 +136,7 @@ jobs:
           generate ts --model tests/golden/model.json --name Shop --import ../src/index.js --out clients/typescript/test/shop.generated.ts
           generate ts --model samples/Shop.Api/model.json --name Shop --import ../src/index.js --out clients/typescript/test-e2e/shop.generated.ts
           generate ts --model samples/Shop.Api/model.json --name Shop --out samples/shop-ts/shop.generated.ts
+          generate cs --model samples/Shop.Api/model.json --namespace Shop.Client --context ShopContext --out samples/Shop.Client/ShopContext.generated.cs
 
       - name: End-to-end tests against samples/Shop.Api
         run: npm run test:e2e
