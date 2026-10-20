@@ -139,6 +139,16 @@ None in `src/`. If the sample needs one, it's designed separately (brainstorming
 | `LinqToRest.Server.IntegrationTests` | self-referencing navigation (parent/children, includes, filters through the parent) on SQLite and PostgreSQL |
 | CI | re-export `Catalog.Api/model.json` and diff; `linqtorest-gen cs`/`ts --check` for both clients; `dotnet publish -c Release` of `Catalog.Blazor` (trimmed); `npm run check` in `catalog-web` |
 
+## Implementation notes
+
+Where the implementation differs from the sections above, this list wins.
+
+1. **Drafts can't leak through other sets.** `productImages` has its own policy (non-editors only see images of
+   active products, through an unexposed `ProductImage.Product` navigation), and the categories' and brands'
+   `productCount` count active products only: a set's `Computed` values read entities past other sets' policies
+   (pinned by the self-reference tests).
+2. **Self-referencing navigations needed no library change**; `SelfReferenceTests` covers them on both providers.
+
 ## Open questions
 
 - Browser end-to-end tests (Playwright) once the screens are stable?

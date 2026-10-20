@@ -1,0 +1,80 @@
+{
+  "v": 1,
+  "enums": {"ProductStatus": ["Draft", "Active", "Discontinued"]},
+  "sets": [
+    {
+      "name": "brands",
+      "type": "Brand",
+      "key": ["id"],
+      "writes": ["insert", "update"],
+      "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "id", "type": "int32", "sortable": true},
+        {"name": "name", "type": "string", "writable": true, "sortable": true},
+        {"name": "productCount", "type": "int32"}
+      ],
+      "navigations": [{"name": "products", "target": "products", "collection": true}]
+    },
+    {
+      "name": "categories",
+      "type": "Category",
+      "key": ["id"],
+      "writes": ["insert", "update", "delete"],
+      "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "id", "type": "int32", "sortable": true},
+        {"name": "name", "type": "string", "writable": true, "sortable": true},
+        {"name": "parentId", "type": "int32", "nullable": true, "writable": true},
+        {"name": "productCount", "type": "int32"}
+      ],
+      "navigations": [
+        {"name": "parent", "target": "categories", "nullable": true, "foreignKey": ["parentId"]},
+        {"name": "children", "target": "categories", "collection": true},
+        {"name": "products", "target": "products", "collection": true}
+      ]
+    },
+    {
+      "name": "productImages",
+      "type": "ProductImage",
+      "key": ["id"],
+      "writes": ["insert", "update", "delete"],
+      "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "id", "type": "int32", "sortable": true},
+        {"name": "productId", "type": "int32", "writable": true},
+        {"name": "url", "type": "string", "writable": true},
+        {"name": "sortOrder", "type": "int32", "writable": true, "sortable": true}
+      ],
+      "navigations": []
+    },
+    {
+      "name": "products",
+      "type": "Product",
+      "key": ["id"],
+      "concurrencyToken": "version",
+      "writes": ["insert", "update", "delete"],
+      "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 24, "maxPageSize": 96, "maxSkip": 1000},
+      "properties": [
+        {"name": "id", "type": "int32", "sortable": true},
+        {"name": "sku", "type": "string", "writable": true},
+        {"name": "name", "type": "string", "writable": true, "sortable": true},
+        {"name": "description", "type": "string", "nullable": true, "writable": true, "filterable": false},
+        {"name": "price", "type": "decimal", "writable": true, "sortable": true},
+        {"name": "status", "type": "ProductStatus", "writable": true},
+        {"name": "stock", "type": "int32", "writable": true, "sortable": true},
+        {"name": "categoryId", "type": "int32", "writable": true},
+        {"name": "brandId", "type": "int32", "writable": true},
+        {"name": "createdAt", "type": "dateTime", "sortable": true},
+        {"name": "version", "type": "guid"},
+        {"name": "inStock", "type": "bool"},
+        {"name": "tags", "type": "string", "collection": true},
+        {"name": "imageCount", "type": "int32"}
+      ],
+      "navigations": [
+        {"name": "category", "target": "categories", "foreignKey": ["categoryId"]},
+        {"name": "brand", "target": "brands", "foreignKey": ["brandId"]},
+        {"name": "images", "target": "productImages", "collection": true}
+      ]
+    }
+  ]
+}
