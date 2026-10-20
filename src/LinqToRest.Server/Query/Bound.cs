@@ -22,7 +22,7 @@ internal sealed class ValueBound(Expression expression, bool isNullable) : Bound
     public bool IsNullable { get; } = isNullable;
 }
 
-/// <summary>A DTO row: the root, a reference navigation or a collection element.</summary>
+/// <summary>A row of a set: the root, a reference navigation or a collection element.</summary>
 // When Guard is set, the row only counts as present if it holds (the policy filter of a navigation).
 internal sealed class EntityBound(Expression expression, SetMapping mapping, Expression? guard, bool isNullable) : Bound
 {

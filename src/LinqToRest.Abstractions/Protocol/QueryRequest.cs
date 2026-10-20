@@ -19,10 +19,10 @@ public sealed class QueryRequest
     /// <summary>Gets the sort members, in order.</summary>
     public IReadOnlyList<OrderByItem> OrderBy { get; init; } = [];
 
-    /// <summary>Gets the projection; <see langword="null"/> returns the full DTO.</summary>
+    /// <summary>Gets the projection; <see langword="null"/> returns the full row.</summary>
     public QueryNode? Select { get; init; }
 
-    /// <summary>Gets the navigation paths to load with the full DTO.</summary>
+    /// <summary>Gets the navigation paths to load with the full row.</summary>
     public IReadOnlyList<MemberNode> Include { get; init; } = [];
 
     /// <summary>Gets the pagination; <see langword="null"/> means offset mode with the default page size.</summary>

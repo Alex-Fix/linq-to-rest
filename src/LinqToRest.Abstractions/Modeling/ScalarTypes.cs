@@ -1,6 +1,6 @@
 namespace LinqToRest.Modeling;
 
-/// <summary>The CLR types LinqToRest accepts for DTO scalar properties and literals.</summary>
+/// <summary>The CLR types LinqToRest accepts for scalar members and literals, and their model-document names.</summary>
 public static class ScalarTypes
 {
     private static readonly HashSet<Type> Supported =
