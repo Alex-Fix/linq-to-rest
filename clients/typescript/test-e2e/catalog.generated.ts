@@ -121,7 +121,7 @@ export const catalogModel = {
       writes: ["insert", "update"],
       members: [
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
-        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: true, writable: true },
+        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: true, writable: true, rules: { required: true, maxLength: 50 } },
         { name: "productCount", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
       ],
       navigations: [
@@ -136,7 +136,7 @@ export const catalogModel = {
       writes: ["insert", "update", "delete"],
       members: [
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
-        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: true, writable: true },
+        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: true, writable: true, rules: { required: true, maxLength: 50 } },
         { name: "parentId", kind: "number", nullable: true, collection: false, filterable: true, sortable: false, writable: true },
         { name: "productCount", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
       ],
@@ -155,7 +155,7 @@ export const catalogModel = {
       members: [
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
         { name: "productId", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
-        { name: "url", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
+        { name: "url", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true, rules: { required: true, maxLength: 500, pattern: "^https://" } },
         { name: "sortOrder", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true },
       ],
       navigations: [
@@ -170,12 +170,12 @@ export const catalogModel = {
       writes: ["insert", "update", "delete"],
       members: [
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
-        { name: "sku", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
-        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: true, writable: true },
-        { name: "description", kind: "string", nullable: true, collection: false, filterable: false, sortable: false, writable: true },
-        { name: "price", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true },
+        { name: "sku", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true, rules: { required: true, pattern: "^[A-Z0-9-]{3,20}$" } },
+        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: true, writable: true, rules: { required: true, maxLength: 100 } },
+        { name: "description", kind: "string", nullable: true, collection: false, filterable: false, sortable: false, writable: true, rules: { maxLength: 2000 } },
+        { name: "price", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true, rules: { min: 0.01, max: 100000 } },
         { name: "status", kind: "enum", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
-        { name: "stock", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true },
+        { name: "stock", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true, rules: { min: 0 } },
         { name: "categoryId", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
         { name: "brandId", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
         { name: "createdAt", kind: "datetime", nullable: false, collection: false, filterable: true, sortable: true, writable: false },

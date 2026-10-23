@@ -7,7 +7,7 @@ Design: [`docs/plans/2026-10-20-catalog-sample-design.md`](../docs/plans/2026-10
 
 | Project | What it is |
 |---|---|
-| `Catalog.Api` | ASP.NET Core + EF Core (SQLite by default), sets, role policies, dev login, CORS, `model.json`; published ReadyToRun |
+| `Catalog.Api` | ASP.NET Core + EF Core (SQLite by default), sets, validation rules and a validator, role policies, dev login, CORS, `model.json`; published ReadyToRun |
 | `Catalog.Client` | `CatalogContext.generated.cs`, generated from `model.json` (never edit it) |
 | `catalog-web` | React + Vite + [Ant Design](https://ant.design) on `catalog.generated.ts`, generated from the same `model.json` |
 | `Catalog.Blazor` | Blazor WebAssembly + [Ant Design Blazor](https://antblazor.com) on `Catalog.Client` |
@@ -36,7 +36,7 @@ mapped outside Development; a real app uses an identity provider.
 |---|---|
 | Browse | One query for the category tree (assembled on the client); filters translated to the server (`contains`, `in` for brands and the category with its subcategories, price range, a computed `inStock`); sorting; cursor pages with a total count; cards project only what they show plus the first image (`select` with a filtered collection). |
 | Product page | `include` of a reference and a collection; a second, projected query for related products. |
-| Product editor (editors) | One batch for the product and every image change; a new product and its images through `refs`; a change made elsewhere comes back as a concurrency conflict with "reload and reapply". |
+| Product editor (editors) | One batch for the product and every image change; a new product and its images through `refs`; a change made elsewhere comes back as a concurrency conflict with "reload and reapply". Validation: the model's rules (required, lengths, SKU pattern, price range) mark fields and check them as you type; the server's own rules (whole cents, a SKU no other product has) come back as field errors from one 422. |
 | Categories admin (editors) | Small units of work per action (attach, change, save); a self-referencing navigation (`parentId`); deleting a non-empty category shows the 409. |
 
 Switch roles to see the policies at work: viewers and anonymous visitors see only active products (also through

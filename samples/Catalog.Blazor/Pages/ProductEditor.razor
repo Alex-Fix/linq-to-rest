@@ -24,19 +24,29 @@ else
         <Form Model="_form" Layout="@FormLayout.Vertical" OnFinish="() => SaveAsync(_loaded)">
             <GridRow Gutter="16">
                 <GridCol Xs="24" Md="8">
-                    <FormItem Label="SKU" Required><Input @bind-Value="_form.Sku" /></FormItem>
+                    <FormItem Label="SKU" Required="@(_rules.Sku?.IsRequired == true)" Extra="Capitals, digits and dashes." @attributes="Help(nameof(Product.Sku))">
+                        <Input @bind-Value="_form.Sku" @bind-Value:after="() => Touch(nameof(Product.Sku))" />
+                    </FormItem>
                 </GridCol>
                 <GridCol Xs="24" Md="16">
-                    <FormItem Label="Name" Required><Input @bind-Value="_form.Name" /></FormItem>
+                    <FormItem Label="Name" Required="@(_rules.Name?.IsRequired == true)" @attributes="Help(nameof(Product.Name))">
+                        <Input @bind-Value="_form.Name" @bind-Value:after="() => Touch(nameof(Product.Name))" MaxLength="@(_rules.Name?.MaxLength ?? -1)" ShowCount />
+                    </FormItem>
                 </GridCol>
             </GridRow>
-            <FormItem Label="Description"><TextArea Rows="3" @bind-Value="_form.Description" /></FormItem>
+            <FormItem Label="Description" @attributes="Help(nameof(Product.Description))">
+                <TextArea Rows="3" @bind-Value="_form.Description" @bind-Value:after="() => Touch(nameof(Product.Description))" MaxLength="@(_rules.Description?.MaxLength ?? -1)" />
+            </FormItem>
             <GridRow Gutter="16">
                 <GridCol Xs="12" Md="6">
-                    <FormItem Label="Price"><AntDesign.InputNumber TValue="decimal" Min="0" Step="0.01m" Style="width: 100%" @bind-Value="_form.Price" /></FormItem>
+                    <FormItem Label="Price" @attributes="Help(nameof(Product.Price))">
+                        <AntDesign.InputNumber TValue="decimal" Step="0.01m" Style="width: 100%" @bind-Value="_form.Price" @bind-Value:after="() => Touch(nameof(Product.Price))" />
+                    </FormItem>
                 </GridCol>
                 <GridCol Xs="12" Md="6">
-                    <FormItem Label="Stock"><AntDesign.InputNumber TValue="int" Min="0" Style="width: 100%" @bind-Value="_form.Stock" /></FormItem>
+                    <FormItem Label="Stock" @attributes="Help(nameof(Product.Stock))">
+                        <AntDesign.InputNumber TValue="int" Style="width: 100%" @bind-Value="_form.Stock" @bind-Value:after="() => Touch(nameof(Product.Stock))" />
+                    </FormItem>
                 </GridCol>
                 <GridCol Xs="24" Md="12">
                     <FormItem Label="Status"><EnumSelect TEnum="ProductStatus" @bind-Value="_form.Status" /></FormItem>
@@ -62,11 +72,15 @@ else
                     var position = index;
                     var row = _form.Images[position];
                     <div @key="row" style="display: flex; gap: 8px; margin-bottom: 8px">
-                        <Input Placeholder="https://…" @bind-Value="row.Url" />
+                        <Input Placeholder="https://…" @bind-Value="row.Url" @bind-Value:after="() => _imageErrors.Remove(row)" Status="@(_imageErrors.ContainsKey(row) ? FormValidateStatus.Error : FormValidateStatus.Default)" />
                         <Button Icon="arrow-up" Disabled="@(position == 0)" OnClick="() => Move(position, -1)" />
                         <Button Icon="arrow-down" Disabled="@(position == _form.Images.Count - 1)" OnClick="() => Move(position, 1)" />
                         <Button Danger Icon="delete" OnClick="() => _form.Images.Remove(row)" />
                     </div>
+                    @if (_imageErrors.TryGetValue(row, out var imageError))
+                    {
+                        <div style="margin: -4px 0 8px"><Text Type="TextElementType.Danger">@imageError</Text></div>
+                    }
                 }
                 <Button Type="ButtonType.Dashed" Block Icon="plus" OnClick="() => _form.Images.Add(new ImageRow(null, string.Empty))">Add image</Button>
             </FormItem>
@@ -96,12 +110,17 @@ else
     private string? _error;
     private bool _conflict;
     private bool _saving;
+    private Rules _rules = null!;
+    private readonly HashSet<string> _touched = [];
+    private Dictionary<string, IReadOnlyList<string>> _serverErrors = [];
+    private Dictionary<ImageRow, string> _imageErrors = [];
 
     protected override async Task OnParametersSetAsync()
     {
         try
         {
             var catalog = Session.NewCatalog();
+            _rules = new Rules(catalog);
             _categories = await catalog.Categories.OrderBy(c => c.Name).Select(c => new CategoryNode(c.Id, c.Name, c.ParentId, c.ProductCount)).Take(200).ToListAsync();
             _brands = await catalog.Brands.OrderBy(b => b.Name).Select(b => new BrandRow(b.Id, b.Name, b.ProductCount)).Take(100).ToListAsync();
             _loaded = Id is { } id ? await LoadAsync(id) : null;
@@ -130,7 +149,9 @@ else
     /// </summary>
     private async Task SaveAsync(Loaded? baseline)
     {
-        (_saving, _error, _conflict) = (true, null, false);
+        (_saving, _error, _conflict, _serverErrors, _imageErrors) = (true, null, false, [], []);
+        var rows = new Dictionary<object, ImageRow>(ReferenceEqualityComparer.Instance);
+        Product? saved = null;
         try
         {
             var catalog = Session.NewCatalog();
@@ -140,11 +161,13 @@ else
             {
                 product = new Product();
                 catalog.Products.Add(product);
+                saved = product;
             }
             else
             {
                 product = Copy(baseline.Product);
                 catalog.Products.Attach(product);
+                saved = product;
                 foreach (var image in baseline.Images)
                 {
                     var tracked = new ProductImage { Id = image.Id, ProductId = image.ProductId, Url = image.Url, SortOrder = image.SortOrder };
@@ -160,11 +183,14 @@ else
                 if (row.Id is { } imageId && existing.Remove(imageId, out var image))
                 {
                     (image.Url, image.SortOrder) = (row.Url, sortOrder);
+                    rows.Add(image, row);
                 }
                 else
                 {
                     // A new image points at the product; for a new product that becomes a ref in the batch.
-                    catalog.ProductImages.Add(new ProductImage { Url = row.Url, SortOrder = sortOrder, Product = product });
+                    var added = new ProductImage { Url = row.Url, SortOrder = sortOrder, Product = product };
+                    catalog.ProductImages.Add(added);
+                    rows.Add(added, row);
                 }
             }
 
@@ -175,6 +201,16 @@ else
 
             await catalog.SaveChangesAsync();
             Navigation.NavigateTo($"products/{product.Id}");
+        }
+        catch (RestValidationException exception)
+        {
+            // Errors from the client's check or the server's 422 name tracked entities: place them on the fields.
+            _error = Errors.Describe(exception);
+            _touched.UnionWith(Members);
+            _serverErrors = saved is null ? [] : exception.ErrorsFor(saved).ToDictionary();
+            _imageErrors = rows
+                .Where(pair => exception.ErrorsFor(pair.Key).Count > 0)
+                .ToDictionary(pair => pair.Value, pair => string.Join(" ", exception.ErrorsFor(pair.Key).SelectMany(codes => codes.Value).Select(code => Errors.FieldMessage(code, _rules.Url))));
         }
         catch (RestSaveException exception)
         {
@@ -208,6 +244,37 @@ else
         await SaveAsync(_loaded);
     }
 
+    private static readonly string[] Members = [nameof(Product.Sku), nameof(Product.Name), nameof(Product.Description), nameof(Product.Price), nameof(Product.Stock)];
+
+    private void Touch(string member)
+    {
+        _touched.Add(member);
+        _serverErrors.Remove(member);
+    }
+
+    /// <summary>
+    /// The model's rules on the row the form would save, for touched fields, plus what the last save reported: as
+    /// the FormItem's error status and help.
+    /// </summary>
+    private Dictionary<string, object> Help(string member)
+    {
+        var product = new Product();
+        _form!.ApplyTo(product);
+        var codes = _rules.Catalog.Validate(product)
+            .Where(error => error.Member == member && _touched.Contains(member))
+            .Select(error => error.Code)
+            .Concat(_serverErrors.GetValueOrDefault(member) ?? [])
+            .Distinct()
+            .ToList();
+        return codes.Count == 0
+            ? []
+            : new Dictionary<string, object>
+            {
+                ["ValidateStatus"] = FormValidateStatus.Error,
+                ["Help"] = string.Join(" ", codes.Select(code => Errors.FieldMessage(code, _rules.For(member)))),
+            };
+    }
+
     private void Move(int index, int offset)
     {
         var row = _form!.Images[index];
@@ -231,6 +298,35 @@ else
     };
 
     private sealed record Loaded(Product Product, List<ProductImage> Images);
+
+    /// <summary>The model's built-in rules the form uses: required marks, max lengths and message limits.</summary>
+    private sealed class Rules(CatalogContext catalog)
+    {
+        /// <summary>Gets a context for checking rows locally; nothing is tracked or sent through it.</summary>
+        public CatalogContext Catalog { get; } = catalog;
+
+        public RestPropertyRules? Sku { get; } = catalog.Products.Rules(p => p.Sku);
+
+        public RestPropertyRules? Name { get; } = catalog.Products.Rules(p => p.Name);
+
+        public RestPropertyRules? Description { get; } = catalog.Products.Rules(p => p.Description);
+
+        public RestPropertyRules? Price { get; } = catalog.Products.Rules(p => p.Price);
+
+        public RestPropertyRules? Stock { get; } = catalog.Products.Rules(p => p.Stock);
+
+        public RestPropertyRules? Url { get; } = catalog.ProductImages.Rules(i => i.Url);
+
+        public RestPropertyRules? For(string member) => member switch
+        {
+            nameof(Product.Sku) => Sku,
+            nameof(Product.Name) => Name,
+            nameof(Product.Description) => Description,
+            nameof(Product.Price) => Price,
+            nameof(Product.Stock) => Stock,
+            _ => null,
+        };
+    }
 
     private sealed class ImageRow(int? id, string url)
     {
