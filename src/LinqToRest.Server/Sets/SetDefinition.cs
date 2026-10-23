@@ -30,6 +30,12 @@ internal sealed class SetDefinition(Type entityType)
 
     public SetPaginationBuilder Pagination { get; } = new();
 
+    /// <summary>Gets the custom rules (<c>Must</c>), in the order they were added.</summary>
+    public List<RuleDefinition.Custom> Rules { get; } = [];
+
+    /// <summary>Gets the validator types (<c>ValidateWith</c>), in the order they were added.</summary>
+    public List<Type> Validators { get; } = [];
+
     public MemberDefinition GetProperty(PropertyInfo property, LambdaExpression expression)
     {
         if (Members.Find(member => member.Property == property) is { } existing)
@@ -62,7 +68,35 @@ internal sealed class MemberDefinition(PropertyInfo? property, string? computedN
 
     public bool IsRequired { get; set; }
 
+    /// <summary>Gets the built-in validation rules (<see cref="EntityPropertyBuilder"/>).</summary>
+    public RuleDefinition Rules { get; } = new();
+
     public string Describe() => Property?.Name ?? ComputedName!;
+}
+
+/// <summary>The built-in validation rules configured on a property; exported as <see cref="RestPropertyRules"/>.</summary>
+internal sealed class RuleDefinition
+{
+    public bool IsRequired { get; set; }
+
+    public int? MinLength { get; set; }
+
+    public int? MaxLength { get; set; }
+
+    public object? Min { get; set; }
+
+    public object? Max { get; set; }
+
+    public string? Pattern { get; set; }
+
+    public RestPropertyRules? ToModel()
+    {
+        var rules = new RestPropertyRules { IsRequired = IsRequired, MinLength = MinLength, MaxLength = MaxLength, Min = Min, Max = Max, Pattern = Pattern };
+        return rules.IsEmpty ? null : rules;
+    }
+
+    /// <summary>A <c>Must</c> rule: <paramref name="Member"/> is the property it's about, or null for the row.</summary>
+    public sealed record Custom(PropertyInfo? Member, Func<object, bool> IsValid, string Code, bool OnlyWhenSent);
 }
 
 internal sealed class NavigationDefinition(PropertyInfo property, LambdaExpression expression, Type targetEntity, bool isCollection)

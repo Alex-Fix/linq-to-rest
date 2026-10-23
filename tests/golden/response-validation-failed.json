@@ -1,0 +1,12 @@
+{
+  "type": "urn:linqtorest:error:validation_failed",
+  "title": "Invalid values.",
+  "status": 422,
+  "code": "validation_failed",
+  "pointer": "/operations",
+  "errors": [
+    {"operation": "o0", "pointer": "/operations/0/values/name", "member": "name", "code": "duplicate"},
+    {"operation": "o1", "pointer": "/operations/1", "code": "too_many_products"},
+    {"code": "too_many_errors"}
+  ]
+}

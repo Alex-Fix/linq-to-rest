@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using LinqToRest.Modeling;
+using LinqToRest.Protocol;
 
 namespace LinqToRest.CodeGen;
 
@@ -127,7 +128,7 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
             foreach (var property in set.Properties)
             {
                 body.Append(CultureInfo.InvariantCulture,
-                    $"        {{ name: {Quote(property.Name)}, kind: {Quote(Kind(property.Type))}, nullable: {Bool(property.IsNullable)}, collection: {Bool(property.IsCollection)}, filterable: {Bool(property.IsFilterable)}, sortable: {Bool(property.IsSortable)}, writable: {Bool(property.IsWritable)} }},\n");
+                    $"        {{ name: {Quote(property.Name)}, kind: {Quote(Kind(property.Type))}, nullable: {Bool(property.IsNullable)}, collection: {Bool(property.IsCollection)}, filterable: {Bool(property.IsFilterable)}, sortable: {Bool(property.IsSortable)}, writable: {Bool(property.IsWritable)}{Rules(property.Rules)} }},\n");
             }
 
             body.Append("      ],\n");
@@ -258,6 +259,48 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
         "bytes" => "binary",
         _ => "enum",
     };
+
+    // The built-in rules the client checks before saving; bounds are wire values (numbers or date/time strings).
+    private static string Rules(RestPropertyRules? rules)
+    {
+        if (rules is null || rules.IsEmpty)
+        {
+            return "";
+        }
+
+        var parts = new List<string>();
+        if (rules.IsRequired)
+        {
+            parts.Add("required: true");
+        }
+
+        if (rules.MinLength is { } minLength)
+        {
+            parts.Add($"minLength: {minLength.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (rules.MaxLength is { } maxLength)
+        {
+            parts.Add($"maxLength: {maxLength.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (rules.Min is { } min)
+        {
+            parts.Add($"min: {JsonValues.ToElement(min).GetRawText()}");
+        }
+
+        if (rules.Max is { } max)
+        {
+            parts.Add($"max: {JsonValues.ToElement(max).GetRawText()}");
+        }
+
+        if (rules.Pattern is { } pattern)
+        {
+            parts.Add($"pattern: {Quote(pattern)}");
+        }
+
+        return $", rules: {{ {string.Join(", ", parts)} }}";
+    }
 
     private static string Bool(bool value) => value ? "true" : "false";
 

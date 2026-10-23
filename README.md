@@ -169,6 +169,67 @@ const games = await shop.products
 Same protocol, same rules, same unit of work: both clients write identical request bodies, checked against the shared
 golden files in `tests/golden/`. Details in [clients/typescript/README.md](clients/typescript/README.md).
 
+## Validation
+
+Rules run on every insert and update of a batch, after all its values are applied and before anything is written;
+every broken rule of every operation comes back at once, as one 422.
+
+```csharp
+b.Property(p => p.Sku).IsRequired().HasPattern("^[A-Z0-9-]{3,20}$");      // built-ins: exported in the model document,
+b.Property(p => p.Name).IsRequired().HasMaxLength(100);                   // checked by both clients before saving
+b.Property(p => p.Price).HasRange(0.01m, 100_000m);
+b.Must(p => p.Price, price => decimal.Round(price, 2) == price, "too_precise");                 // server-only rules
+b.Must(p => p.EndsOn > p.StartsOn, "ends_before_start", p => p.EndsOn);
+b.ValidateWith<UniqueSkuValidator>();                                     // async, from DI, can query the database
+
+public sealed class UniqueSkuValidator(ShopDbContext db) : IEntityValidator<Product>
+{
+    public async ValueTask ValidateAsync(EntityValidationContext<Product> c, CancellationToken ct)
+    {
+        if (c.IsModified(p => p.Sku) && await db.Products.AnyAsync(p => p.Sku == c.Entity.Sku && p.Id != c.Entity.Id, ct))
+        {
+            c.AddError(p => p.Sku, "duplicate");
+        }
+    }
+}
+```
+
+- **Built-ins** and their codes: `IsRequired()` → `required` (not null; strings and collections also not empty or
+  blank), `HasMinLength`/`HasMaxLength` → `too_short`/`too_long` (string length, collection count),
+  `HasRange`/`HasMin`/`HasMax` → `out_of_range` (numbers, dates, times), `HasPattern` → `invalid_format`. A rule that
+  doesn't fit its property fails at startup.
+- **Patterns** run in .NET on the server and in JavaScript in the browser, so they must mean the same in both: no
+  inline options, `\p{…}`, `\A`/`\z`, atomic groups or class subtraction (refused at startup); `$` and `\s` are
+  given their JavaScript meaning. Anchor them (`^…$`); they run with a 100 ms timeout.
+- **When:** an insert checks everything; an update checks the members it sends, plus row rules and validators, so
+  older data a newer rule rejects doesn't block an unrelated edit. A foreign key set through `refs` is checked once
+  it exists, by the database.
+- **Custom codes** are `snake_case` (at most 64 characters) and reach the client as they are; don't let them reveal
+  rows the caller can't see (a validator queries past the policies).
+
+```json
+{"type":"urn:linqtorest:error:validation_failed","title":"Invalid values.","status":422,
+ "code":"validation_failed","pointer":"/operations",
+ "errors":[{"operation":"o0","pointer":"/operations/0/values/price","member":"price","code":"out_of_range"},
+           {"operation":"o1","pointer":"/operations/1","code":"ends_before_start"}]}
+```
+
+Both clients check the built-in rules before sending and raise the same error for local and server failures:
+
+```csharp
+try { await shop.SaveChangesAsync(); }
+catch (RestValidationException e)            // e.IsLocal: found before sending; e.Errors: (Entity, Member, Code)
+{
+    var fields = e.ErrorsFor(product);       // { "Price": ["out_of_range"] }; row errors under ""
+}
+var errors = shop.Validate(product);          // for forms: the built-in rules, nothing sent
+var rules = shop.Products.Rules(p => p.Name); // IsRequired, MinLength, MaxLength, Min, Max, Pattern
+```
+
+In TypeScript: `RestValidationError` (`errors`, `isLocal`, `errorsFor(entity)`), `shop.products.validate(entity)` and
+`shop.products.rules.name`. Other save errors name their member too (`Member` / `member`), for example a foreign key
+whose row doesn't exist.
+
 ## Wire protocol
 
 `QUERY /api/products` (`application/json`):
@@ -210,6 +271,7 @@ Errors are `application/problem+json` with a stable `code`, a JSON `pointer` int
 | 400 | `invalid_json` `unknown_node` `bad_arity` `unknown_member` `not_filterable` `not_sortable` `not_writable` `type_mismatch` `invalid_cursor` `cursor_nullable_sort` `limit_exceeded` `unsupported_version` `invalid_query` `invalid_batch` |
 | 403 / 404 | `forbidden`, `operation_not_allowed` / `not_found` |
 | 409 / 412 | `conflict` (constraint violation) / `concurrency_conflict` |
+| 422 | `validation_failed`, with `errors` (`required` `too_short` `too_long` `out_of_range` `invalid_format`, custom codes, and a final `too_many_errors` past the limit) |
 | 415 | `unsupported_media_type` |
 
 ## Limits
@@ -223,6 +285,7 @@ Errors are `application/problem+json` with a stable `code`, a JSON `pointer` int
 | Page size | per set: default 50, max 200 |
 | Skip (offset mode) | per set: 10 000 |
 | Batch operations | 100 |
+| Validation errors per response | 100 |
 
 Every query is paged and every sort ends with the key. Cursor pagination only sorts by non-nullable members, because
 providers order `NULL` differently.

@@ -10,7 +10,13 @@
       "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
-        {"name": "name", "type": "string", "writable": true, "sortable": true},
+        {
+          "name": "name",
+          "type": "string",
+          "writable": true,
+          "sortable": true,
+          "rules": {"required": true, "maxLength": 50}
+        },
         {"name": "productCount", "type": "int32"}
       ],
       "navigations": [{"name": "products", "target": "products", "collection": true}]
@@ -23,7 +29,13 @@
       "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
-        {"name": "name", "type": "string", "writable": true, "sortable": true},
+        {
+          "name": "name",
+          "type": "string",
+          "writable": true,
+          "sortable": true,
+          "rules": {"required": true, "maxLength": 50}
+        },
         {"name": "parentId", "type": "int32", "nullable": true, "writable": true},
         {"name": "productCount", "type": "int32"}
       ],
@@ -42,7 +54,12 @@
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
         {"name": "productId", "type": "int32", "writable": true},
-        {"name": "url", "type": "string", "writable": true},
+        {
+          "name": "url",
+          "type": "string",
+          "writable": true,
+          "rules": {"required": true, "maxLength": 500, "pattern": "^https://"}
+        },
         {"name": "sortOrder", "type": "int32", "writable": true, "sortable": true}
       ],
       "navigations": [{"name": "product", "target": "products", "foreignKey": ["productId"]}]
@@ -56,12 +73,25 @@
       "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 24, "maxPageSize": 96, "maxSkip": 1000},
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
-        {"name": "sku", "type": "string", "writable": true},
-        {"name": "name", "type": "string", "writable": true, "sortable": true},
-        {"name": "description", "type": "string", "nullable": true, "writable": true, "filterable": false},
-        {"name": "price", "type": "decimal", "writable": true, "sortable": true},
+        {"name": "sku", "type": "string", "writable": true, "rules": {"required": true, "pattern": "^[A-Z0-9-]{3,20}$"}},
+        {
+          "name": "name",
+          "type": "string",
+          "writable": true,
+          "sortable": true,
+          "rules": {"required": true, "maxLength": 100}
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "nullable": true,
+          "writable": true,
+          "filterable": false,
+          "rules": {"maxLength": 2000}
+        },
+        {"name": "price", "type": "decimal", "writable": true, "sortable": true, "rules": {"min": 0.01, "max": 100000}},
         {"name": "status", "type": "ProductStatus", "writable": true},
-        {"name": "stock", "type": "int32", "writable": true, "sortable": true},
+        {"name": "stock", "type": "int32", "writable": true, "sortable": true, "rules": {"min": 0}},
         {"name": "categoryId", "type": "int32", "writable": true},
         {"name": "brandId", "type": "int32", "writable": true},
         {"name": "createdAt", "type": "dateTime", "sortable": true},

@@ -1,3 +1,4 @@
+using LinqToRest.Protocol;
 using LinqToRest.Server.Query;
 using Microsoft.AspNetCore.Http;
 
@@ -23,8 +24,14 @@ internal static class Problems
             extensions["operationIds"] = several;
         }
 
+        if (error.Issues is { } issues)
+        {
+            extensions["errors"] = BatchJson.WriteIssues(issues);
+        }
+
         var title = error.Status switch
         {
+            StatusCodes.Status422UnprocessableEntity => "Invalid values.",
             StatusCodes.Status403Forbidden => "Forbidden.",
             StatusCodes.Status404NotFound => "Not found.",
             StatusCodes.Status409Conflict => "Conflict.",

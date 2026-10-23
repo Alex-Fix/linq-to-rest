@@ -187,17 +187,51 @@ internal static class RestModelJson
 
     private static RestPropertyModel ReadProperty(JsonElement element, string pointer)
     {
-        var properties = Object(element, pointer, "name", "type", "nullable", "collection", "writable", "sortable", "filterable");
+        var properties = Object(element, pointer, "name", "type", "nullable", "collection", "writable", "sortable", "filterable", "rules");
+        var type = String(Required(properties, pointer, "type"), pointer + "/type");
         return new RestPropertyModel
         {
             Name = String(Required(properties, pointer, "name"), pointer + "/name"),
-            Type = String(Required(properties, pointer, "type"), pointer + "/type"),
+            Type = type,
+            Rules = properties.TryGetValue("rules", out var rules) ? ReadRules(rules, pointer + "/rules", type) : null,
             IsNullable = Flag(properties, pointer, "nullable", false),
             IsCollection = Flag(properties, pointer, "collection", false),
             IsWritable = Flag(properties, pointer, "writable", false),
             IsSortable = Flag(properties, pointer, "sortable", false),
             IsFilterable = Flag(properties, pointer, "filterable", true),
         };
+    }
+
+    private static RestPropertyRules ReadRules(JsonElement element, string pointer, string type)
+    {
+        var properties = Object(element, pointer, "required", "minLength", "maxLength", "min", "max", "pattern");
+        return new RestPropertyRules
+        {
+            IsRequired = Flag(properties, pointer, "required", false),
+            MinLength = properties.TryGetValue("minLength", out var minLength) ? Int32(minLength, pointer + "/minLength") : null,
+            MaxLength = properties.TryGetValue("maxLength", out var maxLength) ? Int32(maxLength, pointer + "/maxLength") : null,
+            Min = properties.TryGetValue("min", out var min) ? Bound(min, pointer + "/min", type) : null,
+            Max = properties.TryGetValue("max", out var max) ? Bound(max, pointer + "/max", type) : null,
+            Pattern = properties.TryGetValue("pattern", out var pattern) ? String(pattern, pointer + "/pattern") : null,
+        };
+    }
+
+    // A range bound is a wire value of the property's own type.
+    private static object Bound(JsonElement element, string pointer, string type)
+    {
+        if (ScalarTypes.FromName(type) is not { } scalar || element.ValueKind == JsonValueKind.Null)
+        {
+            throw Invalid(pointer, "must be a value of the property's type");
+        }
+
+        try
+        {
+            return Protocol.JsonValues.ReadScalar(element, scalar, pointer)!;
+        }
+        catch (Protocol.ProtocolException)
+        {
+            throw Invalid(pointer, "must be a value of the property's type");
+        }
     }
 
     private static RestNavigationModel ReadNavigation(JsonElement element, string pointer)
@@ -315,6 +349,11 @@ internal static class RestModelJson
                 writer.WriteBoolean("filterable", false);
             }
 
+            if (property.Rules is { IsEmpty: false } rules)
+            {
+                WriteRules(writer, rules);
+            }
+
             writer.WriteEndObject();
         }
 
@@ -337,6 +376,40 @@ internal static class RestModelJson
         }
 
         writer.WriteEndArray();
+        writer.WriteEndObject();
+    }
+
+    private static void WriteRules(Utf8JsonWriter writer, RestPropertyRules rules)
+    {
+        writer.WriteStartObject("rules");
+        WriteFlag(writer, "required", rules.IsRequired);
+        if (rules.MinLength is { } minLength)
+        {
+            writer.WriteNumber("minLength", minLength);
+        }
+
+        if (rules.MaxLength is { } maxLength)
+        {
+            writer.WriteNumber("maxLength", maxLength);
+        }
+
+        if (rules.Min is { } min)
+        {
+            writer.WritePropertyName("min");
+            Protocol.JsonValues.Write(writer, min);
+        }
+
+        if (rules.Max is { } max)
+        {
+            writer.WritePropertyName("max");
+            Protocol.JsonValues.Write(writer, max);
+        }
+
+        if (rules.Pattern is { } pattern)
+        {
+            writer.WriteString("pattern", pattern);
+        }
+
         writer.WriteEndObject();
     }
 

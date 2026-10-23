@@ -34,6 +34,9 @@ function parentOptions(
 
 export function CategoriesAdmin() {
   const { catalog, newCatalog, isEditor } = useSession();
+  // The model's limit, so a name can't get too long; the server checks it (and the rest) anyway.
+  const maxLength = catalog.categories.rules.name?.maxLength;
+  const nameLimit = maxLength === undefined ? {} : { maxLength };
   const { message } = AntApp.useApp();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,6 +105,7 @@ export function CategoriesAdmin() {
         <Form.Item required>
           <Input
             placeholder="New category"
+            {...nameLimit}
             value={name}
             onChange={(event) => {
               setName(event.target.value);
@@ -138,6 +142,7 @@ export function CategoriesAdmin() {
             render: (_, row) => (
               <Input
                 key={`${String(row.id)}-${row.name}`}
+                {...nameLimit}
                 defaultValue={row.name}
                 variant="borderless"
                 onBlur={(event) => {

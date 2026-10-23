@@ -12,6 +12,25 @@ export type MemberKind =
   | "timespan"
   | "binary";
 
+/**
+ * The built-in validation rules of a writable member, from the model document. The client checks them before saving;
+ * the server checks them again, with any rules of its own.
+ */
+export interface MemberRules {
+  /** Not null or missing, and for strings and collections not empty or blank. */
+  readonly required?: boolean;
+  /** Minimum string length or item count. */
+  readonly minLength?: number;
+  /** Maximum string length or item count. */
+  readonly maxLength?: number;
+  /** Inclusive lower bound: a number, or a date/time string in the member's wire format. */
+  readonly min?: number | string;
+  /** Inclusive upper bound: a number, or a date/time string in the member's wire format. */
+  readonly max?: number | string;
+  /** The pattern a string must match (JavaScript syntax, no flags). */
+  readonly pattern?: string;
+}
+
 /** A scalar or primitive-collection member of a set. */
 export interface MemberModel {
   readonly name: string;
@@ -21,6 +40,7 @@ export interface MemberModel {
   readonly filterable: boolean;
   readonly sortable: boolean;
   readonly writable: boolean;
+  readonly rules?: MemberRules;
 }
 
 /** A navigation to another set. */

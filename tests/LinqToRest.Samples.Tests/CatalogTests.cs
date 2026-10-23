@@ -152,6 +152,25 @@ public sealed class CatalogWriteTests
     }
 
     [Fact]
+    public async Task Invalid_values_come_back_as_field_errors_before_anything_is_written()
+    {
+        await using var api = new CatalogApi();
+        var editor = await api.ClientAsync("editor");
+
+        // SKU-0002 exists: the validator reports it next to the SKU instead of the unique index's 409.
+        var (status, problem) = await editor.BatchAsync("""
+            {"v":1,"operations":[
+              {"id":"p","op":"insert","set":"products","values":{"sku":"SKU-0002","name":"Cube","price":9.999,"status":"Draft","stock":-1,"categoryId":4,"brandId":1}},
+              {"id":"i","op":"insert","set":"productImages","values":{"url":"http://example.test/cube.png","sortOrder":0},"refs":{"productId":"p"}}]}
+            """);
+
+        Assert.Equal((HttpStatusCode.UnprocessableEntity, "validation_failed"), (status, problem.Code()));
+        Assert.Equal(
+            [("p", "stock", "out_of_range"), ("p", "price", "too_precise"), ("p", "sku", "duplicate"), ("i", "url", "invalid_format")],
+            problem.GetProperty("errors").EnumerateArray().Select(error => (error.GetProperty("operation").GetString(), error.GetProperty("member").GetString(), error.GetProperty("code").GetString())));
+    }
+
+    [Fact]
     public async Task Deleting_a_category_with_products_is_a_conflict()
     {
         await using var api = new CatalogApi();

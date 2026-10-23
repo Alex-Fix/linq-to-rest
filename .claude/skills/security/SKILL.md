@@ -65,6 +65,11 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
   always checked when the set has one.
 - One transaction for the whole batch; any failure rolls everything back. `refs` may only point at earlier insert
   operations in the same batch.
+- Validation (built-ins, `Must`, `IEntityValidator<T>`) runs after values are applied and before `SaveChanges`; a
+  422 means nothing was written. Error pointers and `member` carry only model names (an unknown member keeps the
+  `/values` pointer), codes are `snake_case` constants, and the list is capped (`MaxValidationErrors`). Patterns are
+  author-defined but run on untrusted strings: keep the match timeout and the portable-subset check. Validators query
+  past the policies, so their codes must not reveal hidden rows; a validator bug (bad code or member) is a 500.
 
 ### Cursors
 - Unsigned by design; validate version, sort-spec hash, value count and types. They must never grant access beyond

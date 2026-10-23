@@ -1,8 +1,9 @@
 import type { EntityProxy } from "./expressions.js";
-import { findSet, type Model, type WriteOperation } from "./model.js";
+import { findSet, type MemberRules, type Model, type WriteOperation } from "./model.js";
 import { Query, type QueryHost } from "./query.js";
 import { ChangeTracker, type EntityState, saveChanges } from "./tracking.js";
 import { type CallOptions, type ContextOptions, Transport } from "./transport.js";
+import { checkEntity, type RestValidationIssue } from "./validation.js";
 
 // The usual type-equality trick: the generic functions only exist to compare X and Y exactly.
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
@@ -40,6 +41,21 @@ export class EntitySet<D, P extends EntityProxy<D>> extends Query<D, P, D> {
   remove(entity: D): void {
     this.host.tracker.remove(entity as object, this.set);
   }
+
+  /**
+   * Checks an entity against the model's built-in rules (every writable member) without sending anything; the
+   * server may have more rules of its own.
+   */
+  validate(entity: D | New<D>): RestValidationIssue[] {
+    return checkEntity(this.set, entity as object);
+  }
+
+  /** The built-in validation rules of the set's members, for forms (required, lengths, range, pattern). */
+  get rules(): Partial<Record<keyof D & string, MemberRules>> {
+    return Object.fromEntries(
+      this.set.members.flatMap((member) => (member.rules === undefined ? [] : [[member.name, member.rules]])),
+    ) as Partial<Record<keyof D & string, MemberRules>>;
+  }
 }
 
 /**
@@ -47,7 +63,7 @@ export class EntitySet<D, P extends EntityProxy<D>> extends Query<D, P, D> {
  * `add` needs `"insert"`, `update` needs `"update"`, `remove` needs `"delete"`.
  */
 export type RestSet<D, P extends EntityProxy<D>, W extends WriteOperation = never> = Query<D, P, D> &
-  Pick<EntitySet<D, P>, "attach"> &
+  Pick<EntitySet<D, P>, "attach" | "validate" | "rules"> &
   ("insert" extends W ? Pick<EntitySet<D, P>, "add"> : unknown) &
   ("update" extends W ? Pick<EntitySet<D, P>, "update"> : unknown) &
   ("delete" extends W ? Pick<EntitySet<D, P>, "remove"> : unknown);

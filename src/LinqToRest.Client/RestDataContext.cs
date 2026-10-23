@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using LinqToRest.Client.Materialization;
@@ -80,6 +81,12 @@ public abstract class RestDataContext
             return 0;
         }
 
+        // The model's built-in rules, before anything is sent; the server checks them (and its own) again.
+        if (LocalValidation.Check(ordered) is { Count: > 0 } errors)
+        {
+            throw new RestValidationException((int)HttpStatusCode.UnprocessableEntity, "/operations", errors, isLocal: true, isTruncated: false);
+        }
+
         var ids = new Dictionary<Entry, string>();
         foreach (var entry in ordered)
         {
@@ -93,7 +100,7 @@ public abstract class RestDataContext
         var byId = ids.ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
         if (!response.IsSuccessStatusCode)
         {
-            throw await Problems.SaveFailureAsync(response, byId, cancellationToken).ConfigureAwait(false);
+            throw await Problems.SaveFailureAsync(response, ordered, byId, cancellationToken).ConfigureAwait(false);
         }
 
         var result = BatchJson.ReadResponse(await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false));
@@ -116,6 +123,19 @@ public abstract class RestDataContext
         }
 
         return ordered.Count;
+    }
+
+    /// <summary>
+    /// Checks an entity against the model's built-in rules (every writable member), without sending anything. The
+    /// server may have more rules of its own.
+    /// </summary>
+    /// <param name="entity">An entity of a set of this context.</param>
+    /// <returns>The broken rules; empty when the entity passes.</returns>
+    public IReadOnlyList<RestValidationError> Validate(object entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        var type = Options.Model.FindSet(entity.GetType()) ?? throw new InvalidOperationException($"{entity.GetType().Name} isn't the class of a set in the model.");
+        return [.. LocalValidation.Check(entity, type.Properties.Where(property => property.IsWritable))];
     }
 
     internal static ByteArrayContent JsonContent(byte[] body)

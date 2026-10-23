@@ -73,6 +73,23 @@ public sealed class BatchResult
     public JsonElement? Value { get; init; }
 }
 
+/// <summary>One broken rule in the <c>errors</c> member of a <c>validation_failed</c> problem.</summary>
+public sealed class ValidationIssue
+{
+    /// <summary>Gets the operation id; <see langword="null"/> only for <see cref="ErrorCodes.TooManyErrors"/>.</summary>
+    public string? Operation { get; init; }
+
+    /// <summary>Gets the JSON pointer of the value (<c>/operations/N/values/member</c>) or of the operation.</summary>
+    [JsonPropertyName("pointer")]
+    public string? Location { get; init; }
+
+    /// <summary>Gets the member's wire name, or <see langword="null"/> when the error is about the whole row.</summary>
+    public string? Member { get; init; }
+
+    /// <summary>Gets the error code: a built-in one such as <see cref="ErrorCodes.Required"/>, or a custom one.</summary>
+    public required string Code { get; init; }
+}
+
 [JsonSourceGenerationOptions(
     JsonSerializerDefaults.Web,
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
@@ -83,4 +100,5 @@ public sealed class BatchResult
     MaxDepth = 32)]
 [JsonSerializable(typeof(BatchRequest))]
 [JsonSerializable(typeof(BatchResponse))]
+[JsonSerializable(typeof(List<ValidationIssue>))]
 internal sealed partial class BatchJsonContext : JsonSerializerContext;

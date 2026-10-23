@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using LinqToRest.Modeling;
 using LinqToRest.Server.Internal;
+using LinqToRest.Server.Validation;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinqToRest.Server.Sets;
@@ -147,6 +148,71 @@ public sealed class EntitySetBuilder<TEntity>
     public EntitySetBuilder<TEntity> AllowWrites(WriteOperations operations)
     {
         Definition.Writes = operations;
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a server-only rule on one member: inserts and updates that send the member fail with <paramref name="code"/>
+    /// when <paramref name="rule"/> returns <see langword="false"/>. Not exported to clients.
+    /// </summary>
+    /// <param name="member">The member, exposed with <c>Property(...)</c>: <c>e =&gt; e.Price</c>.</param>
+    /// <param name="rule">Returns whether the value is valid.</param>
+    /// <param name="code">The error code: <c>snake_case</c>, at most 64 characters, not a built-in code.</param>
+    /// <typeparam name="TMember">The member type.</typeparam>
+    /// <returns>The same builder.</returns>
+    public EntitySetBuilder<TEntity> Must<TMember>(Expression<Func<TEntity, TMember>> member, Func<TMember, bool> rule, string code)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        var property = MemberAccess.GetProperty(member, nameof(member));
+        Definition.Rules.Add(new RuleDefinition.Custom(property, entity => rule((TMember)property.GetValue(entity)!), ValidationCodes.Check(code), OnlyWhenSent: true));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a server-only rule on the whole row, checked on every insert and update: it fails with
+    /// <paramref name="code"/> when <paramref name="rule"/> returns <see langword="false"/>. Not exported to clients.
+    /// </summary>
+    /// <param name="rule">Returns whether the row is valid.</param>
+    /// <param name="code">The error code: <c>snake_case</c>, at most 64 characters, not a built-in code.</param>
+    /// <returns>The same builder.</returns>
+    public EntitySetBuilder<TEntity> Must(Func<TEntity, bool> rule, string code)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        Definition.Rules.Add(new RuleDefinition.Custom(null, entity => rule((TEntity)entity), ValidationCodes.Check(code), OnlyWhenSent: false));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a server-only rule on the whole row, checked on every insert and update and reported against
+    /// <paramref name="member"/> (for example the later of two dates). Not exported to clients.
+    /// </summary>
+    /// <param name="rule">Returns whether the row is valid.</param>
+    /// <param name="code">The error code: <c>snake_case</c>, at most 64 characters, not a built-in code.</param>
+    /// <param name="member">The exposed member the error points at.</param>
+    /// <typeparam name="TMember">The member type.</typeparam>
+    /// <returns>The same builder.</returns>
+    public EntitySetBuilder<TEntity> Must<TMember>(Func<TEntity, bool> rule, string code, Expression<Func<TEntity, TMember>> member)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        var property = MemberAccess.GetProperty(member, nameof(member));
+        Definition.Rules.Add(new RuleDefinition.Custom(property, entity => rule((TEntity)entity), ValidationCodes.Check(code), OnlyWhenSent: false));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a validator for inserts and updates, created once per request from its services. Not exported to
+    /// clients.
+    /// </summary>
+    /// <typeparam name="TValidator">The validator.</typeparam>
+    /// <returns>The same builder.</returns>
+    public EntitySetBuilder<TEntity> ValidateWith<TValidator>()
+        where TValidator : class, IEntityValidator<TEntity>
+    {
+        if (!Definition.Validators.Contains(typeof(TValidator)))
+        {
+            Definition.Validators.Add(typeof(TValidator));
+        }
+
         return this;
     }
 

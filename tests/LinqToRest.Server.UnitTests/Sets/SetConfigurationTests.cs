@@ -3,6 +3,7 @@ using LinqToRest.Server.Hosting;
 using LinqToRest.Server.Mapping;
 using LinqToRest.Server.Policies;
 using LinqToRest.Server.Sets;
+using LinqToRest.Server.Validation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -109,6 +110,16 @@ public sealed class SetConfigurationTests
     [InlineData("badWireName", "invalid or duplicate member name 'Title'")]
     [InlineData("duplicateWireName", "invalid or duplicate member name 'name'")]
     [InlineData("sortableCollection", "collections and binary values can't be sorted")]
+    [InlineData("ruleOnReadOnly", "has validation rules on 'Name', which isn't writable")]
+    [InlineData("ruleOnKey", "has validation rules on 'Id', which isn't writable")]
+    [InlineData("rangeOfAnotherType", "HasRange on 'Stock' with Int32 bounds, but the property is Int64")]
+    [InlineData("rangeOnString", "HasRange on 'Name' with Int32 bounds, but the property is String")]
+    [InlineData("minAboveMax", "needs min <= max")]
+    [InlineData("lengthOnNumber", "only strings and collections have a length")]
+    [InlineData("patternOnNumber", "only strings can have one")]
+    [InlineData("nonPortablePattern", "doesn't mean the same in .NET and JavaScript")]
+    [InlineData("mustOnUnexposed", "has a Must rule on 'Stock', which isn't exposed")]
+    [InlineData("mustOnReadOnly", "has a Must rule on 'Name', which isn't writable, so it would never run")]
     public void Invalid_product_set_is_rejected(string problem, string expected)
     {
         var error = Assert.Throws<InvalidOperationException>(() => Build(o => o
@@ -118,6 +129,79 @@ public sealed class SetConfigurationTests
             .AddSet(new LineSet())));
 
         Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validation_rules_are_exported_and_bound()
+    {
+        var server = Build(o => o
+            .AddSet<Product>(b =>
+            {
+                b.ToSet("products").AllowWrites(WriteOperations.Insert);
+                b.Property(p => p.Name).IsRequired().HasMinLength(2).HasMaxLength(50).HasPattern("^[A-Z]");
+                b.Property(p => p.Stock).HasMin(0L);
+                b.Property(p => p.Description);
+            })
+            .AddSet(new CategorySet())
+            .AddSet(new SupplierSet())
+            .AddSet(new LineSet()));
+
+        var products = server.Model.FindSet("products")!;
+        Assert.True(products.FindProperty("name")!.Rules is { IsRequired: true, MinLength: 2, MaxLength: 50, Pattern: "^[A-Z]" });
+        Assert.True(products.FindProperty("stock")!.Rules is { Min: 0L, Max: null });
+        Assert.Null(products.FindProperty("description")!.Rules);
+        Assert.Contains("\"rules\": {\"min\": 0}", server.Model.ToJson(), StringComparison.Ordinal);
+        Assert.Same(products.FindProperty("name")!.Rules, server.FindSet("products")!.FindProperty("name")!.Rules);
+    }
+
+    [Fact]
+    public void A_row_rule_may_point_at_a_read_only_member()
+    {
+        var server = Build(o => o
+            .AddSet<Product>(b =>
+            {
+                b.ToSet("products").AllowWrites(WriteOperations.Insert);
+                b.Property(p => p.Name).IsReadOnly();
+                b.Must(p => p.Name.Length > 0, "named", p => p.Name);
+                b.Must(p => p.Stock >= 0, "in_stock");
+            })
+            .AddSet(new CategorySet())
+            .AddSet(new SupplierSet())
+            .AddSet(new LineSet()));
+
+        var rules = server.FindSet("products")!.Rules;
+        Assert.Equal([("name", "named", false), (null, "in_stock", false)], rules.Select(rule => (rule.Member?.Name, rule.Code, rule.OnlyWhenSent)));
+        Assert.False(rules[1].IsValid(new Product { Stock = -1 }));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Rules_and_validators_need_inserts_or_updates(bool validator)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Build(o => o
+            .AddSet<Product>(b =>
+            {
+                b.ToSet("products").AllowWrites(WriteOperations.Delete);
+                _ = validator ? b.ValidateWith<StockValidator>() : b.Must(p => p.Stock >= 0, "in_stock");
+            })
+            .AddSet(new CategorySet())
+            .AddSet(new SupplierSet())
+            .AddSet(new LineSet())));
+
+        Assert.Contains("allows neither inserts nor updates, so they would never run", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rule_arguments_are_checked_when_configured()
+    {
+        var builder = new EntitySetBuilder<Product>();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.Property(p => p.Name).HasMaxLength(-1));
+        Assert.Throws<ArgumentException>(() => builder.Property(p => p.Name).HasPattern(""));
+        Assert.Throws<ArgumentException>(() => builder.Must(p => p.Stock > 0, "Not-Snake"));
+        Assert.Throws<ArgumentException>(() => builder.Must(p => p.Stock, stock => stock > 0, "required"));
+        Assert.Throws<ArgumentException>(() => builder.Must(p => p.Stock > 0, new string('a', 65)));
     }
 
     [Fact]
@@ -265,8 +349,44 @@ public sealed class SetConfigurationTests
             case "sortableCollection":
                 b.Computed("lineIds", p => p.Lines.Select(l => l.Id).ToList()).IsSortable();
                 break;
+            case "ruleOnReadOnly":
+                b.Property(p => p.Name).IsReadOnly().IsRequired();
+                break;
+            case "ruleOnKey":
+                b.Property(p => p.Id).IsRequired();
+                break;
+            case "rangeOfAnotherType":
+                b.Property(p => p.Stock).HasRange(1, 10);
+                break;
+            case "rangeOnString":
+                b.Property(p => p.Name).HasRange(1, 10);
+                break;
+            case "minAboveMax":
+                b.Property(p => p.Stock).HasRange(10L, 1L);
+                break;
+            case "lengthOnNumber":
+                b.Property(p => p.Stock).HasMaxLength(3);
+                break;
+            case "patternOnNumber":
+                b.Property(p => p.Stock).HasPattern("^1");
+                break;
+            case "nonPortablePattern":
+                b.Property(p => p.Name).HasPattern("(?i)^a");
+                break;
+            case "mustOnUnexposed":
+                b.Must(p => p.Stock, stock => stock > 0, "positive");
+                break;
+            case "mustOnReadOnly":
+                b.Property(p => p.Name).IsReadOnly();
+                b.Must(p => p.Name, name => name.Length > 0, "named");
+                break;
         }
     }
 
     public sealed class ProductPolicy : SetPolicy<Product>;
+
+    public sealed class StockValidator : IEntityValidator<Product>
+    {
+        public ValueTask ValidateAsync(EntityValidationContext<Product> context, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    }
 }

@@ -9,8 +9,10 @@ using LinqToRest.Server.Internal;
 using LinqToRest.Server.Mapping;
 using LinqToRest.Server.Policies;
 using LinqToRest.Server.Query;
+using LinqToRest.Server.Validation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LinqToRest.Server.Batch;
 
@@ -22,6 +24,7 @@ namespace LinqToRest.Server.Batch;
 internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPolicies policies)
 {
     private readonly Dictionary<string, Applied> _applied = new(StringComparer.Ordinal);
+    private readonly Dictionary<Type, object> _validators = [];
 
     public async Task<BatchResponse> ExecuteAsync(BatchRequest batch, CancellationToken cancellationToken)
     {
@@ -39,6 +42,13 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
                 {
                     throw RequestException.From(exception, [operation.Id]);
                 }
+            }
+
+            // Every rule of every operation, before anything is written: a form gets all its errors at once.
+            var issues = await ValidateAsync(batch, cancellationToken).ConfigureAwait(false);
+            if (issues.Count > 0)
+            {
+                throw RequestException.Validation(issues);
             }
 
             try
@@ -127,6 +137,75 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         _applied.Add(operation.Id, new Applied(operation, mapping, entity));
     }
 
+    private async Task<List<ValidationIssue>> ValidateAsync(BatchRequest batch, CancellationToken cancellationToken)
+    {
+        var max = server.Limits.MaxValidationErrors;
+        var issues = new List<ValidationIssue>();
+        for (var index = 0; index < batch.Operations.Count && issues.Count <= max; index++)
+        {
+            var operation = batch.Operations[index];
+            if (operation.Op != BatchOperationKind.Delete)
+            {
+                var (_, mapping, entity) = _applied[operation.Id];
+                var scope = new ValidationScope(operation, $"/operations/{index}", mapping, policies.Context, issues);
+                CheckRules(scope, operation, entity);
+                foreach (var type in mapping.Validators)
+                {
+                    await mapping.ValidateAsync(Validator(type), entity, scope, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        return issues.Count <= max ? issues : [.. issues.Take(max), new ValidationIssue { Code = ErrorCodes.TooManyErrors }];
+    }
+
+    /// <summary>
+    /// Checks the built-in rules, then the <c>Must</c> rules, of one inserted or updated row. An insert checks every
+    /// member; an update only the members it sends (and every row rule), so older data a newer rule rejects doesn't
+    /// block an edit. One error per member: a member that broke a rule isn't checked again.
+    /// </summary>
+    private static void CheckRules(ValidationScope scope, BatchOperation operation, object entity)
+    {
+        var isInsert = operation.Op == BatchOperationKind.Insert;
+        var failed = new HashSet<SetProperty>();
+        foreach (var property in scope.Mapping.Properties)
+        {
+            // A foreign key set through refs gets its value when the row it references is saved.
+            if (property.Rules is { } rules && (isInsert || scope.IsSent(property)) && operation.Refs?.ContainsKey(property.Name) != true
+                && rules.Check(property.EntityProperty!.GetValue(entity)) is { } code)
+            {
+                failed.Add(property);
+                scope.Add(property, code);
+            }
+        }
+
+        foreach (var rule in scope.Mapping.Rules)
+        {
+            var skipped = rule.Member is { } member && (failed.Contains(member) || (rule.OnlyWhenSent && !isInsert && !scope.IsSent(member)));
+            if (!skipped && !rule.IsValid(entity))
+            {
+                if (rule.Member is not null)
+                {
+                    failed.Add(rule.Member);
+                }
+
+                scope.Add(rule.Member, rule.Code);
+            }
+        }
+    }
+
+    // One instance per validator type and request, from the request's services.
+    private object Validator(Type type)
+    {
+        if (!_validators.TryGetValue(type, out var validator))
+        {
+            validator = ActivatorUtilities.CreateInstance(policies.Context.Services, type);
+            _validators.Add(type, validator);
+        }
+
+        return validator;
+    }
+
     private async Task<object> LoadAsync(SetMapping mapping, BatchOperation operation, string location, CancellationToken cancellationToken)
     {
         var key = mapping.Key;
@@ -183,16 +262,18 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
     {
         foreach (var (name, element) in operation.Values ?? new Dictionary<string, JsonElement>())
         {
+            // An unknown name came from the client and isn't echoed; known members are named by the model.
             var property = mapping.FindProperty(name) ?? throw Invalid(ErrorCodes.UnknownMember, $"{location}/values", operation);
+            var pointer = $"{location}/values/{property.Name}";
             if (!property.IsWritable)
             {
-                throw Invalid(ErrorCodes.NotWritable, $"{location}/values", operation);
+                throw Invalid(ErrorCodes.NotWritable, pointer, operation);
             }
 
-            var value = JsonValues.Read(element, property.ClrType, $"{location}/values");
+            var value = JsonValues.Read(element, property.ClrType, pointer);
             if (value is null && !property.IsNullable)
             {
-                throw Invalid(ErrorCodes.TypeMismatch, $"{location}/values", operation);
+                throw Invalid(ErrorCodes.TypeMismatch, pointer, operation);
             }
 
             property.EntityProperty!.SetValue(entity, value);
@@ -217,7 +298,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         foreach (var navigation in mapping.Navigations)
         {
             if (navigation.ForeignKey is not { } foreignKey || operation.Values?.TryGetValue(foreignKey.Name, out var element) != true
-                || JsonValues.Read(element, foreignKey.ClrType, $"{location}/values") is not { } value)
+                || JsonValues.Read(element, foreignKey.ClrType, $"{location}/values/{foreignKey.Name}") is not { } value)
             {
                 continue;
             }
@@ -225,7 +306,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
             var target = navigation.Target;
             if (await target.FindAsync(db, policies.Filter(target), [value], cancellationToken).ConfigureAwait(false) is null)
             {
-                throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values", operation);
+                throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values/{foreignKey.Name}", operation);
             }
         }
     }

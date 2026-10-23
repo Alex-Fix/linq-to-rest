@@ -190,6 +190,34 @@ public sealed class GeneratorTests
         Assert.Contains("writes: [],", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Rules_travel_to_both_clients()
+    {
+        var model = RestModel.Parse("""
+            {
+              "v": 1,
+              "sets": [{
+                "name": "notes", "type": "Note", "key": ["id"], "writes": ["insert"],
+                "pagination": {"modes": ["offset"], "defaultPageSize": 10, "maxPageSize": 10, "maxSkip": 0},
+                "properties": [
+                  {"name": "id", "type": "int32", "sortable": true},
+                  {"name": "text", "type": "string", "writable": true, "rules": {"required": true, "minLength": 1, "maxLength": 20, "pattern": "^[A-Z]+$"}},
+                  {"name": "score", "type": "decimal", "writable": true, "rules": {"min": 0.5, "max": 10}},
+                  {"name": "due", "type": "dateOnly", "writable": true, "rules": {"min": "2026-01-01"}}
+                ]
+              }]
+            }
+            """);
+
+        var typeScript = new TypeScriptEmitter(model, "Notes", "linqtorest", "test.json").Emit();
+        var csharp = new CSharpEmitter(model, "Notes.Client", "NotesContext", "test.json").Emit();
+
+        Assert.Contains("""writable: true, rules: { required: true, minLength: 1, maxLength: 20, pattern: "^[A-Z]\u002B$" } },""", typeScript, StringComparison.Ordinal);
+        Assert.Contains("""writable: true, rules: { min: 0.5, max: 10 } },""", typeScript, StringComparison.Ordinal);
+        Assert.Contains("""writable: true, rules: { min: "2026-01-01" } },""", typeScript, StringComparison.Ordinal);
+        Assert.Contains("\"rules\":{\"required\":true,\"minLength\":1,\"maxLength\":20,\"pattern\":\"^[A-Z]\\u002B$\"}", csharp, StringComparison.Ordinal);
+    }
+
     private static (int Code, string Output, string Errors) Run(params string[] args)
     {
         using var output = new StringWriter();

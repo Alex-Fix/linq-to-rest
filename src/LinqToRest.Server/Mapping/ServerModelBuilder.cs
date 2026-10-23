@@ -68,7 +68,9 @@ internal static class ServerModelBuilder
                     IsCollection = navigation.Definition.IsCollection,
                     IsNullable = navigation.IsNullable,
                     ForeignKey = navigation.ForeignKey is null ? null : properties[navigation.ForeignKey],
-                })]);
+                })],
+                [.. set.Definition.Rules.Select(rule => ResolveRule(set, rule, properties))],
+                [.. set.Definition.Validators]);
         }
 
         return new ServerModel(model, [.. mappings.Values.OrderBy(mapping => mapping.Name, StringComparer.Ordinal)], contextType, limits);
@@ -98,6 +100,11 @@ internal static class ServerModelBuilder
         {
             var isKey = member.Property is { } info && keyProperties.Contains(info);
             set.Properties.Add(ResolveProperty(set, member, isKey, enums));
+        }
+
+        if ((definition.Rules.Count > 0 || definition.Validators.Count > 0) && (definition.Writes & (WriteOperations.Insert | WriteOperations.Update)) == 0)
+        {
+            throw Invalid(name, definition.EntityType, "has Must rules or validators, but allows neither inserts nor updates, so they would never run");
         }
 
         if (definition.ConcurrencyToken is { } token)
@@ -154,8 +161,23 @@ internal static class ServerModelBuilder
             throw Invalid(set.Name, entityType, $"exposes the writable property '{member.Property.Name}', which has no public setter. Mark it IsReadOnly()");
         }
 
+        var rules = member.Rules.ToModel();
+        if (rules is not null && !writable)
+        {
+            throw Invalid(set.Name, entityType, $"has validation rules on '{member.Describe()}', which isn't writable. Rules apply to inserts and updates, so keys, the concurrency token, read-only members and sets without inserts or updates can't have them");
+        }
+
+        foreach (var bound in (ReadOnlySpan<object?>)[rules?.Min, rules?.Max])
+        {
+            if (bound is not null && bound.GetType() != underlying)
+            {
+                throw Invalid(set.Name, entityType, $"has HasRange on '{member.Describe()}' with {bound.GetType().Name} bounds, but the property is {underlying.Name}");
+            }
+        }
+
         return new ResolvedProperty(member)
         {
+            Rules = rules,
             Name = member.WireName ?? member.ComputedName ?? JsonNamingPolicy.CamelCase.ConvertName(member.Property!.Name),
             Binding = binding,
             TypeName = typeName,
@@ -166,6 +188,25 @@ internal static class ServerModelBuilder
             IsSortable = member.IsSortable || isKey,
             IsFilterable = !member.IsNotFilterable,
         };
+    }
+
+    private static SetRule ResolveRule(ResolvedSet set, RuleDefinition.Custom rule, Dictionary<ResolvedProperty, SetProperty> properties)
+    {
+        if (rule.Member is not { } member)
+        {
+            return new SetRule(null, rule.IsValid, rule.Code, OnlyWhenSent: false);
+        }
+
+        var property = set.Properties.Find(property => property.Member.Property == member)
+            ?? throw Invalid(set.Name, set.Definition.EntityType, $"has a Must rule on '{member.Name}', which isn't exposed. Call Property(...)");
+
+        // A member rule runs when the batch sends the member, which only writable members can be.
+        if (rule.OnlyWhenSent && !property.IsWritable)
+        {
+            throw Invalid(set.Name, set.Definition.EntityType, $"has a Must rule on '{member.Name}', which isn't writable, so it would never run");
+        }
+
+        return new SetRule(properties[property], rule.IsValid, rule.Code, rule.OnlyWhenSent);
     }
 
     private static void ResolveNavigations(ResolvedSet set, List<ResolvedSet> sets)
@@ -225,6 +266,7 @@ internal static class ServerModelBuilder
             IsWritable = property.IsWritable,
             IsSortable = property.IsSortable,
             IsFilterable = property.IsFilterable,
+            Rules = property.Rules,
         })],
         Navigations = [.. set.Navigations.Select(navigation => new RestNavigationModel
         {
@@ -277,8 +319,11 @@ internal static class ServerModelBuilder
 
         public bool IsFilterable { get; init; }
 
+        public RestPropertyRules? Rules { get; init; }
+
         public SetProperty ToSetProperty() => new()
         {
+            Rules = Rules,
             Name = Name,
             Binding = Binding,
             EntityProperty = Member.Property,
