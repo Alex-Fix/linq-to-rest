@@ -86,27 +86,22 @@ public sealed class ValidationTests
     [Fact]
     public async Task Server_validation_errors_map_to_entities_and_members()
     {
-        var (context, http) = Create();
-        var first = new Note { Text = "One", AuthorId = 1 };
-        var second = new Note { Text = "Two", AuthorId = 1 };
-        context.Notes.Add(first);
-        context.Notes.Add(second);
-        http.Problem(HttpStatusCode.UnprocessableEntity, """
-            {"type":"urn:linqtorest:error:validation_failed","title":"Invalid values.","status":422,"code":"validation_failed","pointer":"/operations",
-             "errors":[
-               {"operation":"o0","pointer":"/operations/0/values/text","member":"text","code":"duplicate"},
-               {"operation":"o1","pointer":"/operations/1","code":"too_many_notes"},
-               {"code":"too_many_errors"}]}
-            """);
+        // The golden shop and the response contract shared with the TypeScript client's tests.
+        var (shop, http) = Shop.Create();
+        var first = new ProductDto { Name = "One" };
+        var second = new ProductDto { Name = "Two" };
+        shop.Products.Add(first);
+        shop.Products.Add(second);
+        http.Problem(HttpStatusCode.UnprocessableEntity, await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "golden", "response-validation-failed.json"), Token));
 
-        var error = await Assert.ThrowsAsync<RestValidationException>(() => context.SaveChangesAsync(Token));
+        var error = await Assert.ThrowsAsync<RestValidationException>(() => shop.SaveChangesAsync(Token));
 
         Assert.False(error.IsLocal);
         Assert.True(error.IsTruncated);
-        Assert.Equal([(first, "Text", "duplicate"), (second, null, "too_many_notes")], error.Errors.Select(e => (e.Entity, e.Member, e.Code)));
-        Assert.Equal(["duplicate"], error.ErrorsFor(first)["Text"]);
-        Assert.Equal(["too_many_notes"], error.ErrorsFor(second)[""]);
-        Assert.Equal(EntityState.Added, context.Entry(first).State);
+        Assert.Equal([(first, "Name", "duplicate"), (second, null, "too_many_products")], error.Errors.Select(e => (e.Entity, e.Member, e.Code)));
+        Assert.Equal(["duplicate"], error.ErrorsFor(first)["Name"]);
+        Assert.Equal(["too_many_products"], error.ErrorsFor(second)[""]);
+        Assert.Equal(EntityState.Added, shop.Entry(first).State);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
-import { readProblem, RestConcurrencyError, RestHttpError, RestSaveError } from "./errors.js";
+import { readProblem, RestConcurrencyError, RestHttpError, RestSaveError, RestValidationError } from "./errors.js";
 import { findSet, requireWrite, type Model, type NavigationModel, type SetModel } from "./model.js";
 import type { Transport } from "./transport.js";
+import { checkEntity } from "./validation.js";
 
 /** The tracking state of a DTO. */
 export type EntityState = "detached" | "unchanged" | "added" | "modified" | "deleted";
@@ -290,6 +291,21 @@ export async function saveChanges(
     return 0;
   }
 
+  // The model's built-in rules, before anything is sent; the server checks them (and its own) again. Inserts check
+  // every writable member, updates the members they send; members set through a new row's key are known only later.
+  const local = ordered
+    .filter((entry) => entry.state === "added" || entry.state === "modified")
+    .flatMap((entry) =>
+      checkEntity(
+        entry.set,
+        entry.entity,
+        (member) => !entry.references.has(member.name) && (entry.state === "added" || entry.modified.has(member.name)),
+      ),
+    );
+  if (local.length > 0) {
+    throw new RestValidationError(422, "/operations", local, true, false);
+  }
+
   const ids = new Map<Entry, string>(ordered.map((entry, index) => [entry, `o${String(index)}`]));
   const body = { v: 1, operations: ordered.map((entry) => operation(entry, ids)) };
   const response = await transport.send("$batch", "POST", body, signal);
@@ -300,10 +316,24 @@ export async function saveChanges(
       throw new RestHttpError(response.status);
     }
 
+    if (problem.issues !== undefined) {
+      const errors = problem.issues.flatMap((issue) => {
+        const entry = issue.operation === undefined ? undefined : byId.get(issue.operation);
+        return entry === undefined ? [] : [{ entity: entry.entity, member: issue.member, code: issue.code }];
+      });
+      throw new RestValidationError(
+        response.status,
+        problem.pointer,
+        errors,
+        false,
+        problem.issues.some((issue) => issue.code === "too_many_errors"),
+      );
+    }
+
     const entities = problem.operationIds.map((id) => byId.get(id)?.entity).filter((entity) => entity !== undefined);
     throw response.status === 412
       ? new RestConcurrencyError(response.status, problem.code, problem.pointer, entities)
-      : new RestSaveError(response.status, problem.code, problem.pointer, entities);
+      : new RestSaveError(response.status, problem.code, problem.pointer, entities, memberOf(problem.pointer, ordered));
   }
 
   const result = (await response.json()) as { results: { id: string; value?: Dto }[] };
@@ -330,6 +360,13 @@ export async function saveChanges(
   }
 
   return ordered.length;
+}
+
+/** The member a pointer such as `/operations/2/values/price` names, if it names one of that operation's set. */
+function memberOf(pointer: string | undefined, ordered: readonly Entry[]): string | undefined {
+  const match = /^\/operations\/(\d+)\/values\/([A-Za-z0-9]+)$/.exec(pointer ?? "");
+  const entry = match === null ? undefined : ordered[Number(match[1])];
+  return entry?.set.members.some((member) => member.name === match?.[2]) === true ? match?.[2] : undefined;
 }
 
 /** Inserts first (each after the inserts it references), then updates, then deletes. */
