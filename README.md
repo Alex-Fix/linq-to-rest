@@ -272,6 +272,15 @@ only, as the tests and sample do.
   ```
 - **OpenAPI**: OpenAPI 3.1 (what ASP.NET Core 10's `AddOpenApi()` generates) can't describe QUERY, so the QUERY route is
   excluded from descriptions; `POST {set}/$query` and `POST $batch` carry full metadata.
+- **Trimming and Native AOT**: the .NET client is trim- and AOT-compatible. Generated contexts bind their classes
+  through compile-time delegates and results are read without `JsonSerializer`, so it works with `PublishAot` and with
+  `JsonSerializerIsReflectionEnabledByDefault=false` (CI publishes and runs a Native AOT app). Three things to know:
+  - Hand-written classes bound with `ClientModel.Bind(model, types)` use reflection and are marked trim/AOT-unsafe;
+    bind them with `SetBinding<T>` (what the generator emits) instead.
+  - C# builds anonymous-type and object-initializer projections with expression APIs that .NET marks trim-unsafe,
+    so a trimmed app gets warning IL2026 where it writes one. They work: suppress the warning there, or project into
+    a record through its constructor, which doesn't warn.
+  - Collections in projections need `ToList()` or `ToArray()`.
 - **Concurrency tokens** must be EF Core concurrency tokens (`IsConcurrencyToken()` / `IsRowVersion()`); the server
   refuses to start with one that isn't.
 

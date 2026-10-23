@@ -32,6 +32,7 @@ samples/                        the catalog sample: Catalog.Api (EF Core SQLite,
                                 (generated), Catalog.Blazor, catalog-web (React). Not packable
 tests/                          xUnit v3, one project per package + Server.IntegrationTests (SQLite) + EndToEnd.Tests
                                 (EndToEnd links the integration tests' Shop/*.cs) + Samples.Tests (the catalog sample)
+                                + AotSmoke (Native AOT console app, published and run in CI)
 benchmarks/                     BenchmarkDotNet suites for every src/ project (not packable)
 docs/plans/                     approved design docs (written by the `brainstorming` skill)
 artifacts/                      gitignored: all build output (no per-project bin/obj)
@@ -77,7 +78,8 @@ artifacts/                      gitignored: all build output (no per-project bin
    members bound with `Property(...)`. Every size is limited (body, depth, nodes, page, batch, model…).
 4. **Wire contract and public API are versioned.** The JSON contract carries `"v"`; breaking changes to it or to
    packable `src/` APIs need explicit approval and a design-doc update.
-5. **Free and open.** Free/open-source dependencies only; Abstractions and Client stay BCL-only.
+5. **Free and open.** Free/open-source dependencies only; Abstractions and Client stay BCL-only and trim/AOT-safe
+   (`IsAotCompatible`; `tests/LinqToRest.AotSmoke` runs under Native AOT in CI).
 
 ## Conventions
 

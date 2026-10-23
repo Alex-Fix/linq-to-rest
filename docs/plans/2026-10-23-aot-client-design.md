@@ -1,5 +1,5 @@
 # Trim- and AOT-safe .NET client — design
-Status: approved · Date: 2026-10-23
+Status: approved, implemented (see Implementation notes) · Date: 2026-10-23
 
 Milestone 2 of [`2026-10-20-roadmap.md`](2026-10-20-roadmap.md): "Trim/AOT-safe .NET client".
 
@@ -132,7 +132,7 @@ snapshots, change detection, identity keys, foreign-key sync, writing saved valu
 - **Client (annotated):** `ClientModel.Bind(RestModel, IReadOnlyDictionary<string, Type>)` with
   `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]`.
 - **Client (obsolete):** `RestDataContextOptions.SerializerOptions`.
-- **Abstractions (added):** AOT-safe generic list readers in `JsonValues`.
+- **Abstractions (added):** AOT-safe generic readers in `JsonValues`: `ReadList<TElement>` and `ReadScalar<T>`.
 - **Generated C#:** binding chain instead of the type dictionary.
 
 ## Security notes
@@ -152,9 +152,45 @@ snapshots, change detection, identity keys, foreign-key sync, writing saved valu
 | AotSmoke (CI) | Native AOT publish with zero warnings; scenarios with reflection JSON off |
 | Benchmarks | Before/after `ClientMaterialization`, `ChangeDetection`, `ClientTranslation` (alternating runs) |
 
+## Implementation notes
+
+Where the implementation differs from the sections above, this list wins.
+
+1. **Bindings name the CLR member too:** `Property("id", nameof(Product.Id), get, set)`. Queries name members in
+   lambdas and validation messages name the property, and neither can be recovered from a delegate.
+2. **Projections:** collections need `ToList()` or `ToArray()` (an `IEnumerable<T>`-typed `Select` has no concrete
+   type to build) and get a local `NotSupportedException` otherwise. Lists are built by invoking the developer's own
+   closed `Enumerable.ToList<T>` on an array of the elements, not by `Activator`: under Native AOT, `List<T>`'s
+   constructor isn't kept for an anonymous `T`. That array comes from `MakeArrayType`, the one justified
+   suppression (reference-type arrays share code; value-type arrays exist wherever `List<T>` does). The open
+   question is closed: lists of anonymous objects, `int` and `string` work under Native AOT.
+3. **`decimal` operators:** C# builds `decimal` comparisons and arithmetic in lambdas without naming the operator
+   method, so System.Linq.Expressions looks it up by reflection, and Native AOT trims it with no warning. The client
+   keeps `decimal`'s public methods (`[DynamicDependency]` on `CreateQuery<T>`). `DateTime`, `DateOnly` and `Guid`
+   didn't need it. The smoke app found this and the list problem above; the analyzers can't see either.
+4. **Trim warnings at the query site:** the compiler builds anonymous types with `Expression.New(…, members)` and
+   object initializers with `Expression.Bind(MethodInfo, …)`, which System.Linq.Expressions marks
+   `[RequiresUnreferencedCode]`. A trimmed app gets IL2026 where it writes such a projection; the smoke app suppresses
+   it in its projection scenario and shows they work. Record constructors don't warn.
+5. **Smaller changes:** the untyped `IQueryProvider.CreateQuery(Expression)` throws `NotSupportedException` (it
+   needed `MakeGenericType`; the `Queryable` operators never call it). `AddRestDataContext<TContext>` annotates
+   `TContext`'s public constructors. The evaluator compiles an object-returning lambda and keeps `new T { … }`
+   intact (it used to fail on a parameterless initializer). A conversion to a nullable type in a projection
+   accepts `null`. Reading saved values back only sets the members present in the result.
+6. **Performance.** `main` and the branch alternated twice (DefaultJob), with a new `ClientMaterialization.Project`
+   (anonymous projection) benchmark. Translation and change detection are unchanged (within ±3%). The first row
+   reader was 45% slower than `JsonSerializer` and allocated almost twice as much: it built a JSON pointer string per
+   member, allocated each property name, boxed every value and allocated in the enum reader. Members are now matched
+   as UTF-8 (in model order first), pointers are built only for errors, `SetBinding.Property<TValue>` reads through
+   the new `JsonValues.ReadScalar<T>` (no boxing for the common value types, checked against the `Type`-based reader
+   by a parity test) straight into the typed setter, and a single enum name is checked with `Enum.IsDefined`. Full
+   rows now take the same time as `main` (3.3/79/321 µs vs 3.4/80/320 µs for 1/50/200 rows) with 4% more
+   allocation (enum values are still boxed). Projections are 7–16% faster from 50 rows and allocate 25% more; a
+   one-row projection is about 11% slower (0.7 µs), because its reader is built from the `Select` lambda per query.
+
 ## Open questions
 
-- Are projections into `List<T>` of a value type reliable under Native AOT? (Step 8 decides; fallback above.)
+- ~~Are projections into `List<T>` of a value type reliable under Native AOT?~~ Yes (Implementation notes 2).
 - A Roslyn source generator for the .NET client (backlog).
 
 ## Implementation steps

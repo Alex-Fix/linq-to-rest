@@ -117,7 +117,8 @@ queries.
   through the client's `headers` option; one context per editor screen (one unit of work per form).
 - **Blazor:** `AddCatalogContext(...)` from the generated client, a `DelegatingHandler` for the bearer token, Razor
   components with LINQ. Release publish is trimmed; as a stopgap the project roots `Catalog.Client`
-  (`<TrimmerRootAssembly Include="Catalog.Client" />`) until the client is trim-safe (Milestone 2).
+  (`<TrimmerRootAssembly Include="Catalog.Client" />`) until the client is trim-safe (Milestone 2; removed by
+  [`2026-10-23-aot-client-design.md`](2026-10-23-aot-client-design.md)).
 
 ## Public API changes
 
