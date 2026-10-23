@@ -19,12 +19,12 @@ internal static class QueryCompiler
 
     public static QueryPlan Compile(ServerModel server, SetMapping mapping, QueryRequest request, RequestPolicies policies)
     {
-        // Grouped queries are bound separately; until then, a query that isn't grouped can't filter groups.
         if (request.GroupBy is not null)
         {
-            throw RequestException.Invalid(ErrorCodes.InvalidQuery, "/groupBy");
+            return CompileGrouped(server, mapping, request, policies);
         }
 
+        // Only a grouped query filters groups.
         if (request.Having is not null)
         {
             throw RequestException.Invalid(ErrorCodes.InvalidQuery, "/having");
@@ -96,6 +96,94 @@ internal static class QueryCompiler
             Count = request.Count,
             SortHash = hash,
             CursorIndexes = cursorIndexes,
+        };
+    }
+
+    /// <summary>
+    /// A grouped query: rows filtered (policy first), grouped by groupable keys, the select projected per group, then
+    /// having and order over the select's fields, keys last as tie-breakers, and offset pages (or the group cap).
+    /// </summary>
+    private static QueryPlan CompileGrouped(ServerModel server, SetMapping mapping, QueryRequest request, RequestPolicies policies)
+    {
+        if (request.Include.Count > 0)
+        {
+            throw RequestException.Invalid(ErrorCodes.InvalidQuery, "/include");
+        }
+
+        if (request.Page is { Mode: PageMode.Cursor })
+        {
+            throw RequestException.Invalid(ErrorCodes.InvalidQuery, "/page/mode");
+        }
+
+        var select = request.Select ?? throw RequestException.Invalid(ErrorCodes.InvalidQuery, "/select");
+        var binder = new QueryBinder(server, policies);
+        var root = Expression.Parameter(mapping.EntityType, "e");
+        var rootBound = new EntityBound(root, mapping, null, isNullable: false);
+        var scope = new Scope(rootBound, ImmutableDictionary<string, Bound>.Empty);
+        var filter = request.Filter is null ? null : Expression.Lambda(binder.Predicate(request.Filter, scope), root);
+
+        var keys = request.GroupBy!
+            .Select(path => binder.Member(path, scope, MemberUse.Group) as ValueBound ?? throw RequestException.Invalid(ErrorCodes.NotGroupable, path.Location))
+            .ToList();
+        var keySelector = GroupKeys.Selector([.. keys.Select(key => key.Expression)], root);
+        var group = Expression.Parameter(typeof(IGrouping<,>).MakeGenericType(keySelector.ReturnType, mapping.EntityType), "g");
+        var keyBounds = keys.Select((key, index) => new ValueBound(GroupKeys.Key(group, index), key.IsNullable)).ToList();
+
+        var row = new Row(group);
+        var groupScope = scope with { Group = new GroupScope(group, keyBounds, mapping), RootHidden = true };
+        var shape = binder.Select(select, groupScope, row);
+
+        // Having and order name the select's fields (top-level values of an object select).
+        var fields = shape is ObjectShape objectShape && select is NewNode shapeNode
+            ? shapeNode.Fields.Zip(objectShape.Fields)
+                .Where(pair => pair.Second.Value is ValueShape)
+                .ToDictionary(pair => pair.First.Key, pair => new ValueBound(row[((ValueShape)pair.Second.Value).Index], isNullable: true), StringComparer.Ordinal)
+            : [];
+        var fieldScope = scope with { RootHidden = true, Fields = fields };
+        var having = request.Having is null ? null : Expression.Lambda(binder.Predicate(request.Having, fieldScope), group);
+
+        var sorts = new List<SortKey>();
+        for (var index = 0; index < request.OrderBy.Count; index++)
+        {
+            var item = request.OrderBy[index];
+            var value = ((ValueBound)binder.Member(item.Member, fieldScope, MemberUse.Sort)).Expression;
+            if (QueryBinder.Comparison(ExpressionType.LessThan, value, value) is null && ExpressionHelpers.Underlying(value.Type) != typeof(bool))
+            {
+                throw RequestException.Invalid(ErrorCodes.NotSortable, $"/orderBy/{index}");
+            }
+
+            sorts.Add(new SortKey(Expression.Lambda(value, group), item.Descending, item.Member.Path));
+        }
+
+        // Keys end the order, so pages of groups are deterministic.
+        sorts.AddRange(keyBounds.Select((key, index) => new SortKey(Expression.Lambda(key.Expression, group), false, $"key{index}")));
+
+        var pagination = mapping.Pagination;
+        int? maxGroups = request.Page?.Take is null ? server.Limits.MaxGroups : null;
+        var take = request.Page?.Take ?? server.Limits.MaxGroups + 1;
+        if (maxGroups is null && take > pagination.MaxPageSize)
+        {
+            throw RequestException.LimitExceeded("/page/take", "pageSize");
+        }
+
+        var skip = request.Page?.Skip ?? 0;
+        if (skip > pagination.MaxSkip)
+        {
+            throw RequestException.LimitExceeded("/page/skip", "skip");
+        }
+
+        return new QueryPlan
+        {
+            PolicyFilter = policies.Filter(mapping),
+            Filter = filter,
+            Sorts = [],
+            Projection = row.ToLambda(),
+            Shape = shape,
+            Mode = PageMode.Offset,
+            Skip = skip,
+            Take = take,
+            Count = request.Count,
+            Group = new GroupPlan(keySelector, having, sorts, maxGroups),
         };
     }
 

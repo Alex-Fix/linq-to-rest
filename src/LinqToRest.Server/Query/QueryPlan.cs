@@ -29,7 +29,16 @@ internal sealed class QueryPlan
     public string? SortHash { get; init; }
 
     public IReadOnlyList<int> CursorIndexes { get; init; } = [];
+
+    /// <summary>Gets the grouping of a grouped query; <see cref="Projection"/> then projects each group.</summary>
+    public GroupPlan? Group { get; init; }
 }
+
+/// <summary>
+/// A grouped query: the key selector over rows, then over groups the having filter and the order (keys last). Capped
+/// queries have no take of their own: they read one group more than the limit to know whether it was exceeded.
+/// </summary>
+internal sealed record GroupPlan(LambdaExpression Key, LambdaExpression? Having, IReadOnlyList<SortKey> Sorts, int? MaxGroups);
 
 internal sealed record SortKey(LambdaExpression Key, bool Descending, string Path);
 

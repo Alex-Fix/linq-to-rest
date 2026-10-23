@@ -93,9 +93,11 @@ internal sealed partial class QueryBinder
         }
 
         parameter ??= Expression.Parameter(elementType, NextParameterName());
+
+        // Sum, min, max and avg over a group read only aggregatable members.
         var selector = node.Body is null
             ? ScalarTypes.IsScalar(elementType) ? parameter : throw TypeMismatch(node)
-            : Value(node.Body, inner, null, use);
+            : Value(node.Body, inner, null, node.Source is GroupNode ? MemberUse.Aggregate : use);
         var selectorType = ExpressionHelpers.Underlying(selector.Type);
         if (node.Op is QueryOperators.Sum or QueryOperators.Avg)
         {
@@ -125,9 +127,29 @@ internal sealed partial class QueryBinder
 
     private (Expression Source, ParameterExpression? Parameter, Scope Inner) OpenLambda(LambdaNode node, Scope scope, MemberUse use)
     {
-        var collection = node.Source is MemberNode member && Member(member, scope, use) is CollectionBound bound
-            ? bound
-            : throw TypeMismatch(node.Source);
+        CollectionBound collection;
+        if (node.Source is GroupNode)
+        {
+            // The group's rows: only direct aggregates, with no group-level nodes or other collections inside.
+            if (scope.Group is not { } group || node.Op is not (QueryOperators.Count or QueryOperators.Sum or QueryOperators.Min or QueryOperators.Max or QueryOperators.Avg))
+            {
+                throw RequestException.Invalid(ErrorCodes.InvalidQuery, node.Location);
+            }
+
+            collection = new CollectionBound(group.Group, group.Mapping.EntityType, group.Mapping, null);
+            scope = scope with { Group = null, RootHidden = true, InGroupAggregate = true };
+        }
+        else if (scope.InGroupAggregate)
+        {
+            throw RequestException.Invalid(ErrorCodes.InvalidQuery, node.Location);
+        }
+        else
+        {
+            collection = node.Source is MemberNode member && Member(member, scope, use) is CollectionBound bound
+                ? bound
+                : throw TypeMismatch(node.Source);
+        }
+
         if (node.Variable is null)
         {
             return (collection.Source, null, scope);

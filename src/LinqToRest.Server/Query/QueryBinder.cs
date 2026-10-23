@@ -32,12 +32,22 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
     public Bound Member(MemberNode node, Scope scope, MemberUse use)
     {
         var segments = node.Segments;
+        if (scope.Fields is { } fields)
+        {
+            // Having and order of a grouped query: paths name the select's fields.
+            return segments.Count == 1 && fields.TryGetValue(segments[0], out var field) ? field : throw UnknownMember(node);
+        }
+
         Bound current = scope.Root;
         var index = 0;
         if (scope.Variables.TryGetValue(segments[0], out var variable))
         {
             current = variable;
             index = 1;
+        }
+        else if (scope.RootHidden)
+        {
+            throw RequestException.Invalid(ErrorCodes.InvalidQuery, node.Location);
         }
 
         var navigations = 0;
@@ -102,6 +112,10 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
             : throw UnknownMember(node),
         CallNode call => Call(call, scope, use),
         LambdaNode { Op: not QueryOperators.Map } lambda => Aggregate(lambda, scope, use),
+        KeyNode key => scope.Group is { } group && key.Index < group.Keys.Count
+            ? group.Keys[key.Index].Expression
+            : throw RequestException.Invalid(ErrorCodes.InvalidQuery, node.Location),
+        GroupNode => throw RequestException.Invalid(ErrorCodes.InvalidQuery, node.Location),
         _ => throw TypeMismatch(node),
     };
 
@@ -189,6 +203,16 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
         if (use == MemberUse.Sort && !property.IsSortable)
         {
             throw RequestException.Invalid(ErrorCodes.NotSortable, node.Location);
+        }
+
+        if (use == MemberUse.Group && !property.IsGroupable)
+        {
+            throw RequestException.Invalid(ErrorCodes.NotGroupable, node.Location);
+        }
+
+        if (use == MemberUse.Aggregate && !property.IsAggregatable)
+        {
+            throw RequestException.Invalid(ErrorCodes.NotAggregatable, node.Location);
         }
     }
 
