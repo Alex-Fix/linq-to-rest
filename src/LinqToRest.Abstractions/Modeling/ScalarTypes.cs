@@ -10,6 +10,11 @@ public static class ScalarTypes
         typeof(TimeOnly), typeof(TimeSpan), typeof(byte[]),
     ];
 
+    private static readonly Type[] ListInterfaces =
+    [
+        typeof(IEnumerable<>), typeof(ICollection<>), typeof(IList<>), typeof(IReadOnlyCollection<>), typeof(IReadOnlyList<>),
+    ];
+
     private static readonly Dictionary<Type, string> NamesByType = new()
     {
         [typeof(bool)] = "bool",
@@ -88,9 +93,8 @@ public static class ScalarTypes
             return element;
         }
 
-        return type.IsInterface && type.GetGenericArguments().Length == 1 && type.IsAssignableFrom(typeof(List<>).MakeGenericType(element))
-            ? element
-            : null;
+        // The generic interfaces List<T> implements, compared by definition (no runtime generic instantiation).
+        return type.IsInterface && Array.IndexOf(ListInterfaces, definition) >= 0 ? element : null;
     }
 
     /// <summary>

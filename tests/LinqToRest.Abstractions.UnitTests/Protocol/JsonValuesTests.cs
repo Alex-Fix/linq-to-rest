@@ -111,6 +111,34 @@ public sealed class JsonValuesTests
         Assert.Equal(FileAccess.ReadWrite, JsonValues.Read(document.RootElement, typeof(FileAccess), "/x"));
     }
 
+    [Fact]
+    public void Read_scalar_reads_scalars_and_rejects_collections()
+    {
+        using var number = JsonDocument.Parse("42");
+        using var empty = JsonDocument.Parse("null");
+        using var array = JsonDocument.Parse("[1]");
+
+        Assert.Equal(42, JsonValues.ReadScalar(number.RootElement, typeof(int), "/x"));
+        Assert.Null(JsonValues.ReadScalar(empty.RootElement, typeof(int?), "/x"));
+        var error = Assert.Throws<ProtocolException>(() => JsonValues.ReadScalar(array.RootElement, typeof(List<int>), "/x"));
+        Assert.Equal(ErrorCodes.TypeMismatch, error.Code);
+    }
+
+    [Fact]
+    public void Read_list_reads_typed_lists_strictly()
+    {
+        using var strings = JsonDocument.Parse("""["a","b"]""");
+        using var statuses = JsonDocument.Parse("""["Friday","Monday"]""");
+        using var empty = JsonDocument.Parse("null");
+        using var mixed = JsonDocument.Parse("""[1,"2"]""");
+
+        Assert.Equal(["a", "b"], JsonValues.ReadList<string>(strings.RootElement, "/x"));
+        Assert.Equal([DayOfWeek.Friday, DayOfWeek.Monday], JsonValues.ReadList<DayOfWeek>(statuses.RootElement, "/x"));
+        Assert.Null(JsonValues.ReadList<int>(empty.RootElement, "/x"));
+        var error = Assert.Throws<ProtocolException>(() => JsonValues.ReadList<int>(mixed.RootElement, "/x"));
+        Assert.Equal((ErrorCodes.TypeMismatch, "/x/1"), (error.Code, error.Location));
+    }
+
     private static void AssertMismatch(JsonElement element, Type type)
     {
         var error = Assert.Throws<ProtocolException>(() => JsonValues.Read(element, type, "/x"));

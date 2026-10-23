@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 using LinqToRest.Modeling;
@@ -74,7 +75,25 @@ public static class JsonValues
     /// <param name="location">The JSON pointer reported on failure.</param>
     /// <returns>The value.</returns>
     /// <exception cref="ProtocolException">The value doesn't fit <paramref name="type"/> (code <see cref="ErrorCodes.TypeMismatch"/>).</exception>
+    [RequiresDynamicCode("Creates a List<T> or array for a runtime element type. On trimmed or AOT paths use ReadScalar or ReadList<TElement>.")]
     public static object? Read(JsonElement element, Type type, string location)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        if (element.ValueKind != JsonValueKind.Null && ScalarTypes.GetCollectionElementType(type) is { } elementType)
+        {
+            return ReadCollection(element, type, elementType, location);
+        }
+
+        return ReadScalar(element, type, location);
+    }
+
+    /// <summary>Decodes a scalar, enum or nullable value into <paramref name="type"/>, strictly. Safe for trimming and AOT.</summary>
+    /// <param name="element">The JSON value.</param>
+    /// <param name="type">A supported scalar, enum or nullable type (not a collection).</param>
+    /// <param name="location">The JSON pointer reported on failure.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="ProtocolException">The value doesn't fit <paramref name="type"/> (code <see cref="ErrorCodes.TypeMismatch"/>).</exception>
+    public static object? ReadScalar(JsonElement element, Type type, string location)
     {
         ArgumentNullException.ThrowIfNull(type);
         if (element.ValueKind == JsonValueKind.Null)
@@ -82,15 +101,39 @@ public static class JsonValues
             return !type.IsValueType || Nullable.GetUnderlyingType(type) is not null ? null : throw Mismatch(location);
         }
 
-        if (ScalarTypes.GetCollectionElementType(type) is { } elementType)
-        {
-            return ReadCollection(element, type, elementType, location);
-        }
-
         var target = Nullable.GetUnderlyingType(type) ?? type;
         return TryReadScalar(element, target, out var value) ? value : throw Mismatch(location);
     }
 
+    /// <summary>Decodes a JSON array into a list of <typeparamref name="TElement"/>, strictly. Safe for trimming and AOT.</summary>
+    /// <param name="element">The JSON value: an array, or null.</param>
+    /// <param name="location">The JSON pointer reported on failure.</param>
+    /// <typeparam name="TElement">A supported scalar, enum or nullable element type.</typeparam>
+    /// <returns>The list, or <see langword="null"/> for a JSON null.</returns>
+    /// <exception cref="ProtocolException">The value doesn't fit (code <see cref="ErrorCodes.TypeMismatch"/>).</exception>
+    public static List<TElement>? ReadList<TElement>(JsonElement element, string location)
+    {
+        if (element.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            throw Mismatch(location);
+        }
+
+        var list = new List<TElement>(element.GetArrayLength());
+        var index = 0;
+        foreach (var item in element.EnumerateArray())
+        {
+            list.Add((TElement)ReadScalar(item, typeof(TElement), $"{location}/{index++}")!);
+        }
+
+        return list;
+    }
+
+    [RequiresDynamicCode("Creates a List<T> or array for a runtime element type.")]
     private static object ReadCollection(JsonElement element, Type type, Type elementType, string location)
     {
         if (element.ValueKind != JsonValueKind.Array)
@@ -102,7 +145,7 @@ public static class JsonValues
         var index = 0;
         foreach (var item in element.EnumerateArray())
         {
-            list.Add(Read(item, elementType, $"{location}/{index++}"));
+            list.Add(ReadScalar(item, elementType, $"{location}/{index++}"));
         }
 
         if (!type.IsArray)

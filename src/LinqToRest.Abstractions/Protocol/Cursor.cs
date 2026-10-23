@@ -92,7 +92,7 @@ public static class Cursor
             var values = new object?[types.Count];
             for (var index = 0; index < types.Count; index++)
             {
-                values[index] = JsonValues.Read(keys[index], types[index], location);
+                values[index] = JsonValues.ReadScalar(keys[index], types[index], location);
             }
 
             return values;

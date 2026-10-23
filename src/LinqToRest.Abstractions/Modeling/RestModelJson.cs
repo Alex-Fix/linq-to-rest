@@ -125,7 +125,7 @@ internal static class RestModelJson
 
     private static IEnumerable<(string? Name, JsonElement Value)> Children(JsonElement element) =>
         element.ValueKind == JsonValueKind.Object
-            ? element.EnumerateObject().Select(property => ((string?)JsonSerializer.Serialize(property.Name), property.Value))
+            ? element.EnumerateObject().Select(property => ((string?)$"\"{JsonEncodedText.Encode(property.Name)}\"", property.Value))
             : element.EnumerateArray().Select(item => ((string?)null, item));
 
     private static RestModel ReadModel(JsonElement root)
