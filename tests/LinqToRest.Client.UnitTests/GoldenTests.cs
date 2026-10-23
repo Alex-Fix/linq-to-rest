@@ -18,7 +18,7 @@ public sealed class GoldenTests
     public static readonly TheoryData<string> Cases =
     [
         "query-filter-sort-page", "query-lambdas", "query-strings-dates", "query-in-enum-navigation", "query-select",
-        "query-include-cursor", "query-count", "batch-unit-of-work",
+        "query-include-cursor", "query-count", "query-group", "query-aggregate", "batch-unit-of-work",
     ];
 
     [Theory]
@@ -80,6 +80,19 @@ public sealed class GoldenTests
             case "query-count":
                 http.Respond("""{"items":[],"totalCount":4}""");
                 await shop.Products.CountAsync(p => p.Price > 1, Token);
+                break;
+            case "query-group":
+                await shop.Products
+                    .Where(p => p.Status == ProductStatus.Active)
+                    .GroupBy(p => new { p.CategoryId, p.Category!.Name })
+                    .Select(g => new { g.Key.CategoryId, g.Key.Name, Count = g.Count(), Expensive = g.Count(p => p.Price > 20), From = g.Min(p => p.Price), Total = g.Sum(p => p.Price * 2) })
+                    .Where(f => f.Count > 1)
+                    .OrderByDescending(f => f.Count)
+                    .Take(10)
+                    .ToListAsync(Token);
+                break;
+            case "query-aggregate":
+                await shop.Products.Where(p => p.CategoryId == 2).SumAsync(p => p.Price * 2, Token);
                 break;
             default:
                 http.Respond($$"""{"items":[{{Chess}},{{Dune}}]}""");

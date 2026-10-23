@@ -4,9 +4,12 @@ using LinqToRest.Protocol;
 namespace LinqToRest.Client.Translation;
 
 /// <summary>A LINQ query translated into the parts of a <see cref="QueryRequest"/>.</summary>
-internal sealed class TranslatedQuery(ClientSet type)
+internal sealed class TranslatedQuery(ClientSet type, NodeTranslator translator)
 {
     public ClientSet Type { get; } = type;
+
+    /// <summary>Gets the translator of this query's lambdas, which keeps lambda variable names unique across the query.</summary>
+    public NodeTranslator Translator { get; } = translator;
 
     public List<QueryNode> Filters { get; } = [];
 
@@ -29,19 +32,31 @@ internal sealed class TranslatedQuery(ClientSet type)
 
     public bool NoTracking { get; set; }
 
+    /// <summary>Gets or sets the group keys of a grouped query (<c>GroupBy(…).Select(…)</c>), or <see langword="null"/>.</summary>
+    public List<MemberNode>? GroupBy { get; set; }
+
+    /// <summary>Gets the filters on groups: <c>Where</c> after the group <c>Select</c>.</summary>
+    public List<QueryNode> Having { get; } = [];
+
+    public bool IsGrouped => GroupBy is not null;
+
     public QueryRequest ToRequest(PageRequest page, bool count = false, QueryNode? select = null) => new()
     {
-        Filter = Filters.Count switch
-        {
-            0 => null,
-            1 => Filters[0],
-            _ => new CallNode(QueryOperators.And, Filters),
-        },
+        Filter = And(Filters),
         OrderBy = OrderBy,
         Include = Include,
         Select = select ?? Select,
         Page = page,
         Count = count,
+        GroupBy = GroupBy,
+        Having = And(Having),
+    };
+
+    private static QueryNode? And(List<QueryNode> nodes) => nodes.Count switch
+    {
+        0 => null,
+        1 => nodes[0],
+        _ => new CallNode(QueryOperators.And, nodes),
     };
 
     public static TranslatedQuery Translate(Expression expression)
@@ -58,10 +73,11 @@ internal sealed class TranslatedQuery(ClientSet type)
             throw new NotSupportedException("LinqToRest queries must start from a RestSet of a RestDataContext.");
         }
 
-        var query = new TranslatedQuery(set.Type);
         var translator = new NodeTranslator(set.Type);
+        var query = new TranslatedQuery(set.Type, translator);
         var phase = Phase.Compose;
         var selected = false;
+        HashSet<string>? fields = null;
         foreach (var call in calls)
         {
             var name = call.Method.Name;
@@ -71,10 +87,28 @@ internal sealed class TranslatedQuery(ClientSet type)
                 throw Unsupported(name);
             }
 
-            // Filtering, includes and sorting come before Select; paging may come before or after it.
-            var composing = phase == Phase.Compose && !selected;
+            // Filtering, includes and sorting come before Select; paging may come before or after it. A grouped query
+            // filters and sorts its groups after the group Select, over the selected fields.
+            var composing = phase == Phase.Compose && !selected && !query.IsGrouped;
+            var composingGroups = phase == Phase.Compose && selected && query.IsGrouped;
             switch (name)
             {
+                case nameof(Queryable.GroupBy) when composing && call.Arguments.Count == 2:
+                    query.GroupBy = translator.GroupKeys(Lambda(call.Arguments[1]));
+                    break;
+                case nameof(Queryable.Select) when query.IsGrouped && !selected && call.Arguments.Count == 2:
+                    var groupSelector = Lambda(call.Arguments[1]);
+                    query.Select = translator.GroupSelect(groupSelector);
+                    (query.HasSelect, query.Selector, selected) = (true, groupSelector, true);
+                    fields = FieldNames(groupSelector);
+                    break;
+                case nameof(Queryable.Where) when composingGroups:
+                    query.Having.Add(translator.Having(Lambda(call.Arguments[1]), fields!));
+                    break;
+                case nameof(Queryable.OrderBy) or nameof(Queryable.OrderByDescending) when composingGroups && query.OrderBy.Count == 0:
+                case nameof(Queryable.ThenBy) or nameof(Queryable.ThenByDescending) when composingGroups && query.OrderBy.Count > 0:
+                    query.OrderBy.Add(new OrderByItem(translator.FieldPath(Lambda(call.Arguments[1]), fields!), name.EndsWith("Descending", StringComparison.Ordinal)));
+                    break;
                 case nameof(Queryable.Where) when composing:
                     query.Filters.Add(translator.Predicate(Lambda(call.Arguments[1])));
                     break;
@@ -88,7 +122,7 @@ internal sealed class TranslatedQuery(ClientSet type)
                 case nameof(Queryable.ThenBy) or nameof(Queryable.ThenByDescending) when composing && query.OrderBy.Count > 0:
                     query.OrderBy.Add(new OrderByItem(translator.Path(Lambda(call.Arguments[1]), navigation: false), name.EndsWith("Descending", StringComparison.Ordinal)));
                     break;
-                case nameof(RestQueryableExtensions.After) when phase == Phase.Compose:
+                case nameof(RestQueryableExtensions.After) when phase == Phase.Compose && !query.IsGrouped:
                     query.After = (string)Constant(call.Arguments[1])!;
                     phase = Phase.Paged;
                     break;
@@ -116,7 +150,25 @@ internal sealed class TranslatedQuery(ClientSet type)
             throw new NotSupportedException("Include can't be combined with Select; select the navigation instead.");
         }
 
+        if (query is { IsGrouped: true, HasSelect: false })
+        {
+            throw new NotSupportedException("GroupBy needs a Select over the groups, such as g => new { g.Key, Count = g.Count() }; LinqToRest doesn't return grouped rows.");
+        }
+
         return query;
+    }
+
+    /// <summary>The wire names of the fields a group Select projects, which Where and OrderBy after it may use.</summary>
+    private static HashSet<string> FieldNames(LambdaExpression selector)
+    {
+        IEnumerable<string> names = selector.Body switch
+        {
+            NewExpression { Members: { } members } => members.Select(member => member.Name),
+            NewExpression { Constructor: { } constructor } => constructor.GetParameters().Select(parameter => parameter.Name!),
+            MemberInitExpression initializer => initializer.Bindings.Select(binding => binding.Member.Name),
+            _ => [],
+        };
+        return [.. names.Select(name => System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(name))];
     }
 
     private static NotSupportedException Unsupported(string name, Phase? phase = null) => phase switch

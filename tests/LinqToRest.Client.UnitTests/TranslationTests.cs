@@ -219,7 +219,7 @@ public sealed class TranslationTests
     public static readonly TheoryData<string> Unsupported =
     [
         "no take", "where after select", "skip after take", "order twice", "unknown method", "untranslatable member", "include with select",
-        "group by", "skip on cursor-only set", "count after cursor", "cursor on offset-only set",
+        "group by a non-groupable member", "skip on cursor-only set", "count after cursor", "cursor on offset-only set",
     ];
 
     [Theory]
@@ -237,7 +237,7 @@ public sealed class TranslationTests
             "unknown method" => () => shop.Products.Where(p => p.Name.PadLeft(3) == "  a").Take(1).ToListAsync(Token),
             "untranslatable member" => () => shop.Products.Where(p => p.Name.GetHashCode() == 1).Take(1).ToListAsync(Token),
             "include with select" => () => shop.Products.Include(p => p.Category).Select(p => p.Name).Take(1).ToListAsync(Token),
-            "group by" => () => shop.Products.GroupBy(p => p.Status).Select(g => g.Key).Take(1).ToListAsync(Token),
+            "group by a non-groupable member" => () => shop.Products.GroupBy(p => p.Name).Select(g => g.Key).Take(1).ToListAsync(Token),
             "skip on cursor-only set" => () => shop.Categories.Skip(1).Take(1).ToListAsync(Token),
             "count after cursor" => () => shop.Products.After("c").CountAsync(Token),
             _ => () => shop.Set<OrderLineDto>().Take(1).ToCursorPageAsync(cancellationToken: Token),

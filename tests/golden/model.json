@@ -10,7 +10,7 @@
       "pagination": {"modes": ["cursor"], "defaultPageSize": 2, "maxPageSize": 200, "maxSkip": 10000},
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
-        {"name": "name", "type": "string", "writable": true}
+        {"name": "name", "type": "string", "writable": true, "groupable": true}
       ],
       "navigations": []
     },
@@ -23,8 +23,8 @@
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
         {"name": "sku", "type": "string", "writable": true},
-        {"name": "quantity", "type": "int32", "writable": true},
-        {"name": "unitPrice", "type": "decimal", "writable": true}
+        {"name": "quantity", "type": "int32", "writable": true, "aggregatable": true},
+        {"name": "unitPrice", "type": "decimal", "writable": true, "aggregatable": true}
       ],
       "navigations": []
     },
@@ -39,12 +39,19 @@
         {"name": "id", "type": "int32", "sortable": true},
         {"name": "name", "type": "string", "writable": true, "rules": {"maxLength": 100}},
         {"name": "description", "type": "string", "nullable": true, "writable": true},
-        {"name": "price", "type": "decimal", "writable": true, "sortable": true, "rules": {"min": 0}},
-        {"name": "status", "type": "ProductStatus", "writable": true},
+        {
+          "name": "price",
+          "type": "decimal",
+          "writable": true,
+          "sortable": true,
+          "aggregatable": true,
+          "rules": {"min": 0}
+        },
+        {"name": "status", "type": "ProductStatus", "writable": true, "groupable": true},
         {"name": "version", "type": "guid"},
         {"name": "createdAt", "type": "dateTime"},
         {"name": "releasedOn", "type": "dateOnly", "nullable": true, "writable": true},
-        {"name": "categoryId", "type": "int32", "nullable": true, "writable": true},
+        {"name": "categoryId", "type": "int32", "nullable": true, "writable": true, "groupable": true},
         {"name": "tags", "type": "string", "collection": true},
         {"name": "categoryName", "type": "string", "nullable": true}
       ],

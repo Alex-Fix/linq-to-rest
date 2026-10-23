@@ -324,6 +324,10 @@ internal sealed class ClientProperty(MemberBinding binding, RestPropertyModel mo
 
     public bool IsFilterable => model.IsFilterable;
 
+    public bool IsGroupable => model.IsGroupable;
+
+    public bool IsAggregatable => model.IsAggregatable;
+
     /// <summary>Gets the built-in validation rules from the model, or <see langword="null"/>.</summary>
     public RestPropertyRules? Rules => model.Rules;
 
