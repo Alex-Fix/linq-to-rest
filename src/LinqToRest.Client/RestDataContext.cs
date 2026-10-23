@@ -109,7 +109,7 @@ public abstract class RestDataContext
             if (item.Value is { } value)
             {
                 // New keys, tokens and computed values, straight onto the tracked row.
-                RowReader.ReadInto(entry.Type, value, entry.Entity, $"/results/{item.Id}/value", navigations: false);
+                RowReader.ReadInto(entry.Type, value, entry.Entity, new RowPointer($"/results/{item.Id}/value"), navigations: false);
             }
 
             Tracker.AcceptSaved(entry);

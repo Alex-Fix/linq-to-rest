@@ -2,6 +2,7 @@ using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using LinqToRest.Modeling;
 using LinqToRest.Protocol;
@@ -192,6 +193,7 @@ public sealed class ClientModel
                     Get = Getter(info),
                     Set = info.SetValue,
                     Read = (element, location) => JsonValues.Read(element, info.PropertyType, location),
+                    ReadInto = (row, element, location) => info.SetValue(row, JsonValues.Read(element, info.PropertyType, location)),
                 });
             }
 
@@ -256,14 +258,41 @@ internal sealed class ClientSet(RestSetModel model, Type clrType, Func<object> c
 
     public ClientProperty? FindProperty(string wireName) => _properties.GetValueOrDefault(wireName);
 
+    /// <summary>
+    /// Finds the member a JSON property names, comparing UTF-8 without allocating its name. Rows usually list members
+    /// in model order, so the search starts at <paramref name="hint"/> (one past the previous match).
+    /// </summary>
+    /// <returns>The index into <see cref="Members"/>, or -1 for an unknown key.</returns>
+    public int Match(JsonProperty member, int hint)
+    {
+        for (var offset = 0; offset < Members.Length; offset++)
+        {
+            var index = (hint + offset) % Members.Length;
+            if (member.NameEquals(Members[index].Utf8Name))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
     public ClientNavigation? FindNavigation(string wireName) => _navigations.GetValueOrDefault(wireName);
 
     public bool Allows(WriteOperations operations) => Model.Allows(operations);
+
+    /// <summary>Gets the properties, then the navigations, with their UTF-8 wire names.</summary>
+    public (byte[] Utf8Name, ClientProperty? Property, ClientNavigation? Navigation)[] Members { get; private set; } = [];
 
     public void Initialize(ClientNavigation[] navigations)
     {
         Navigations = navigations;
         _navigations = navigations.ToDictionary(navigation => navigation.WireName, StringComparer.Ordinal);
+        Members =
+        [
+            .. Properties.Select(property => (Encoding.UTF8.GetBytes(property.WireName), (ClientProperty?)property, (ClientNavigation?)null)),
+            .. navigations.Select(navigation => (Encoding.UTF8.GetBytes(navigation.WireName), (ClientProperty?)null, (ClientNavigation?)navigation)),
+        ];
     }
 
     public override string ToString() => ClrType.Name;
@@ -301,6 +330,9 @@ internal sealed class ClientProperty(MemberBinding binding, RestPropertyModel mo
 
     /// <summary>Gets the reader of the property's JSON value.</summary>
     public Func<JsonElement, string, object?> Read => binding.Read!;
+
+    /// <summary>Gets the reader that sets the property's JSON value on a row (typed for generated bindings).</summary>
+    public Action<object, JsonElement, string> ReadInto => binding.ReadInto!;
 
     public override string ToString() => $"{model.Name} ({Name})";
 }

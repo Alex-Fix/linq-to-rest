@@ -57,7 +57,8 @@ public sealed class SetBinding<T> : SetBinding
         {
             Get = entity => get((T)entity),
             Set = (entity, value) => set((T)entity, (TValue)value!),
-            Read = (element, location) => JsonValues.ReadScalar(element, typeof(TValue), location),
+            Read = (element, location) => JsonValues.ReadScalar<TValue>(element, location),
+            ReadInto = (entity, element, location) => set((T)entity, JsonValues.ReadScalar<TValue>(element, location)),
         });
     }
 
@@ -77,6 +78,7 @@ public sealed class SetBinding<T> : SetBinding
             Get = entity => get((T)entity),
             Set = (entity, value) => set((T)entity, (List<TElement>)value!),
             Read = JsonValues.ReadList<TElement>,
+            ReadInto = (entity, element, location) => set((T)entity, JsonValues.ReadList<TElement>(element, location)!),
         });
     }
 
@@ -170,6 +172,9 @@ internal sealed class MemberBinding
 
     /// <summary>Gets the reader of a scalar or primitive-collection value.</summary>
     public Func<JsonElement, string, object?>? Read { get; init; }
+
+    /// <summary>Gets the reader of a scalar or primitive-collection value that sets it on a row, typed (no boxing).</summary>
+    public Action<object, JsonElement, string>? ReadInto { get; init; }
 
     /// <summary>Gets a factory of an empty list, for collection navigations.</summary>
     public Func<IList>? NewList { get; init; }

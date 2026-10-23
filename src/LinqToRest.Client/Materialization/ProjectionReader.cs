@@ -220,7 +220,7 @@ internal sealed class ProjectionReader
     }
 
     private static object? Row(ClientSet set, JsonElement element, string location) =>
-        element.ValueKind == JsonValueKind.Null ? null : RowReader.Read(set, element, location);
+        element.ValueKind == JsonValueKind.Null ? null : RowReader.Read(set, element, new RowPointer(location));
 
     private static IList? Rows(ClientNavigation navigation, JsonElement element, string location)
     {
@@ -233,7 +233,7 @@ internal sealed class ProjectionReader
         var index = 0;
         foreach (var item in element.EnumerateArray())
         {
-            list.Add(RowReader.Read(navigation.Target, item, $"{location}/{index++}"));
+            list.Add(RowReader.Read(navigation.Target, item, new RowPointer(location, index++)));
         }
 
         return list;

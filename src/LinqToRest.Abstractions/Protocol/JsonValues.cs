@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using LinqToRest.Modeling;
 
@@ -105,6 +106,74 @@ public static class JsonValues
         return TryReadScalar(element, target, out var value) ? value : throw Mismatch(location);
     }
 
+    /// <summary>
+    /// Decodes a scalar, enum or nullable value into <typeparamref name="T"/>, strictly, like
+    /// <see cref="ReadScalar(JsonElement, Type, string)"/>; common value types are read without boxing. Safe for
+    /// trimming and AOT.
+    /// </summary>
+    /// <param name="element">The JSON value.</param>
+    /// <param name="location">The JSON pointer reported on failure.</param>
+    /// <typeparam name="T">A supported scalar, enum or nullable type (not a collection).</typeparam>
+    /// <returns>The value.</returns>
+    /// <exception cref="ProtocolException">The value doesn't fit <typeparamref name="T"/> (code <see cref="ErrorCodes.TypeMismatch"/>).</exception>
+    public static T ReadScalar<T>(JsonElement element, string location)
+    {
+        if (element.ValueKind == JsonValueKind.Null)
+        {
+            // Null for reference and nullable types only (their default is null).
+            return default(T) is null ? default! : throw Mismatch(location);
+        }
+
+        // typeof(T) tests are constants per instantiation, so each T compiles to its own branch.
+        var kind = element.ValueKind;
+        if (typeof(T) == typeof(int) || typeof(T) == typeof(int?))
+        {
+            return kind == JsonValueKind.Number && element.TryGetInt32(out var value) ? Typed<int, T>(value) : throw Mismatch(location);
+        }
+
+        if (typeof(T) == typeof(long) || typeof(T) == typeof(long?))
+        {
+            return kind == JsonValueKind.Number && element.TryGetInt64(out var value) ? Typed<long, T>(value) : throw Mismatch(location);
+        }
+
+        if (typeof(T) == typeof(decimal) || typeof(T) == typeof(decimal?))
+        {
+            return kind == JsonValueKind.Number && element.TryGetDecimal(out var value) ? Typed<decimal, T>(value) : throw Mismatch(location);
+        }
+
+        if (typeof(T) == typeof(double) || typeof(T) == typeof(double?))
+        {
+            return kind == JsonValueKind.Number && element.TryGetDouble(out var value) && double.IsFinite(value) ? Typed<double, T>(value) : throw Mismatch(location);
+        }
+
+        if (typeof(T) == typeof(bool) || typeof(T) == typeof(bool?))
+        {
+            return kind is JsonValueKind.True or JsonValueKind.False ? Typed<bool, T>(element.GetBoolean()) : throw Mismatch(location);
+        }
+
+        if (typeof(T) == typeof(Guid) || typeof(T) == typeof(Guid?))
+        {
+            return kind == JsonValueKind.String && element.TryGetGuid(out var value) ? Typed<Guid, T>(value) : throw Mismatch(location);
+        }
+
+        if (typeof(T) == typeof(DateTime) || typeof(T) == typeof(DateTime?))
+        {
+            return kind == JsonValueKind.String && ReadDateTime(element) is { } value ? Typed<DateTime, T>(value) : throw Mismatch(location);
+        }
+
+        if (typeof(T) == typeof(DateTimeOffset) || typeof(T) == typeof(DateTimeOffset?))
+        {
+            return kind == JsonValueKind.String && element.TryGetDateTimeOffset(out var value) ? Typed<DateTimeOffset, T>(value) : throw Mismatch(location);
+        }
+
+        if (typeof(T) == typeof(DateOnly) || typeof(T) == typeof(DateOnly?))
+        {
+            return kind == JsonValueKind.String && ReadDateOnly(element.GetString()!) is { } value ? Typed<DateOnly, T>(value) : throw Mismatch(location);
+        }
+
+        return (T)ReadScalar(element, typeof(T), location)!;
+    }
+
     /// <summary>Decodes a JSON array into a list of <typeparamref name="TElement"/>, strictly. Safe for trimming and AOT.</summary>
     /// <param name="element">The JSON value: an array, or null.</param>
     /// <param name="location">The JSON pointer reported on failure.</param>
@@ -127,7 +196,17 @@ public static class JsonValues
         var index = 0;
         foreach (var item in element.EnumerateArray())
         {
-            list.Add((TElement)ReadScalar(item, typeof(TElement), $"{location}/{index++}")!);
+            try
+            {
+                list.Add(ReadScalar<TElement>(item, location));
+            }
+            catch (ProtocolException)
+            {
+                // The element's pointer is only built on failure.
+                throw Mismatch($"{location}/{index}");
+            }
+
+            index++;
         }
 
         return list;
@@ -203,7 +282,7 @@ public static class JsonValues
         var text = element.GetString()!;
         if (type == typeof(DateOnly))
         {
-            return DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var v) ? v : null;
+            return ReadDateOnly(text);
         }
 
         if (type == typeof(TimeOnly))
@@ -223,6 +302,22 @@ public static class JsonValues
     /// An offset (<c>Z</c>, <c>+02:00</c>) means an instant, read as UTC; no offset means a plain local timestamp
     /// (<see cref="DateTimeKind.Unspecified"/>). Never the server's local time zone.
     /// </summary>
+    // Reinterprets a value as T, which is TValue or TValue? (checked by the caller), without boxing.
+    private static T Typed<TValue, T>(TValue value)
+        where TValue : struct
+    {
+        if (typeof(T) == typeof(TValue))
+        {
+            return Unsafe.As<TValue, T>(ref value);
+        }
+
+        TValue? nullable = value;
+        return Unsafe.As<TValue?, T>(ref nullable);
+    }
+
+    private static DateOnly? ReadDateOnly(string text) =>
+        DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var value) ? value : null;
+
     private static DateTime? ReadDateTime(JsonElement element)
     {
         if (!element.TryGetDateTime(out var value))
@@ -236,6 +331,12 @@ public static class JsonValues
 
     private static object? ReadEnum(string text, Type type)
     {
+        // One name (the usual case): IsDefined matches names exactly, never numbers, without allocating.
+        if (!text.Contains(',', StringComparison.Ordinal))
+        {
+            return Enum.IsDefined(type, text) ? Enum.Parse(type, text) : null;
+        }
+
         var names = Enum.GetNames(type);
         var parts = text.Split(", ");
         if (parts.Length > 1 && !type.IsDefined(typeof(FlagsAttribute), inherit: false))

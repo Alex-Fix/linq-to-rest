@@ -83,7 +83,7 @@ internal sealed class RestQueryProvider(RestDataContext context) : IQueryProvide
             var index = 0;
             foreach (var row in rows.EnumerateArray())
             {
-                var read = RowReader.Read(query.Type, row, $"/items/{index++}");
+                var read = RowReader.Read(query.Type, row, new RowPointer("/items", index++));
                 items.Add((T)(query.NoTracking ? read : context.Tracker.TrackQueried(read, query.Type)));
             }
         }

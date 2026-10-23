@@ -118,10 +118,55 @@ public sealed class JsonValuesTests
         using var empty = JsonDocument.Parse("null");
         using var array = JsonDocument.Parse("[1]");
 
-        Assert.Equal(42, JsonValues.ReadScalar(number.RootElement, typeof(int), "/x"));
-        Assert.Null(JsonValues.ReadScalar(empty.RootElement, typeof(int?), "/x"));
-        var error = Assert.Throws<ProtocolException>(() => JsonValues.ReadScalar(array.RootElement, typeof(List<int>), "/x"));
+        Assert.Equal(42, JsonValues.ReadScalar<int>(number.RootElement, "/x"));
+        Assert.Null(JsonValues.ReadScalar<int?>(empty.RootElement, "/x"));
+        var error = Assert.Throws<ProtocolException>(() => JsonValues.ReadScalar<List<int>>(array.RootElement, "/x"));
         Assert.Equal(ErrorCodes.TypeMismatch, error.Code);
+    }
+
+    [Theory]
+    [InlineData("42")]
+    [InlineData("-1")]
+    [InlineData("42.5")]
+    [InlineData("9000000000")]
+    [InlineData("1e400")]
+    [InlineData("\"42\"")]
+    [InlineData("true")]
+    [InlineData("null")]
+    [InlineData("\"6a2f41a3-c54c-fce8-32d2-0324e1c32e22\"")]
+    [InlineData("\"2026-10-18T13:44:00Z\"")]
+    [InlineData("\"2026-10-18T13:44:00+02:00\"")]
+    [InlineData("\"2026-10-18\"")]
+    [InlineData("\"2026-18-10\"")]
+    [InlineData("\"Friday\"")]
+    [InlineData("[1]")]
+    [InlineData("{}")]
+    public void Typed_scalar_reads_match_the_type_based_reader(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var element = document.RootElement;
+
+        // The typed reader has its own branches for common value types; every outcome must be the same.
+        AssertSame<int>(element);
+        AssertSame<int?>(element);
+        AssertSame<long>(element);
+        AssertSame<long?>(element);
+        AssertSame<decimal>(element);
+        AssertSame<decimal?>(element);
+        AssertSame<double>(element);
+        AssertSame<double?>(element);
+        AssertSame<bool>(element);
+        AssertSame<bool?>(element);
+        AssertSame<Guid>(element);
+        AssertSame<Guid?>(element);
+        AssertSame<DateTime>(element);
+        AssertSame<DateTime?>(element);
+        AssertSame<DateTimeOffset>(element);
+        AssertSame<DateTimeOffset?>(element);
+        AssertSame<DateOnly>(element);
+        AssertSame<DateOnly?>(element);
+        AssertSame<DayOfWeek?>(element);
+        AssertSame<string>(element);
     }
 
     [Fact]
@@ -137,6 +182,25 @@ public sealed class JsonValuesTests
         Assert.Null(JsonValues.ReadList<int>(empty.RootElement, "/x"));
         var error = Assert.Throws<ProtocolException>(() => JsonValues.ReadList<int>(mixed.RootElement, "/x"));
         Assert.Equal((ErrorCodes.TypeMismatch, "/x/1"), (error.Code, error.Location));
+    }
+
+    private static void AssertSame<T>(JsonElement element)
+    {
+        object? expected;
+        try
+        {
+#pragma warning disable CA2263 // The Type-based overload is the reference here.
+            expected = JsonValues.ReadScalar(element, typeof(T), "/x");
+#pragma warning restore CA2263
+        }
+        catch (ProtocolException error)
+        {
+            var typed = Assert.Throws<ProtocolException>(() => JsonValues.ReadScalar<T>(element, "/x"));
+            Assert.Equal((error.Code, error.Location), (typed.Code, typed.Location));
+            return;
+        }
+
+        Assert.Equal(expected, JsonValues.ReadScalar<T>(element, "/x"));
     }
 
     private static void AssertMismatch(JsonElement element, Type type)
