@@ -183,6 +183,9 @@ internal sealed class SetProperty
 
     public bool IsFilterable { get; init; }
 
+    /// <summary>Gets the built-in validation rules, or <see langword="null"/>.</summary>
+    public RestPropertyRules? Rules { get; init; }
+
     public override string ToString() => Name;
 }
 

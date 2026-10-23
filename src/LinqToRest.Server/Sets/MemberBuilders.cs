@@ -43,6 +43,82 @@ public sealed class EntityPropertyBuilder
         _member.IsNotFilterable = true;
         return this;
     }
+
+    /// <summary>
+    /// Requires a value on inserts and updates: not null, and for strings and collections not empty or blank (code
+    /// <c>required</c>). Exported to clients, which check it before sending.
+    /// </summary>
+    /// <returns>The same builder.</returns>
+    public EntityPropertyBuilder IsRequired()
+    {
+        _member.Rules.IsRequired = true;
+        return this;
+    }
+
+    /// <summary>Sets the minimum length of a string, or item count of a collection (code <c>too_short</c>). Exported to clients.</summary>
+    /// <param name="length">The minimum, inclusive.</param>
+    /// <returns>The same builder.</returns>
+    public EntityPropertyBuilder HasMinLength(int length)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        _member.Rules.MinLength = length;
+        return this;
+    }
+
+    /// <summary>Sets the maximum length of a string, or item count of a collection (code <c>too_long</c>). Exported to clients.</summary>
+    /// <param name="length">The maximum, inclusive.</param>
+    /// <returns>The same builder.</returns>
+    public EntityPropertyBuilder HasMaxLength(int length)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        _member.Rules.MaxLength = length;
+        return this;
+    }
+
+    /// <summary>Sets the inclusive range of a number, date or time (code <c>out_of_range</c>). Exported to clients.</summary>
+    /// <param name="min">The lower bound.</param>
+    /// <param name="max">The upper bound.</param>
+    /// <typeparam name="T">The property's type (without <see cref="Nullable{T}"/>).</typeparam>
+    /// <returns>The same builder.</returns>
+    public EntityPropertyBuilder HasRange<T>(T min, T max)
+        where T : struct, IComparable<T> =>
+        HasMin(min).HasMax(max);
+
+    /// <summary>Sets the inclusive lower bound of a number, date or time (code <c>out_of_range</c>). Exported to clients.</summary>
+    /// <param name="min">The lower bound.</param>
+    /// <typeparam name="T">The property's type (without <see cref="Nullable{T}"/>).</typeparam>
+    /// <returns>The same builder.</returns>
+    public EntityPropertyBuilder HasMin<T>(T min)
+        where T : struct, IComparable<T>
+    {
+        _member.Rules.Min = min;
+        return this;
+    }
+
+    /// <summary>Sets the inclusive upper bound of a number, date or time (code <c>out_of_range</c>). Exported to clients.</summary>
+    /// <param name="max">The upper bound.</param>
+    /// <typeparam name="T">The property's type (without <see cref="Nullable{T}"/>).</typeparam>
+    /// <returns>The same builder.</returns>
+    public EntityPropertyBuilder HasMax<T>(T max)
+        where T : struct, IComparable<T>
+    {
+        _member.Rules.Max = max;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the pattern a string must match (code <c>invalid_format</c>); anchor it (<c>^…$</c>) to match the whole value.
+    /// The pattern must mean the same in .NET and JavaScript, where clients check it: no inline options, <c>\p{…}</c>,
+    /// <c>\A</c>/<c>\z</c>, atomic groups or class subtraction. At most 500 characters.
+    /// </summary>
+    /// <param name="pattern">The pattern.</param>
+    /// <returns>The same builder.</returns>
+    public EntityPropertyBuilder HasPattern(string pattern)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(pattern);
+        _member.Rules.Pattern = pattern;
+        return this;
+    }
 }
 
 /// <summary>Configures an exposed computed value.</summary>

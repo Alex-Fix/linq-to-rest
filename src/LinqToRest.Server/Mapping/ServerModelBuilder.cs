@@ -154,8 +154,23 @@ internal static class ServerModelBuilder
             throw Invalid(set.Name, entityType, $"exposes the writable property '{member.Property.Name}', which has no public setter. Mark it IsReadOnly()");
         }
 
+        var rules = member.Rules.ToModel();
+        if (rules is not null && !writable)
+        {
+            throw Invalid(set.Name, entityType, $"has validation rules on '{member.Describe()}', which isn't writable. Rules apply to inserts and updates, so keys, the concurrency token, read-only members and sets without inserts or updates can't have them");
+        }
+
+        foreach (var bound in (ReadOnlySpan<object?>)[rules?.Min, rules?.Max])
+        {
+            if (bound is not null && bound.GetType() != underlying)
+            {
+                throw Invalid(set.Name, entityType, $"has HasRange on '{member.Describe()}' with {bound.GetType().Name} bounds, but the property is {underlying.Name}");
+            }
+        }
+
         return new ResolvedProperty(member)
         {
+            Rules = rules,
             Name = member.WireName ?? member.ComputedName ?? JsonNamingPolicy.CamelCase.ConvertName(member.Property!.Name),
             Binding = binding,
             TypeName = typeName,
@@ -225,6 +240,7 @@ internal static class ServerModelBuilder
             IsWritable = property.IsWritable,
             IsSortable = property.IsSortable,
             IsFilterable = property.IsFilterable,
+            Rules = property.Rules,
         })],
         Navigations = [.. set.Navigations.Select(navigation => new RestNavigationModel
         {
@@ -277,8 +293,11 @@ internal static class ServerModelBuilder
 
         public bool IsFilterable { get; init; }
 
+        public RestPropertyRules? Rules { get; init; }
+
         public SetProperty ToSetProperty() => new()
         {
+            Rules = Rules,
             Name = Name,
             Binding = Binding,
             EntityProperty = Member.Property,

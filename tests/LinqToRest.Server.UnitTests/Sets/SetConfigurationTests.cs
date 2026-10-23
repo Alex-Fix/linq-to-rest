@@ -109,6 +109,14 @@ public sealed class SetConfigurationTests
     [InlineData("badWireName", "invalid or duplicate member name 'Title'")]
     [InlineData("duplicateWireName", "invalid or duplicate member name 'name'")]
     [InlineData("sortableCollection", "collections and binary values can't be sorted")]
+    [InlineData("ruleOnReadOnly", "has validation rules on 'Name', which isn't writable")]
+    [InlineData("ruleOnKey", "has validation rules on 'Id', which isn't writable")]
+    [InlineData("rangeOfAnotherType", "HasRange on 'Stock' with Int32 bounds, but the property is Int64")]
+    [InlineData("rangeOnString", "HasRange on 'Name' with Int32 bounds, but the property is String")]
+    [InlineData("minAboveMax", "needs min <= max")]
+    [InlineData("lengthOnNumber", "only strings and collections have a length")]
+    [InlineData("patternOnNumber", "only strings can have one")]
+    [InlineData("nonPortablePattern", "doesn't mean the same in .NET and JavaScript")]
     public void Invalid_product_set_is_rejected(string problem, string expected)
     {
         var error = Assert.Throws<InvalidOperationException>(() => Build(o => o
@@ -118,6 +126,38 @@ public sealed class SetConfigurationTests
             .AddSet(new LineSet())));
 
         Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validation_rules_are_exported_and_bound()
+    {
+        var server = Build(o => o
+            .AddSet<Product>(b =>
+            {
+                b.ToSet("products").AllowWrites(WriteOperations.Insert);
+                b.Property(p => p.Name).IsRequired().HasMinLength(2).HasMaxLength(50).HasPattern("^[A-Z]");
+                b.Property(p => p.Stock).HasMin(0L);
+                b.Property(p => p.Description);
+            })
+            .AddSet(new CategorySet())
+            .AddSet(new SupplierSet())
+            .AddSet(new LineSet()));
+
+        var products = server.Model.FindSet("products")!;
+        Assert.True(products.FindProperty("name")!.Rules is { IsRequired: true, MinLength: 2, MaxLength: 50, Pattern: "^[A-Z]" });
+        Assert.True(products.FindProperty("stock")!.Rules is { Min: 0L, Max: null });
+        Assert.Null(products.FindProperty("description")!.Rules);
+        Assert.Contains("\"rules\": {\"min\": 0}", server.Model.ToJson(), StringComparison.Ordinal);
+        Assert.Same(products.FindProperty("name")!.Rules, server.FindSet("products")!.FindProperty("name")!.Rules);
+    }
+
+    [Fact]
+    public void Rule_arguments_are_checked_when_configured()
+    {
+        var builder = new EntitySetBuilder<Product>();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.Property(p => p.Name).HasMaxLength(-1));
+        Assert.Throws<ArgumentException>(() => builder.Property(p => p.Name).HasPattern(""));
     }
 
     [Fact]
@@ -264,6 +304,30 @@ public sealed class SetConfigurationTests
                 break;
             case "sortableCollection":
                 b.Computed("lineIds", p => p.Lines.Select(l => l.Id).ToList()).IsSortable();
+                break;
+            case "ruleOnReadOnly":
+                b.Property(p => p.Name).IsReadOnly().IsRequired();
+                break;
+            case "ruleOnKey":
+                b.Property(p => p.Id).IsRequired();
+                break;
+            case "rangeOfAnotherType":
+                b.Property(p => p.Stock).HasRange(1, 10);
+                break;
+            case "rangeOnString":
+                b.Property(p => p.Name).HasRange(1, 10);
+                break;
+            case "minAboveMax":
+                b.Property(p => p.Stock).HasRange(10L, 1L);
+                break;
+            case "lengthOnNumber":
+                b.Property(p => p.Stock).HasMaxLength(3);
+                break;
+            case "patternOnNumber":
+                b.Property(p => p.Stock).HasPattern("^1");
+                break;
+            case "nonPortablePattern":
+                b.Property(p => p.Name).HasPattern("(?i)^a");
                 break;
         }
     }
