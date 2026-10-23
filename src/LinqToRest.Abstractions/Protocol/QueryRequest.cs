@@ -28,8 +28,17 @@ public sealed class QueryRequest
     /// <summary>Gets the pagination; <see langword="null"/> means offset mode with the default page size.</summary>
     public PageRequest? Page { get; init; }
 
-    /// <summary>Gets whether to return the total count of matching rows.</summary>
+    /// <summary>Gets whether to return the total count of matching rows (of groups, for a grouped query).</summary>
     public bool Count { get; init; }
+
+    /// <summary>
+    /// Gets the group keys: <see langword="null"/> for a query of rows, empty for one group of all rows (whole-query
+    /// aggregates). A grouped query returns its <see cref="Select"/> per group.
+    /// </summary>
+    public IReadOnlyList<MemberNode>? GroupBy { get; init; }
+
+    /// <summary>Gets the filter on groups; its member paths name the fields of <see cref="Select"/>.</summary>
+    public QueryNode? Having { get; init; }
 }
 
 /// <summary>One sort member of a query.</summary>

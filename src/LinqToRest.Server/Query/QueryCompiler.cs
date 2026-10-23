@@ -19,6 +19,17 @@ internal static class QueryCompiler
 
     public static QueryPlan Compile(ServerModel server, SetMapping mapping, QueryRequest request, RequestPolicies policies)
     {
+        // Grouped queries are bound separately; until then, a query that isn't grouped can't filter groups.
+        if (request.GroupBy is not null)
+        {
+            throw RequestException.Invalid(ErrorCodes.InvalidQuery, "/groupBy");
+        }
+
+        if (request.Having is not null)
+        {
+            throw RequestException.Invalid(ErrorCodes.InvalidQuery, "/having");
+        }
+
         var binder = new QueryBinder(server, policies);
         var root = Expression.Parameter(mapping.EntityType, "e");
         var rootBound = new EntityBound(root, mapping, null, isNullable: false);

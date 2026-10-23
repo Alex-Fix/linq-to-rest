@@ -187,7 +187,7 @@ internal static class RestModelJson
 
     private static RestPropertyModel ReadProperty(JsonElement element, string pointer)
     {
-        var properties = Object(element, pointer, "name", "type", "nullable", "collection", "writable", "sortable", "filterable", "rules");
+        var properties = Object(element, pointer, "name", "type", "nullable", "collection", "writable", "sortable", "filterable", "groupable", "aggregatable", "rules");
         var type = String(Required(properties, pointer, "type"), pointer + "/type");
         return new RestPropertyModel
         {
@@ -199,6 +199,8 @@ internal static class RestModelJson
             IsWritable = Flag(properties, pointer, "writable", false),
             IsSortable = Flag(properties, pointer, "sortable", false),
             IsFilterable = Flag(properties, pointer, "filterable", true),
+            IsGroupable = Flag(properties, pointer, "groupable", false),
+            IsAggregatable = Flag(properties, pointer, "aggregatable", false),
         };
     }
 
@@ -349,6 +351,8 @@ internal static class RestModelJson
                 writer.WriteBoolean("filterable", false);
             }
 
+            WriteFlag(writer, "groupable", property.IsGroupable);
+            WriteFlag(writer, "aggregatable", property.IsAggregatable);
             if (property.Rules is { IsEmpty: false } rules)
             {
                 WriteRules(writer, rules);

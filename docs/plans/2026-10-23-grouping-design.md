@@ -33,7 +33,7 @@ reports need extra endpoints today, which LinqToRest exists to avoid.
 | **Translatable** | `GroupBy(key).Select(g => …g.Count(), g.Sum(x => …)…)` and conditional aggregates translate to `GROUP BY` on SQLite, PostgreSQL and SQL Server. The key type (our own generic class via `MemberInit`) is proven by a spike first. Only direct aggregates over the group are accepted; integration tests assert `GROUP BY` in the SQL and nothing evaluated on the client. |
 | **Untrusted input** | Keys and aggregated members are opt-in per column; policy filters apply before grouping (hidden rows never count); `MaxGroupKeys` (4), node limits, and `MaxGroups` (1000) without `Take` or the set's page limits with it. |
 | **No dynamic code** | Built from `Expression` nodes; the server closes one of its own `GroupKey<…>` classes, nothing is generated. |
-| **Wire contract** | Additive: `groupBy`, `having`, nodes `key` and `group`, sort items with `expr`, all only in grouped queries; still `"v": 1`. Old servers reject `groupBy` as unknown. Model document: optional `groupable`/`aggregatable` flags. |
+| **Wire contract** | Additive: `groupBy`, `having`, nodes `key` and `group`, all only in grouped queries (where `having`/`orderBy` name `select` fields); still `"v": 1`. Old servers reject `groupBy` as unknown. Model document: optional `groupable`/`aggregatable` flags. |
 | **Public API** | Server: `IsGroupable()`, `IsAggregatable()` (property and computed builders), `QueryLimits.MaxGroups`/`MaxGroupKeys`. .NET client: grouped LINQ shapes, `SumAsync`/`MinAsync`/`MaxAsync`/`AverageAsync`. TypeScript: `groupBy`, `sum`/`min`/`max`/`average`, typed proxies. All additive. |
 | **Dependencies** | None new; Abstractions and Client stay BCL-only and trim/AOT-safe (the client never builds key types). |
 | **Errors** | New codes `not_groupable` and `not_aggregatable` (400, pointer to the member); `limit_exceeded` with `groups` or `groupKeys`; `invalid_query` for misplaced members, nodes or unsupported shapes. |
@@ -69,24 +69,26 @@ decimal total = await catalog.Products.Where(p => p.CategoryId == 4).SumAsync(p 
 ```json
 {"v": 1,
  "filter": {"eq": [{"member": "status"}, "Active"]},
- "groupBy": [{"member": "brandId"}, {"member": "brand/name"}],
- "having": {"gt": [{"count": {"source": {"group": {}}, "var": "v0", "body": true}}, 1]},
+ "groupBy": ["brandId", "brand/name"],
  "select": {"new": {
    "brandId": {"key": 0}, "name": {"key": 1},
    "count":   {"count": {"source": {"group": {}}, "var": "v1", "body": true}},
    "inStock": {"count": {"source": {"group": {}}, "var": "v2", "where": {"gt": [{"member": "v2/stock"}, 0]}, "body": true}},
    "from":    {"min": {"source": {"group": {}}, "var": "v3", "body": {"member": "v3/price"}}},
    "to":      {"max": {"source": {"group": {}}, "var": "v4", "body": {"member": "v4/price"}}}}},
- "orderBy": [{"expr": {"count": {"source": {"group": {}}, "var": "v5", "body": true}}, "desc": true}],
+ "having": {"gt": [{"member": "count"}, 1]},
+ "orderBy": [{"member": "count", "desc": true}],
  "page": {"mode": "offset", "take": 20}}
 ```
 
-- `groupBy`: 0–4 key paths (`[]` = one group of all rows, used by whole-query aggregates).
+- `groupBy`: 0–4 key paths, written like `include` (`[]` = one group of all rows, used by whole-query aggregates).
 - Grouped-query nodes: `{"key": n}` (the n-th key) and `{"group": {}}` (only as the source of `count`, `sum`, `min`,
-  `max`, `avg`). `having` filters groups; `orderBy` items may be `{"expr": …}` (grouped queries only); keys are added
-  as final tie-breakers.
-- The client puts a `Where` before `GroupBy` into `filter` and one after the group `Select` into `having`, rewritten
-  over keys and aggregates; anything else fails locally with `NotSupportedException`.
+  `max`, `avg`), both only inside `select`. `having` filters groups and `orderBy` sorts them; in a grouped query their
+  member paths name the `select`'s fields (`{"member": "count"}`), which the server replaces with the fields'
+  expressions. Keys are added as final tie-breakers.
+- The client puts a `Where` before `GroupBy` into `filter`, and a `Where`/`OrderBy` after the group `Select` into
+  `having`/`orderBy` over the projected fields (exactly as written in LINQ); anything else fails locally with
+  `NotSupportedException`.
 - Response: the usual `{"items": [...], "totalCount": n}`; items are the projected groups; `count: true` counts groups.
 - Whole-query aggregates send `"groupBy": []` and a `select` with one aggregate and read back one value. Over no rows,
   `Sum` is 0; `Min`/`Max`/`Average` throw like LINQ (or return null for nullable results).
@@ -115,8 +117,9 @@ source.Where(policy).Where(filter)
   - `{"group": {}}` only as the source of `count`/`sum`/`min`/`max`/`avg`. In `sum`/`min`/`max`/`avg` bodies every
     member must be `IsAggregatable()` (`not_aggregatable`); in `where` and `count` bodies filterable suffices. Bodies
     may use arithmetic and references, not nested collection lambdas.
-  - Grouped `select`, `having` and `orderBy` use only keys, aggregates, literals and operators; a bare `member` there
-    is `invalid_query`.
+  - Grouped `select` uses only keys, aggregates, literals and operators (a bare `member` there is `invalid_query`);
+    `having` and `orderBy` use the `select`'s fields by name (an unknown field is `unknown_member`), literals and
+    operators.
   - `sum`/`avg` need numbers; `min`/`max` also dates and times; result types follow LINQ (`Average` of `int` is
     `double`, `decimal` stays `decimal`).
 - Limits: `MaxGroupKeys` (4); `MaxGroups` (1000): without `Take`, the server reads `MaxGroups + 1` rows and answers
@@ -167,7 +170,7 @@ clients to the same bodies.
 
 ## Public API changes
 
-- **Abstractions (added):** `QueryRequest.GroupBy`/`Having`, `KeyNode`, `GroupNode`, expression sort items;
+- **Abstractions (added):** `QueryRequest.GroupBy`/`Having`, `KeyNode`, `GroupNode`;
   `RestPropertyModel.IsGroupable`/`IsAggregatable`; `QueryLimits.MaxGroups`/`MaxGroupKeys`; `ErrorCodes.NotGroupable`,
   `NotAggregatable`.
 - **Server (added):** `IsGroupable()`, `IsAggregatable()` on property and computed builders.
@@ -215,8 +218,7 @@ clients to the same bodies.
 ## Implementation steps
 
 1. Server: translation spike for grouped queries on SQLite and PostgreSQL; pick the key type.
-2. Abstractions: wire contract (`groupBy`, `having`, `key`, `group`, `expr` sort items, limits, codes) and model flags;
-   tests.
+2. Abstractions: wire contract (`groupBy`, `having`, `key`, `group`, limits, codes) and model flags; tests.
 3. Server: `IsGroupable()`/`IsAggregatable()`, startup checks, model export; tests.
 4. Server: type checking and binding of grouped queries; translation, paging, cap and count; integration tests.
 5. Server: whole-query aggregates; tests.

@@ -19,9 +19,9 @@ public sealed class RestModelTests
               {"name": "id", "type": "int32", "sortable": true},
               {"name": "name", "type": "string", "writable": true, "rules": {"required": true, "maxLength": 200, "pattern": "^[A-Z]"}},
               {"name": "price", "type": "decimal", "writable": true, "sortable": true, "rules": {"min": 0.01, "max": 100000}},
-              {"name": "status", "type": "ProductStatus", "writable": true},
+              {"name": "status", "type": "ProductStatus", "writable": true, "groupable": true},
               {"name": "version", "type": "guid"},
-              {"name": "categoryId", "type": "int32", "nullable": true, "writable": true},
+              {"name": "categoryId", "type": "int32", "nullable": true, "writable": true, "groupable": true, "aggregatable": true},
               {"name": "categoryName", "type": "string", "nullable": true},
               {"name": "tags", "type": "string", "collection": true},
               {"name": "description", "type": "string", "nullable": true, "writable": true, "filterable": false}
@@ -63,6 +63,8 @@ public sealed class RestModelTests
         Assert.Equal((true, (int?)null, (int?)200, "^[A-Z]"), (nameRules.IsRequired, nameRules.MinLength, nameRules.MaxLength, nameRules.Pattern));
         Assert.Equal((0.01m, 100000m), (products.FindProperty("price")!.Rules!.Min, products.FindProperty("price")!.Rules!.Max));
         Assert.Null(products.FindProperty("status")!.Rules);
+        Assert.True(products.FindProperty("status") is { IsGroupable: true, IsAggregatable: false });
+        Assert.True(products.FindProperty("categoryId") is { IsGroupable: true, IsAggregatable: true });
         Assert.Equal(WriteOperations.None, model.FindSet("categories")!.Writes);
         Assert.True(model.FindSet("categories")!.FindNavigation("products")!.IsCollection);
         Assert.Equal(["Draft", "Active", "Retired"], model.FindEnum("ProductStatus")!.Members);
@@ -153,6 +155,11 @@ public sealed class RestModelTests
     [InlineData("/enums/Status", "[\"A\",\"A\"]", "duplicate member 'A'")]
     [InlineData("/enums/Status", "[\"1A\"]", "invalid or duplicate member '1A'")]
     [InlineData("/sets/0/properties/2/type", "\"string\"", "enum 'Status' isn't used")]
+    [InlineData("/sets/0/properties/2/groupable", "true", "collections and binary values can't be group keys")]
+    [InlineData("/sets/0/properties/3/groupable", "true", "collections and binary values can't be group keys")]
+    [InlineData("/sets/0/properties/1/aggregatable", "true", "only numbers, dates and times can be summed")]
+    [InlineData("/sets/0/properties/2/aggregatable", "true", "only numbers, dates and times can be summed")]
+    [InlineData("/sets/0/properties/1/groupable", "1", "must be true or false")]
     [InlineData("/sets/0/properties/1/rules", "{\"extra\":1}", "unknown key 'extra'")]
     [InlineData("/sets/0/properties/1/rules", "{\"required\":1}", "must be true or false")]
     [InlineData("/sets/0/properties/0/rules", "{\"required\":true}", "has rules but isn't writable")]

@@ -215,6 +215,16 @@ public sealed partial class RestModel
                 throw Invalid($"The property '{set.Name}.{property.Name}' is writable, but the set allows neither inserts nor updates.");
             }
 
+            if (property.IsGroupable && (property.IsCollection || scalar == typeof(byte[])))
+            {
+                throw Invalid($"The property '{set.Name}.{property.Name}' is groupable, but collections and binary values can't be group keys.");
+            }
+
+            if (property.IsAggregatable && (property.IsCollection || scalar is null || !RangeTypes.Contains(scalar)))
+            {
+                throw Invalid($"The property '{set.Name}.{property.Name}' is aggregatable, but only numbers, dates and times can be summed, averaged or compared.");
+            }
+
             if (property.Rules is { } rules)
             {
                 ValidateRules(set, property, scalar, rules);

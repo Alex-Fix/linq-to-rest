@@ -30,6 +30,15 @@ public sealed class QueryLimits
     /// <summary>Gets or sets the most operations in one batch. Default: 100.</summary>
     public int MaxBatchOperations { get; set; } = 100;
 
+    /// <summary>Gets or sets the most keys of a grouped query. Default: 4.</summary>
+    public int MaxGroupKeys { get; set; } = 4;
+
+    /// <summary>
+    /// Gets or sets the most groups a grouped query without <c>take</c> returns; more is <c>limit_exceeded</c>
+    /// (<c>groups</c>). With <c>take</c>, the set's page limits apply. Default: 1000.
+    /// </summary>
+    public int MaxGroups { get; set; } = 1000;
+
     /// <summary>
     /// Gets or sets the most validation errors one <c>validation_failed</c> problem lists; a final
     /// <c>too_many_errors</c> entry says more were found. Default: 100.

@@ -43,7 +43,7 @@ public abstract class GroupingSpikeTests(ShopDatabase database) : IAsyncLifetime
         var rows = await db.Products
             .Where(p => p.TenantId == 1)
             .GroupBy(p => new SpikeKey<int?, string?> { K0 = p.CategoryId, K1 = p.Category!.Name })
-            .Where(g => g.Count() > 0)
+            .Where(g => g.Sum(p => p.Rating) > 0)
             .OrderByDescending(g => g.Count()).ThenBy(g => g.Key.K0).ThenBy(g => g.Key.K1)
             .Skip(0).Take(10)
             .Select(g => new object?[]
@@ -54,7 +54,7 @@ public abstract class GroupingSpikeTests(ShopDatabase database) : IAsyncLifetime
             .ToListAsync(TestContext.Current.CancellationToken);
 
         // Providers order a null key differently (SQLite first, PostgreSQL last), so only the first group is fixed.
-        Assert.Equal([null, (int?)1, 2], rows.Select(row => (int?)row[0]).Order());
+        Assert.Equal([null, 1, 2], rows.Select(row => (int?)row[0]).Order());
         Assert.Equal((2, "Games", 3, 1), ((int?)rows[0][0], (string?)rows[0][1], (int)rows[0][2]!, (int)rows[0][3]!));
         Assert.Equal(20m, Convert.ToDecimal(rows[0][4], System.Globalization.CultureInfo.InvariantCulture));
         Assert.Equal(140m, Convert.ToDecimal(rows[0][6], System.Globalization.CultureInfo.InvariantCulture));

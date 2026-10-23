@@ -21,6 +21,12 @@ public static class ErrorCodes
     /// <summary>The member can't be sorted.</summary>
     public const string NotSortable = "not_sortable";
 
+    /// <summary>The member can't be a group key.</summary>
+    public const string NotGroupable = "not_groupable";
+
+    /// <summary>The member can't be used inside sum, min, max or avg over a group.</summary>
+    public const string NotAggregatable = "not_aggregatable";
+
     /// <summary>The member can't be written.</summary>
     public const string NotWritable = "not_writable";
 
