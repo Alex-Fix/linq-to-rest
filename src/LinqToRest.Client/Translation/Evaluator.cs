@@ -87,7 +87,8 @@ internal static class Evaluator
                 }
             }
 
-            return Expression.Lambda(node).Compile(preferInterpretation: true).DynamicInvoke();
+            // Interpreted, so it needs no dynamic code; boxing to object avoids a delegate type made for node.Type.
+            return Expression.Lambda<Func<object?>>(Expression.Convert(node, typeof(object))).Compile(preferInterpretation: true)();
         }
     }
 }

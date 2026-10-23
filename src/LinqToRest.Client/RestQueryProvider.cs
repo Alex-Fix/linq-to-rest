@@ -10,13 +10,10 @@ namespace LinqToRest.Client;
 /// <summary>Builds LinqToRest queries and runs them over HTTP QUERY.</summary>
 internal sealed class RestQueryProvider(RestDataContext context) : IQueryProvider
 {
-    public IQueryable CreateQuery(Expression expression)
-    {
-        var elementType = expression.Type.GetInterfaces().Append(expression.Type)
-            .First(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IQueryable<>))
-            .GetGenericArguments()[0];
-        return (IQueryable)Activator.CreateInstance(typeof(RestQueryable<>).MakeGenericType(elementType), this, expression)!;
-    }
+    // Building RestQueryable<T> for a runtime T needs MakeGenericType, which Native AOT can't promise; the Queryable
+    // operators always call the generic overload.
+    public IQueryable CreateQuery(Expression expression) =>
+        throw new NotSupportedException("LinqToRest builds queries through the generic CreateQuery<TElement>; use the Queryable operators.");
 
     public IQueryable<TElement> CreateQuery<TElement>(Expression expression) => new RestQueryable<TElement>(this, expression);
 

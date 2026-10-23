@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <Description>LINQ provider and unit of work for LinqToRest APIs: DtoSet queries over HTTP QUERY, SaveChanges over $batch.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>

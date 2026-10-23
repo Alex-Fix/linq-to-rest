@@ -258,6 +258,16 @@ public sealed class TranslationTests
     }
 
     [Fact]
+    public void Untyped_query_creation_is_not_supported()
+    {
+        var (shop, _) = Shop.Create();
+
+        var error = Assert.Throws<NotSupportedException>(() => shop.Products.Provider.CreateQuery(shop.Products.Expression));
+
+        Assert.Contains("generic CreateQuery<TElement>", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Rejected_query_throws_with_the_problem_code()
     {
         var (shop, http) = Shop.Create();
