@@ -1,19 +1,20 @@
-# Local PostgreSQL for samples/Shop.Api. Dev-only credentials: never reuse them outside your machine.
+# Local PostgreSQL for samples/Catalog.Api (--Database:Provider=Postgres). Dev-only credentials: never reuse them
+# outside your machine.
 services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: shop
-      POSTGRES_USER: shop
-      POSTGRES_PASSWORD: shop-dev
+      POSTGRES_DB: catalog
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: catalog-dev
     ports:
       - "5432:5432"
     volumes:
-      - shop-data:/var/lib/postgresql/data
+      - catalog-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shop -d shop"]
+      test: ["CMD-SHELL", "pg_isready -U catalog -d catalog"]
       interval: 2s
       retries: 15
 
 volumes:
-  shop-data:
+  catalog-data:

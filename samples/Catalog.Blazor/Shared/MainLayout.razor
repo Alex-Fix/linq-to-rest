@@ -1,0 +1,52 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject Session Session
+@inject IMessageService Message
+
+<AntDesign.Layout Class="shell">
+    <Header Class="header">
+        <a href="" class="logo">Catalog</a>
+        <Menu Theme="MenuTheme.Dark" Mode="MenuMode.Horizontal" Class="menu" Selectable="false">
+            <MenuItem Key="browse" RouterLink="" RouterMatch="NavLinkMatch.All" Icon="shop">Catalog</MenuItem>
+            @if (Session.IsEditor)
+            {
+                <MenuItem Key="new" RouterLink="products/new" Icon="plus">New product</MenuItem>
+                <MenuItem Key="categories" RouterLink="categories" Icon="appstore">Categories</MenuItem>
+            }
+        </Menu>
+        <Space>
+            <SpaceItem><span class="signed-in">Signed in as</span></SpaceItem>
+            <SpaceItem>
+                <RadioGroup TValue="string" Value="@(Session.Role ?? "anonymous")" ValueChanged="SignInAsync" ButtonStyle="RadioButtonStyle.Solid">
+                    @foreach (var option in Roles)
+                    {
+                        <Radio RadioButton Value="@option">@option</Radio>
+                    }
+                </RadioGroup>
+            </SpaceItem>
+        </Space>
+    </Header>
+    <Content Class="content">@Body</Content>
+    <Footer Class="footer">LinqToRest catalog sample — Blazor WebAssembly + Ant Design</Footer>
+</AntDesign.Layout>
+
+@code {
+    private static readonly string[] Roles = ["anonymous", "viewer", "editor"];
+
+    protected override void OnInitialized() => Session.Changed += StateHasChanged;
+
+    public void Dispose() => Session.Changed -= StateHasChanged;
+
+    // Anonymous, viewer or editor: switching re-runs the queries, so drafts appear and disappear.
+    private async Task SignInAsync(string role)
+    {
+        try
+        {
+            await Session.SignInAsync(role == "anonymous" ? null : role);
+        }
+        catch (HttpRequestException exception)
+        {
+            await Message.ErrorAsync($"Sign-in failed: {exception.Message}");
+        }
+    }
+}

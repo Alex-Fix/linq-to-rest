@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- CatalogContext.generated.cs comes from Catalog.Api's model.json (linqtorest-gen cs); never edit it by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
+  </ItemGroup>
+</Project>

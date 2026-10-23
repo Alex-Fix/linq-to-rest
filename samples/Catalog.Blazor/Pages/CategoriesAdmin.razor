@@ -1,0 +1,116 @@
+@page "/categories"
+@implements IDisposable
+@inject Session Session
+@inject IMessageService Message
+
+@if (!Session.IsEditor)
+{
+    <Result Status="ResultStatus.Http403" Title="Editors only" SubTitle="Sign in as an editor to manage categories." />
+}
+else
+{
+    <Card Title="Categories" Style="max-width: 1000px; margin: 0 auto">
+        <Space Wrap Style="margin-bottom: 16px">
+            <SpaceItem><Input Placeholder="New category" @bind-Value="_name" /></SpaceItem>
+            <SpaceItem>
+                <Select TItem="ParentOption" TItemValue="int?" DataSource="ParentOptions(null)" ItemValue="item => item.Id" ItemLabel="item => item.Label"
+                        @bind-Value="_parentId" Style="width: 280px" />
+            </SpaceItem>
+            <SpaceItem><Button Type="ButtonType.Primary" Icon="plus" Disabled="@string.IsNullOrWhiteSpace(_name)" OnClick="AddAsync">Add</Button></SpaceItem>
+        </Space>
+        <Table TItem="CategoryNode" DataSource="Sorted" HidePagination>
+            <PropertyColumn Property="c => c.Name" Title="Name">
+                <Input @key="@($"{context.Id}-{context.Name}")" Value="@context.Name" Bordered="false" ValueChanged="(string name) => RenameAsync(context, name)" />
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.Id" Title="Path">
+                <Text Type="TextElementType.Secondary">@PathOf(context)</Text>
+            </PropertyColumn>
+            <PropertyColumn Property="c => c.ProductCount" Title="Products" Width="100" Align="ColumnAlign.Right" />
+            <PropertyColumn Property="c => c.ParentId" Title="Parent" Width="260">
+                <Select TItem="ParentOption" TItemValue="int?" DataSource="ParentOptions(context.Id)" ItemValue="item => item.Id" ItemLabel="item => item.Label"
+                        Value="@context.ParentId" ValueChanged="parent => MoveAsync(context, parent)" Style="width: 100%" />
+            </PropertyColumn>
+            <ActionColumn Width="60">
+                <Popconfirm Title="@($"Delete {context.Name}? Categories that still have products or subcategories can't be deleted.")"
+                            OkText="Delete" OkButtonProps="@(new ButtonProps { Danger = true })" OnConfirm="() => DeleteAsync(context)">
+                    <Button Danger Type="ButtonType.Text" Icon="delete" />
+                </Popconfirm>
+            </ActionColumn>
+        </Table>
+    </Card>
+}
+
+@code {
+    private List<CategoryNode> _rows = [];
+    private string _name = "";
+    private int? _parentId;
+
+    private IEnumerable<CategoryNode> Sorted => _rows.OrderBy(PathOf, StringComparer.CurrentCulture);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        await LoadAsync();
+    }
+
+    public void Dispose() => Session.Changed -= OnSessionChanged;
+
+    private void OnSessionChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadAsync() =>
+        _rows = await Session.NewCatalog().Categories.OrderBy(c => c.Name).Select(c => new CategoryNode(c.Id, c.Name, c.ParentId, c.ProductCount)).Take(200).ToListAsync();
+
+    private string PathOf(CategoryNode row) =>
+        _rows.FirstOrDefault(candidate => candidate.Id == row.ParentId) is { } parent ? $"{PathOf(parent)} / {row.Name}" : row.Name;
+
+    private Task AddAsync()
+    {
+        var name = _name.Trim();
+        _name = "";
+        return RunAsync(catalog => catalog.Categories.Add(new Category { Name = name, ParentId = _parentId }), $"Added {name}.");
+    }
+
+    private Task RenameAsync(CategoryNode row, string? name) =>
+        string.IsNullOrWhiteSpace(name) || name == row.Name ? Task.CompletedTask : RunAsync(catalog => Attach(catalog, row).Name = name.Trim(), $"Renamed to {name.Trim()}.");
+
+    private Task MoveAsync(CategoryNode row, int? parentId) =>
+        parentId == row.ParentId ? Task.CompletedTask : RunAsync(catalog => Attach(catalog, row).ParentId = parentId, $"Moved {row.Name}.");
+
+    // Deleting a category that still has products or subcategories is refused by the database (409).
+    private Task DeleteAsync(CategoryNode row) => RunAsync(catalog => catalog.Categories.Remove(Attach(catalog, row)), $"Deleted {row.Name}.");
+
+    private sealed record ParentOption(int? Id, string Label);
+
+    /// <summary>"Top level" and every category by path, leaving out one category and everything below it.</summary>
+    private List<ParentOption> ParentOptions(int? excluded) =>
+        [new(null, "(top level)"), .. Sorted.Where(row => excluded is null || !CategoryNode.Descendants(_rows, excluded.Value).Contains(row.Id)).Select(row => new ParentOption(row.Id, PathOf(row)))];
+
+    /// <summary>Each action is its own small unit of work: attach the row as shown, change it, save one batch.</summary>
+    private static Category Attach(CatalogContext catalog, CategoryNode row)
+    {
+        var category = new Category { Id = row.Id, Name = row.Name, ParentId = row.ParentId };
+        catalog.Categories.Attach(category);
+        return category;
+    }
+
+    private async Task RunAsync(Action<CatalogContext> change, string done)
+    {
+        try
+        {
+            var catalog = Session.NewCatalog();
+            change(catalog);
+            await catalog.SaveChangesAsync();
+            await Message.SuccessAsync(done);
+        }
+        catch (Exception exception) when (exception is RestSaveException or HttpRequestException)
+        {
+            await Message.ErrorAsync(Errors.Describe(exception));
+        }
+
+        await LoadAsync();
+    }
+}

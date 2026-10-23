@@ -1,0 +1,32 @@
+<Tree TItem="CategoryNode"
+      DataSource="Roots"
+      TitleExpression="node => Title(node.DataItem)"
+      KeyExpression="node => node.DataItem.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+      ChildrenExpression="node => Children(node.DataItem.Id)"
+      IsLeafExpression="node => !Children(node.DataItem.Id).Any()"
+      DefaultExpandAll
+      BlockNode
+      SelectedKeys="SelectedKeys"
+      OnSelect="SelectAsync" />
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CategoryNode> Categories { get; set; } = [];
+
+    [Parameter]
+    public int? Selected { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> OnSelect { get; set; }
+
+    private IEnumerable<CategoryNode> Roots => Children(null);
+
+    private string[] SelectedKeys => Selected is { } id ? [id.ToString(System.Globalization.CultureInfo.InvariantCulture)] : [];
+
+    private IEnumerable<CategoryNode> Children(int? parentId) => Categories.Where(category => category.ParentId == parentId);
+
+    private static string Title(CategoryNode category) => category.ProductCount > 0 ? $"{category.Name} ({category.ProductCount})" : category.Name;
+
+    private Task SelectAsync(TreeEventArgs<CategoryNode> args) =>
+        OnSelect.InvokeAsync(args.Node.Selected ? args.Node.DataItem.Id : null);
+}

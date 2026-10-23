@@ -13,9 +13,9 @@
 	</Folder>
 	<Folder Name="/samples/">
 		<File Path="samples/Directory.Build.props" />
-		<Project Path="samples/Shop.Api/Shop.Api.csproj" />
-		<Project Path="samples/Shop.Client/Shop.Client.csproj" />
-		<Project Path="samples/Shop.Console/Shop.Console.csproj" />
+		<Project Path="samples/Catalog.Api/Catalog.Api.csproj" />
+		<Project Path="samples/Catalog.Blazor/Catalog.Blazor.csproj" />
+		<Project Path="samples/Catalog.Client/Catalog.Client.csproj" />
 	</Folder>
 	<Folder Name="/src/">
 		<File Path="src/Directory.Build.props" />
@@ -29,6 +29,7 @@
 		<Project Path="tests/LinqToRest.Abstractions.UnitTests/LinqToRest.Abstractions.UnitTests.csproj" />
 		<Project Path="tests/LinqToRest.Client.UnitTests/LinqToRest.Client.UnitTests.csproj" />
 		<Project Path="tests/LinqToRest.EndToEnd.Tests/LinqToRest.EndToEnd.Tests.csproj" />
+		<Project Path="tests/LinqToRest.Samples.Tests/LinqToRest.Samples.Tests.csproj" />
 		<Project Path="tests/LinqToRest.Server.IntegrationTests/LinqToRest.Server.IntegrationTests.csproj" />
 		<Project Path="tests/LinqToRest.Server.UnitTests/LinqToRest.Server.UnitTests.csproj" />
 		<Project Path="tests/LinqToRest.CodeGen.UnitTests/LinqToRest.CodeGen.UnitTests.csproj" />

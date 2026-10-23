@@ -1,0 +1,60 @@
+body {
+  margin: 0;
+}
+
+.shell {
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header .logo {
+  margin: 0;
+}
+
+.header .logo a {
+  color: #fff;
+}
+
+.header .menu {
+  flex: 1;
+  min-width: 0;
+}
+
+.header .signed-in {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.content {
+  padding: 24px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.footer {
+  text-align: center;
+}
+
+.product-card .ant-card-cover img,
+.product-card .placeholder {
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  width: 100%;
+}
+
+.product-card .placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f0f5;
+  color: #bfbfbf;
+  font-size: 2rem;
+}

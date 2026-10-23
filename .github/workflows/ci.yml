@@ -68,6 +68,10 @@ jobs:
           generate --model tests/LinqToRest.Server.IntegrationTests/Shop/model.json --namespace LinqToRest.EndToEnd.Tests --context ShopClient --out tests/LinqToRest.EndToEnd.Tests/ShopClient.generated.cs
           generate --model tests/golden/model.json --namespace LinqToRest.Benchmarks.Client --context BenchmarkShop --out benchmarks/LinqToRest.Benchmarks/Client/BenchmarkShop.generated.cs
 
+      # Trimmed like a real deployment, so trimming problems show up here rather than in users' apps.
+      - name: Publish the Blazor catalog sample (Release, trimmed)
+        run: dotnet publish samples/Catalog.Blazor -c Release --no-restore -o artifacts/publish/catalog-blazor
+
       # Proves every suite still runs; shared runners are too noisy for timings, so nothing is compared.
       - name: Benchmarks (dry run)
         run: dotnet run -c Release --no-build --project benchmarks/LinqToRest.Benchmarks -- --filter '*' --job dry
@@ -100,7 +104,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: clients/typescript/package-lock.json
+          cache-dependency-path: |
+            clients/typescript/package-lock.json
+            samples/catalog-web/package-lock.json
 
       - name: Install
         run: npm ci
@@ -117,6 +123,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The React catalog sample builds against the client just built (file: dependency).
+      - name: Catalog web app (format, lint, type-check, build)
+        working-directory: samples/catalog-web
+        run: |
+          npm ci
+          npm run check
+
       # Proves the benchmarks still run; timings aren't compared on shared runners.
       - name: Benchmarks
         run: mkdir -p ../../artifacts && npm run bench
@@ -125,18 +138,18 @@ jobs:
         run: npm audit --audit-level=high
 
       # The sample's model must match its sets; the golden test models are checked by the .NET tests.
-      - name: Exported models and generated clients are current
+      - name: Exported model and generated clients are current
         working-directory: .
         run: |
-          dotnet build samples/Shop.Api
+          dotnet build samples/Catalog.Api
           dotnet build src/LinqToRest.CodeGen
-          dotnet run --project samples/Shop.Api --no-build -- --Database:Provider=Sqlite --export-linqtorest-model model.json
-          git diff --exit-code samples/Shop.Api/model.json
+          dotnet run --project samples/Catalog.Api --no-build -- --export-linqtorest-model model.json
+          git diff --exit-code samples/Catalog.Api/model.json
           generate() { dotnet run --project src/LinqToRest.CodeGen --no-build -- "$@" --check; }
           generate ts --model tests/golden/model.json --name Shop --import ../src/index.js --out clients/typescript/test/shop.generated.ts
-          generate ts --model samples/Shop.Api/model.json --name Shop --import ../src/index.js --out clients/typescript/test-e2e/shop.generated.ts
-          generate ts --model samples/Shop.Api/model.json --name Shop --out samples/shop-ts/shop.generated.ts
-          generate cs --model samples/Shop.Api/model.json --namespace Shop.Client --context ShopContext --out samples/Shop.Client/ShopContext.generated.cs
+          generate ts --model samples/Catalog.Api/model.json --name Catalog --import ../src/index.js --out clients/typescript/test-e2e/catalog.generated.ts
+          generate ts --model samples/Catalog.Api/model.json --name Catalog --out samples/catalog-web/src/catalog.generated.ts
+          generate cs --model samples/Catalog.Api/model.json --namespace Catalog.Client --context CatalogContext --out samples/Catalog.Client/CatalogContext.generated.cs
 
-      - name: End-to-end tests against samples/Shop.Api
+      - name: End-to-end tests against samples/Catalog.Api
         run: npm run test:e2e

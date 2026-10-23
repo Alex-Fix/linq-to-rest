@@ -55,12 +55,15 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
 - Time: inject `TimeProvider` if anything needs "now"; tests use `FakeTimeProvider`.
 
 ## Samples (`samples/`)
-- `Shop.Api` (EF Core SQLite, entity sets, API-key auth, tenant policies, `RequireAuthorization`, checked-in
-  `model.json` exported with `--export-linqtorest-model`), `Shop.Client` (generated C# context, never edited by
-  hand), `Shop.Console` (client: query, cursor paging, save). `samples/Directory.Build.props` makes
-  them non-packable. Keep them simple — they're documentation, and people copy them.
-- Run: `dotnet run --project samples/Shop.Api --urls http://localhost:5080` (Development, key `dev-acme-key`), then
-  `dotnet run --project samples/Shop.Console`.
+- The catalog sample: `Catalog.Api` (SQLite default, role policies, dev-only JWT login, CORS,
+  `model.json`), `Catalog.Client` (generated), `Catalog.Blazor` (WebAssembly; trimmed Release publish in CI, with
+  `Catalog.Client` as a trimmer root until the client is trim-safe) and `catalog-web` (React, see the
+  `typescript-client` skill). `samples/Directory.Build.props` makes them non-packable. They're documentation and
+  people copy them: keep them clear. `samples/README.md` lists which screen shows which feature; keep it true.
+- Run: `dotnet run --project samples/Catalog.Api` (Development, http://localhost:5095), then
+  `dotnet run --project samples/Catalog.Blazor` or `npm run dev` in `samples/catalog-web`.
+- `tests/LinqToRest.Samples.Tests` runs `Catalog.Api`'s own `Program` (`WebApplicationFactory`) on a throwaway
+  SQLite file and checks the sample's claims (role filters, unexposed columns, write rules, CORS, `model.json`).
 
 ## Tests (`tests/`)
 - `tests/Directory.Build.props` adds xUnit v3, `OutputType=Exe`, `IsPackable=false`, global `using Xunit`.

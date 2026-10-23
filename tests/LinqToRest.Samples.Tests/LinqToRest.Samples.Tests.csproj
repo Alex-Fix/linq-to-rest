@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\Catalog.Api\Catalog.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The checked-in model must equal a fresh export. -->
+    <None Include="..\..\samples\Catalog.Api\model.json" Link="Catalog\model.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
