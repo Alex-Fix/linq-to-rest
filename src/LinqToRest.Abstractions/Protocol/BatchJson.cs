@@ -86,4 +86,22 @@ public static class BatchJson
     /// <returns>The UTF-8 body.</returns>
     public static byte[] WriteResponse(BatchResponse response) =>
         JsonSerializer.SerializeToUtf8Bytes(response, BatchJsonContext.Default.BatchResponse);
+
+    /// <summary>Writes the <c>errors</c> member of a <c>validation_failed</c> problem.</summary>
+    /// <param name="issues">The issues.</param>
+    /// <returns>The JSON array.</returns>
+    public static JsonElement WriteIssues(IEnumerable<ValidationIssue> issues)
+    {
+        ArgumentNullException.ThrowIfNull(issues);
+        var json = JsonSerializer.SerializeToUtf8Bytes([.. issues], BatchJsonContext.Default.ListValidationIssue);
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
+    /// <summary>Reads the <c>errors</c> member of a <c>validation_failed</c> problem.</summary>
+    /// <param name="errors">The JSON array.</param>
+    /// <returns>The issues.</returns>
+    /// <exception cref="JsonException">The array doesn't fit the contract.</exception>
+    public static IReadOnlyList<ValidationIssue> ReadIssues(JsonElement errors) =>
+        errors.Deserialize(BatchJsonContext.Default.ListValidationIssue) ?? throw new JsonException("The validation errors are missing.");
 }

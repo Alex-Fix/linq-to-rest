@@ -97,4 +97,31 @@ public sealed class BatchJsonTests
 
     private static BatchRequest Read(string json, QueryLimits? limits = null) =>
         BatchJson.Read(Encoding.UTF8.GetBytes(json), limits ?? new QueryLimits());
+
+    [Fact]
+    public void Validation_issues_round_trip_with_their_wire_names()
+    {
+        ValidationIssue[] issues =
+        [
+            new() { Operation = "o0", Location = "/operations/0/values/price", Member = "price", Code = ErrorCodes.OutOfRange },
+            new() { Operation = "o1", Location = "/operations/1", Code = "sale_ends_before_release" },
+            new() { Code = ErrorCodes.TooManyErrors },
+        ];
+
+        var errors = BatchJson.WriteIssues(issues);
+        var read = BatchJson.ReadIssues(errors);
+
+        Assert.Equal(
+            """[{"operation":"o0","pointer":"/operations/0/values/price","member":"price","code":"out_of_range"},{"operation":"o1","pointer":"/operations/1","code":"sale_ends_before_release"},{"code":"too_many_errors"}]""",
+            errors.GetRawText());
+        Assert.Equal(issues.Select(issue => (issue.Operation, issue.Location, issue.Member, issue.Code)), read.Select(issue => (issue.Operation, issue.Location, issue.Member, issue.Code)));
+    }
+
+    [Fact]
+    public void Validation_issues_need_a_code()
+    {
+        using var document = JsonDocument.Parse("""[{"operation":"o0"}]""");
+
+        Assert.Throws<JsonException>(() => BatchJson.ReadIssues(document.RootElement));
+    }
 }

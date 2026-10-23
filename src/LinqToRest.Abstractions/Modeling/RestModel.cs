@@ -12,6 +12,13 @@ public sealed partial class RestModel
     /// <summary>The model document version this library reads and writes.</summary>
     public const int Version = 1;
 
+    // Scalar types a range rule applies to.
+    private static readonly HashSet<Type> RangeTypes =
+    [
+        typeof(byte), typeof(short), typeof(int), typeof(long), typeof(float), typeof(double), typeof(decimal),
+        typeof(DateTime), typeof(DateTimeOffset), typeof(DateOnly), typeof(TimeOnly), typeof(TimeSpan),
+    ];
+
     private readonly Dictionary<string, RestSetModel> _sets;
     private readonly Dictionary<string, RestEnumModel> _enums;
 
@@ -207,6 +214,11 @@ public sealed partial class RestModel
             {
                 throw Invalid($"The property '{set.Name}.{property.Name}' is writable, but the set allows neither inserts nor updates.");
             }
+
+            if (property.Rules is { } rules)
+            {
+                ValidateRules(set, property, scalar, rules);
+            }
         }
 
         foreach (var navigation in set.Navigations)
@@ -228,6 +240,66 @@ public sealed partial class RestModel
             }
         }
     }
+
+    private static void ValidateRules(RestSetModel set, RestPropertyModel property, Type? scalar, RestPropertyRules rules)
+    {
+        var name = $"{set.Name}.{property.Name}";
+        if (!property.IsWritable)
+        {
+            throw Invalid($"The property '{name}' has rules but isn't writable, so they could never apply.");
+        }
+
+        var isString = scalar == typeof(string) && !property.IsCollection;
+        if ((rules.MinLength is not null || rules.MaxLength is not null) && !isString && !property.IsCollection)
+        {
+            throw Invalid($"The property '{name}' has a length rule, but only strings and collections have a length.");
+        }
+
+        if (rules.MinLength < 0 || rules.MaxLength < 0 || rules.MinLength > rules.MaxLength)
+        {
+            throw Invalid($"The property '{name}' needs 0 <= minLength <= maxLength.");
+        }
+
+        if (rules.Min is not null || rules.Max is not null)
+        {
+            if (property.IsCollection || scalar is null || !RangeTypes.Contains(scalar))
+            {
+                throw Invalid($"The property '{name}' has a range, but only numbers, dates and times have one.");
+            }
+
+            if (!IsBound(rules.Min, scalar) || !IsBound(rules.Max, scalar)
+                || (rules is { Min: IComparable min, Max: { } max } && min.CompareTo(max) > 0))
+            {
+                throw Invalid($"The property '{name}' needs min <= max, both finite values of its type.");
+            }
+        }
+
+        if (rules.Pattern is { } pattern)
+        {
+            if (!isString)
+            {
+                throw Invalid($"The property '{name}' has a pattern, but only strings can have one.");
+            }
+
+            if (pattern.Length is 0 or > RestPropertyRules.MaxPatternLength)
+            {
+                throw Invalid($"The property '{name}' has a pattern that is empty or longer than {RestPropertyRules.MaxPatternLength} characters.");
+            }
+
+            try
+            {
+                RestPropertyRules.CreateRegex(pattern);
+            }
+            catch (ArgumentException exception)
+            {
+                throw Invalid($"The property '{name}' has a pattern that doesn't mean the same in .NET and JavaScript: {exception.Message}");
+            }
+        }
+    }
+
+    private static bool IsBound(object? bound, Type type) =>
+        bound is null || (bound.GetType() == type && bound is not (double.NaN or double.PositiveInfinity or double.NegativeInfinity)
+            && bound is not (float.NaN or float.PositiveInfinity or float.NegativeInfinity));
 
     private void ValidateKeys(RestSetModel set)
     {

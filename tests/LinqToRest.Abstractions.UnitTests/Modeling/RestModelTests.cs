@@ -17,8 +17,8 @@ public sealed class RestModelTests
             "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
             "properties": [
               {"name": "id", "type": "int32", "sortable": true},
-              {"name": "name", "type": "string", "writable": true},
-              {"name": "price", "type": "decimal", "writable": true, "sortable": true},
+              {"name": "name", "type": "string", "writable": true, "rules": {"required": true, "maxLength": 200, "pattern": "^[A-Z]"}},
+              {"name": "price", "type": "decimal", "writable": true, "sortable": true, "rules": {"min": 0.01, "max": 100000}},
               {"name": "status", "type": "ProductStatus", "writable": true},
               {"name": "version", "type": "guid"},
               {"name": "categoryId", "type": "int32", "nullable": true, "writable": true},
@@ -59,6 +59,10 @@ public sealed class RestModelTests
         Assert.False(products.FindProperty("description")!.IsFilterable);
         Assert.True(products.FindProperty("name")!.IsFilterable);
         Assert.Equal(["categoryId"], products.FindNavigation("category")!.ForeignKey);
+        var nameRules = products.FindProperty("name")!.Rules!;
+        Assert.Equal((true, (int?)null, (int?)200, "^[A-Z]"), (nameRules.IsRequired, nameRules.MinLength, nameRules.MaxLength, nameRules.Pattern));
+        Assert.Equal((0.01m, 100000m), (products.FindProperty("price")!.Rules!.Min, products.FindProperty("price")!.Rules!.Max));
+        Assert.Null(products.FindProperty("status")!.Rules);
         Assert.Equal(WriteOperations.None, model.FindSet("categories")!.Writes);
         Assert.True(model.FindSet("categories")!.FindNavigation("products")!.IsCollection);
         Assert.Equal(["Draft", "Active", "Retired"], model.FindEnum("ProductStatus")!.Members);
@@ -149,6 +153,21 @@ public sealed class RestModelTests
     [InlineData("/enums/Status", "[\"A\",\"A\"]", "duplicate member 'A'")]
     [InlineData("/enums/Status", "[\"1A\"]", "invalid or duplicate member '1A'")]
     [InlineData("/sets/0/properties/2/type", "\"string\"", "enum 'Status' isn't used")]
+    [InlineData("/sets/0/properties/1/rules", "{\"extra\":1}", "unknown key 'extra'")]
+    [InlineData("/sets/0/properties/1/rules", "{\"required\":1}", "must be true or false")]
+    [InlineData("/sets/0/properties/0/rules", "{\"required\":true}", "has rules but isn't writable")]
+    [InlineData("/sets/0/properties/4/rules", "{\"maxLength\":3}", "only strings and collections have a length")]
+    [InlineData("/sets/0/properties/1/rules", "{\"minLength\":5,\"maxLength\":3}", "0 <= minLength <= maxLength")]
+    [InlineData("/sets/0/properties/1/rules", "{\"minLength\":-1}", "0 <= minLength <= maxLength")]
+    [InlineData("/sets/0/properties/1/rules", "{\"min\":\"a\"}", "only numbers, dates and times have one")]
+    [InlineData("/sets/0/properties/2/rules", "{\"min\":1}", "must be a value of the property's type")]
+    [InlineData("/sets/0/properties/4/rules", "{\"min\":1.5}", "must be a value of the property's type")]
+    [InlineData("/sets/0/properties/4/rules", "{\"min\":null}", "must be a value of the property's type")]
+    [InlineData("/sets/0/properties/4/rules", "{\"min\":5,\"max\":1}", "min <= max")]
+    [InlineData("/sets/0/properties/4/rules", "{\"pattern\":\"x\"}", "only strings can have one")]
+    [InlineData("/sets/0/properties/1/rules", "{\"pattern\":\"\"}", "empty or longer than 500")]
+    [InlineData("/sets/0/properties/1/rules", "{\"pattern\":\"(\"}", "doesn't mean the same in .NET and JavaScript")]
+    [InlineData("/sets/0/properties/1/rules", "{\"pattern\":\"\\\\p{L}\"}", "\\p, which JavaScript only supports with the u flag")]
     public void Rejects_inconsistent_models(string location, string value, string message)
     {
         var json = Minimal();
@@ -157,6 +176,40 @@ public sealed class RestModelTests
         var exception = Assert.Throws<FormatException>(() => RestModel.Parse(json.ToJsonString()));
 
         Assert.Contains(message, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Collections_take_length_rules_and_dates_take_ranges()
+    {
+        var json = Minimal();
+        Set(json, "/sets/0/properties/2/rules", JsonNode.Parse("""{"required":true,"maxLength":2}"""));
+        Set(json, "/sets/0/properties/4/type", JsonValue.Create("dateOnly"));
+        Set(json, "/sets/0/properties/4/rules", JsonNode.Parse("""{"min":"2026-01-01"}"""));
+        Set(json, "/sets/0/navigations", new JsonArray());
+
+        var products = RestModel.Parse(json.ToJsonString()).FindSet("products")!;
+
+        Assert.Equal(2, products.FindProperty("status")!.Rules!.MaxLength);
+        Assert.Equal(new DateOnly(2026, 1, 1), products.FindProperty("categoryId")!.Rules!.Min);
+    }
+
+    [Fact]
+    public void Empty_rules_are_not_written()
+    {
+        var model = new RestModel(
+        [
+            new RestSetModel
+            {
+                Name = "products",
+                TypeName = "Product",
+                Key = ["id"],
+                Writes = WriteOperations.Insert,
+                Pagination = new RestPaginationModel(),
+                Properties = [Key("id"), new RestPropertyModel { Name = "name", Type = "string", IsWritable = true, Rules = new RestPropertyRules() }],
+            },
+        ]);
+
+        Assert.DoesNotContain("rules", model.ToJson(indented: false), StringComparison.Ordinal);
     }
 
     [Fact]

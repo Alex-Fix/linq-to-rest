@@ -27,6 +27,9 @@ public sealed class RestPropertyModel
     /// <summary>Gets whether queries may filter on the property. Default: <see langword="true"/>.</summary>
     public bool IsFilterable { get; init; } = true;
 
+    /// <summary>Gets the built-in validation rules of a writable property, or <see langword="null"/> for none.</summary>
+    public RestPropertyRules? Rules { get; init; }
+
     /// <inheritdoc/>
     public override string ToString() => Name;
 }

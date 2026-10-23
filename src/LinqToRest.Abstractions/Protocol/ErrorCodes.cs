@@ -62,4 +62,28 @@ public static class ErrorCodes
 
     /// <summary>The request isn't <c>application/json</c>.</summary>
     public const string UnsupportedMediaType = "unsupported_media_type";
+
+    /// <summary>
+    /// Batch values break validation rules (422); the <c>errors</c> member lists each one with its operation, pointer,
+    /// member and code.
+    /// </summary>
+    public const string ValidationFailed = "validation_failed";
+
+    /// <summary>A required value is missing, empty or blank.</summary>
+    public const string Required = "required";
+
+    /// <summary>A string or collection is shorter than its minimum length.</summary>
+    public const string TooShort = "too_short";
+
+    /// <summary>A string or collection is longer than its maximum length.</summary>
+    public const string TooLong = "too_long";
+
+    /// <summary>A number, date or time is outside its range.</summary>
+    public const string OutOfRange = "out_of_range";
+
+    /// <summary>A string doesn't match its pattern.</summary>
+    public const string InvalidFormat = "invalid_format";
+
+    /// <summary>The last entry of a validation problem that stopped at its error limit.</summary>
+    public const string TooManyErrors = "too_many_errors";
 }
