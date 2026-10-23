@@ -24,6 +24,8 @@ import { useSession } from "../session";
 
 type Sort = "name" | "price" | "priceDesc" | "newest";
 
+const pageSize = 24;
+
 interface Filters {
   readonly search: string;
   readonly categoryId: number | undefined;
@@ -44,7 +46,10 @@ const initialFilters: Filters = {
   sort: "name",
 };
 
-/** The product grid's query: every filter is translated to the server, nothing is filtered here. */
+/**
+ * The product grid's query: every filter is translated to the server, nothing is filtered here. It stops before
+ * paging, because a cursor (`after`) has to come before `take`.
+ */
 function productQuery(catalog: CatalogContext, filters: Filters, categories: readonly CategoryNode[]) {
   let query = catalog.products.asNoTracking();
   if (filters.search.trim() !== "") {
@@ -86,16 +91,14 @@ function productQuery(catalog: CatalogContext, filters: Filters, categories: rea
           : query.orderBy((p) => p.name);
 
   // Cards only need a few members and the first image, so that's all the server sends.
-  return sorted
-    .select((p) => ({
-      id: p.id,
-      name: p.name,
-      price: p.price,
-      inStock: p.inStock,
-      status: p.status,
-      images: p.images.where((i) => i.sortOrder.eq(0)).select((i) => i.url),
-    }))
-    .take(24);
+  return sorted.select((p) => ({
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    inStock: p.inStock,
+    status: p.status,
+    images: p.images.where((i) => i.sortOrder.eq(0)).select((i) => i.url),
+  }));
 }
 
 type ProductCard = Awaited<ReturnType<ReturnType<typeof productQuery>["toList"]>>[number];
@@ -142,6 +145,7 @@ export function Browse() {
   useEffect(() => {
     const abort = new AbortController();
     query
+      .take(pageSize)
       .toCursorPage({ includeTotalCount: true, signal: abort.signal })
       .then((result) => {
         setError(undefined);
@@ -165,6 +169,7 @@ export function Browse() {
     setLoadingMore(true);
     query
       .after(page.next)
+      .take(pageSize)
       .toCursorPage()
       .then((result) => {
         setPage({ cards: [...page.cards, ...result.items], next: result.nextCursor, total: page.total });
