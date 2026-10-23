@@ -33,6 +33,9 @@ internal sealed class SetDefinition(Type entityType)
     /// <summary>Gets the custom rules (<c>Must</c>), in the order they were added.</summary>
     public List<RuleDefinition.Custom> Rules { get; } = [];
 
+    /// <summary>Gets the validator types (<c>ValidateWith</c>), in the order they were added.</summary>
+    public List<Type> Validators { get; } = [];
+
     public MemberDefinition GetProperty(PropertyInfo property, LambdaExpression expression)
     {
         if (Members.Find(member => member.Property == property) is { } existing)

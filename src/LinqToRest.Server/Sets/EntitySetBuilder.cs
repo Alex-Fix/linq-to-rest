@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using LinqToRest.Modeling;
 using LinqToRest.Server.Internal;
+using LinqToRest.Server.Validation;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinqToRest.Server.Sets;
@@ -195,6 +196,23 @@ public sealed class EntitySetBuilder<TEntity>
         ArgumentNullException.ThrowIfNull(rule);
         var property = MemberAccess.GetProperty(member, nameof(member));
         Definition.Rules.Add(new RuleDefinition.Custom(property, entity => rule((TEntity)entity), ValidationCodes.Check(code), OnlyWhenSent: false));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a validator for inserts and updates, created once per request from its services. Not exported to
+    /// clients.
+    /// </summary>
+    /// <typeparam name="TValidator">The validator.</typeparam>
+    /// <returns>The same builder.</returns>
+    public EntitySetBuilder<TEntity> ValidateWith<TValidator>()
+        where TValidator : class, IEntityValidator<TEntity>
+    {
+        if (!Definition.Validators.Contains(typeof(TValidator)))
+        {
+            Definition.Validators.Add(typeof(TValidator));
+        }
+
         return this;
     }
 

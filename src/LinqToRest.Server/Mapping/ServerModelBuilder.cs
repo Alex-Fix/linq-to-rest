@@ -69,7 +69,8 @@ internal static class ServerModelBuilder
                     IsNullable = navigation.IsNullable,
                     ForeignKey = navigation.ForeignKey is null ? null : properties[navigation.ForeignKey],
                 })],
-                [.. set.Definition.Rules.Select(rule => ResolveRule(set, rule, properties))]);
+                [.. set.Definition.Rules.Select(rule => ResolveRule(set, rule, properties))],
+                [.. set.Definition.Validators]);
         }
 
         return new ServerModel(model, [.. mappings.Values.OrderBy(mapping => mapping.Name, StringComparer.Ordinal)], contextType, limits);
@@ -99,6 +100,11 @@ internal static class ServerModelBuilder
         {
             var isKey = member.Property is { } info && keyProperties.Contains(info);
             set.Properties.Add(ResolveProperty(set, member, isKey, enums));
+        }
+
+        if ((definition.Rules.Count > 0 || definition.Validators.Count > 0) && (definition.Writes & (WriteOperations.Insert | WriteOperations.Update)) == 0)
+        {
+            throw Invalid(name, definition.EntityType, "has Must rules or validators, but allows neither inserts nor updates, so they would never run");
         }
 
         if (definition.ConcurrencyToken is { } token)

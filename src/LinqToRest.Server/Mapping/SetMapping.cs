@@ -4,6 +4,7 @@ using LinqToRest.Modeling;
 using LinqToRest.Server.Internal;
 using LinqToRest.Server.Policies;
 using LinqToRest.Server.Query;
+using LinqToRest.Server.Validation;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinqToRest.Server.Mapping;
@@ -36,13 +37,17 @@ internal abstract class SetMapping(RestSetModel model, Type entityType)
     /// <summary>Gets the custom (<c>Must</c>) rules, in the order they were configured.</summary>
     public SetRule[] Rules { get; private set; } = [];
 
+    /// <summary>Gets the validator types (<c>ValidateWith</c>), in the order they were configured.</summary>
+    public Type[] Validators { get; private set; } = [];
+
     public SetProperty? FindProperty(string name) => _properties.GetValueOrDefault(name);
 
     public SetNavigation? FindNavigation(string name) => _navigations.GetValueOrDefault(name);
 
-    public void Initialize(SetProperty[] properties, SetNavigation[] navigations, SetRule[] rules)
+    public void Initialize(SetProperty[] properties, SetNavigation[] navigations, SetRule[] rules, Type[] validators)
     {
         Rules = rules;
+        Validators = validators;
         Properties = properties;
         Navigations = navigations;
         _properties = properties.ToDictionary(property => property.Name, StringComparer.Ordinal);
@@ -76,6 +81,9 @@ internal abstract class SetMapping(RestSetModel model, Type entityType)
 
     public abstract Task<QueryResult> ExecuteAsync(DbContext db, QueryPlan plan, CancellationToken cancellationToken);
 
+    /// <summary>Runs one validator (an <c>IEntityValidator&lt;TEntity&gt;</c> of this set) on a row.</summary>
+    public abstract ValueTask ValidateAsync(object validator, object entity, ValidationScope scope, CancellationToken cancellationToken);
+
     public override string ToString() => Name;
 }
 
@@ -84,6 +92,9 @@ internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQ
     where TEntity : class
 {
     private IQueryable<TEntity> Query(DbContext db) => source(db);
+
+    public override ValueTask ValidateAsync(object validator, object entity, ValidationScope scope, CancellationToken cancellationToken) =>
+        ((IEntityValidator<TEntity>)validator).ValidateAsync(new EntityValidationContext<TEntity>((TEntity)entity, scope), cancellationToken);
 
     public override async Task<object?> FindAsync(DbContext db, LambdaExpression? policyFilter, IReadOnlyList<object?> key, CancellationToken cancellationToken)
     {

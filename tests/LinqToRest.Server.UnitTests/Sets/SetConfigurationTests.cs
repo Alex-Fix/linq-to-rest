@@ -3,6 +3,7 @@ using LinqToRest.Server.Hosting;
 using LinqToRest.Server.Mapping;
 using LinqToRest.Server.Policies;
 using LinqToRest.Server.Sets;
+using LinqToRest.Server.Validation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -171,6 +172,24 @@ public sealed class SetConfigurationTests
         var rules = server.FindSet("products")!.Rules;
         Assert.Equal([("name", "named", false), (null, "in_stock", false)], rules.Select(rule => (rule.Member?.Name, rule.Code, rule.OnlyWhenSent)));
         Assert.False(rules[1].IsValid(new Product { Stock = -1 }));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Rules_and_validators_need_inserts_or_updates(bool validator)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Build(o => o
+            .AddSet<Product>(b =>
+            {
+                b.ToSet("products").AllowWrites(WriteOperations.Delete);
+                _ = validator ? b.ValidateWith<StockValidator>() : b.Must(p => p.Stock >= 0, "in_stock");
+            })
+            .AddSet(new CategorySet())
+            .AddSet(new SupplierSet())
+            .AddSet(new LineSet())));
+
+        Assert.Contains("allows neither inserts nor updates, so they would never run", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -365,4 +384,9 @@ public sealed class SetConfigurationTests
     }
 
     public sealed class ProductPolicy : SetPolicy<Product>;
+
+    public sealed class StockValidator : IEntityValidator<Product>
+    {
+        public ValueTask ValidateAsync(EntityValidationContext<Product> context, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    }
 }
