@@ -38,9 +38,9 @@
       "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 10, "maxPageSize": 20, "maxSkip": 100},
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
-        {"name": "name", "type": "string", "writable": true},
+        {"name": "name", "type": "string", "writable": true, "rules": {"maxLength": 100}},
         {"name": "description", "type": "string", "nullable": true, "writable": true},
-        {"name": "price", "type": "decimal", "writable": true, "sortable": true},
+        {"name": "price", "type": "decimal", "writable": true, "sortable": true, "rules": {"min": 0}},
         {"name": "status", "type": "ProductStatus", "writable": true, "sortable": true},
         {"name": "version", "type": "guid"},
         {"name": "createdAt", "type": "dateTime", "writable": true, "sortable": true},

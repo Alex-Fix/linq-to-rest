@@ -15,6 +15,7 @@ var scenarios = new (string Name, Func<Task> Run)[]
     ("projections", Projections),
     ("count and any", CountAndAny),
     ("tracking and save", TrackingAndSave),
+    ("validation", Validation),
 };
 
 var failed = 0;
@@ -155,6 +156,38 @@ static async Task TrackingAndSave()
     Check(shop.Entry(cube).State == EntityState.Unchanged, "saved state");
 }
 
+static async Task Validation()
+{
+    var (shop, http) = Create();
+    var product = new ProductDto { Name = new string('x', 101), Price = -1 };
+    shop.Products.Add(product);
+
+    var local = await Catches<RestValidationException>(() => shop.SaveChangesAsync());
+    Check(local.IsLocal && local.Errors.Select(e => (e.Member, e.Code)).SequenceEqual([("Name", "too_long"), ("Price", "out_of_range")]), "local rules");
+    Check(http.LastBody.Length == 0 && shop.Validate(product).Count == 2 && shop.Products.Rules(p => p.Name) is { MaxLength: 100 }, "nothing sent; form helpers");
+
+    product.Name = "Cube";
+    product.Price = 9.5m;
+    http.Problem("""{"type":"urn:linqtorest:error:validation_failed","title":"Invalid values.","status":422,"code":"validation_failed","pointer":"/operations","errors":[{"operation":"o0","pointer":"/operations/0/values/name","member":"name","code":"duplicate"}]}""");
+    var remote = await Catches<RestValidationException>(() => shop.SaveChangesAsync());
+    Check(!remote.IsLocal && remote.ErrorsFor(product)["Name"].SequenceEqual(["duplicate"]), "server errors");
+}
+
+static async Task<T> Catches<T>(Func<Task> action)
+    where T : Exception
+{
+    try
+    {
+        await action();
+    }
+    catch (T expected)
+    {
+        return expected;
+    }
+
+    throw new InvalidOperationException($"Check failed: expected {typeof(T).Name}.");
+}
+
 static (ShopContext Shop, StubHandler Http) Create()
 {
     var http = new StubHandler();
@@ -188,21 +221,23 @@ internal sealed class NameAndQuantities
 /// <summary>Records request bodies and answers with queued responses.</summary>
 internal sealed class StubHandler : HttpMessageHandler
 {
-    private readonly Queue<string> _responses = new();
+    private readonly Queue<(string Body, HttpStatusCode Status, string MediaType)> _responses = new();
 
     public string LastBody { get; private set; } = "";
 
     public StubHandler Respond(string body)
     {
-        _responses.Enqueue(body);
+        _responses.Enqueue((body, HttpStatusCode.OK, "application/json"));
         return this;
     }
+
+    public void Problem(string body) => _responses.Enqueue((body, HttpStatusCode.UnprocessableEntity, "application/problem+json"));
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         LastBody = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
-        var body = _responses.TryDequeue(out var response) ? response : throw new InvalidOperationException($"No response queued for {request.RequestUri}.");
-        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        var (body, status, mediaType) = _responses.TryDequeue(out var response) ? response : throw new InvalidOperationException($"No response queued for {request.RequestUri}.");
+        return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, mediaType) };
     }
 }
 

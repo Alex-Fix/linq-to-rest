@@ -8,9 +8,9 @@ public sealed class ProductSet : IEntitySetConfiguration<Product>
     public void Configure(EntitySetBuilder<Product> builder)
     {
         builder.ToSet("products").AllowWrites(WriteOperations.All);
-        builder.Property(p => p.Name);
+        builder.Property(p => p.Name).HasMaxLength(100);
         builder.Property(p => p.Description);
-        builder.Property(p => p.Price).IsSortable();
+        builder.Property(p => p.Price).IsSortable().HasMin(0m);
         builder.Property(p => p.Status).IsSortable();
         builder.HasConcurrencyToken(p => p.Version);
         builder.Property(p => p.CreatedAt).IsSortable();

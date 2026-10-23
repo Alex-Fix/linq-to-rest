@@ -231,6 +231,34 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
         Assert.Same(stale, Assert.Single(remote.Entities));
         Assert.Equal("Games", (await Host.Client().Categories.FirstAsync(c => c.Id == games.Id, Token)).Name);
     }
+
+    [Fact]
+    public async Task Rules_fail_before_sending_and_on_the_server_with_the_same_errors()
+    {
+        var client = Host.Client();
+        var local = new Product { Name = new string('x', 101), Price = -1 };
+        client.Products.Add(local);
+
+        var before = await Assert.ThrowsAsync<RestValidationException>(() => client.SaveChangesAsync(Token));
+
+        // A client built from a model without the rules sends the insert; the server finds the same errors.
+        var outdated = Host.Client(model: ClientModel.Bind(
+            RestModel.Parse(ShopClient.Model.Document.ToJson(indented: false)
+                .Replace(",\"rules\":{\"maxLength\":100}", "", StringComparison.Ordinal)
+                .Replace(",\"rules\":{\"min\":0}", "", StringComparison.Ordinal)),
+            new Dictionary<string, Type> { ["categories"] = typeof(Category), ["orderLines"] = typeof(OrderLine), ["products"] = typeof(Product) }));
+        var remote = new Product { Name = new string('x', 101), Price = -1 };
+        outdated.Products.Add(remote);
+        var after = await Assert.ThrowsAsync<RestValidationException>(() => outdated.SaveChangesAsync(Token));
+
+        Assert.True(before.IsLocal);
+        Assert.False(after.IsLocal);
+        Assert.Equal(422, after.Status);
+        Assert.Equal([("Name", "too_long"), ("Price", "out_of_range")], before.Errors.Select(error => (error.Member, error.Code)));
+        Assert.Equal(before.Errors.Select(error => (error.Member, error.Code)), after.Errors.Select(error => (error.Member, error.Code)));
+        Assert.All(after.Errors, error => Assert.Same(remote, error.Entity));
+        Assert.Equal(EntityState.Added, outdated.Entry(remote).State);
+    }
 }
 
 public sealed class SqliteEndToEndTests() : EndToEndTests(new SqliteDatabase());

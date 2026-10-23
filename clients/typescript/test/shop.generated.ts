@@ -114,9 +114,9 @@ export const shopModel = {
       writes: ["insert", "update", "delete"],
       members: [
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
-        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
+        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true, rules: { maxLength: 100 } },
         { name: "description", kind: "string", nullable: true, collection: false, filterable: true, sortable: false, writable: true },
-        { name: "price", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true },
+        { name: "price", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true, rules: { min: 0 } },
         { name: "status", kind: "enum", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
         { name: "version", kind: "guid", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
         { name: "createdAt", kind: "datetime", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
