@@ -134,12 +134,12 @@ public abstract class BatchTests(ShopDatabase database) : IAsyncLifetime
 
     public static readonly TheoryData<string, HttpStatusCode, string, string> Rejected = new()
     {
-        { """{"id":"x","op":"update","set":"products","key":{"id":1},"values":{"id":7},"token":"00000001-0000-0000-0000-000000000000"}""", HttpStatusCode.BadRequest, "not_writable", "/operations/0/values" },
-        { """{"id":"x","op":"update","set":"products","key":{"id":1},"values":{"categoryName":"x"},"token":"00000001-0000-0000-0000-000000000000"}""", HttpStatusCode.BadRequest, "not_writable", "/operations/0/values" },
-        { """{"id":"x","op":"update","set":"products","key":{"id":1},"values":{"version":"00000001-0000-0000-0000-000000000000"},"token":"00000001-0000-0000-0000-000000000000"}""", HttpStatusCode.BadRequest, "not_writable", "/operations/0/values" },
+        { """{"id":"x","op":"update","set":"products","key":{"id":1},"values":{"id":7},"token":"00000001-0000-0000-0000-000000000000"}""", HttpStatusCode.BadRequest, "not_writable", "/operations/0/values/id" },
+        { """{"id":"x","op":"update","set":"products","key":{"id":1},"values":{"categoryName":"x"},"token":"00000001-0000-0000-0000-000000000000"}""", HttpStatusCode.BadRequest, "not_writable", "/operations/0/values/categoryName" },
+        { """{"id":"x","op":"update","set":"products","key":{"id":1},"values":{"version":"00000001-0000-0000-0000-000000000000"},"token":"00000001-0000-0000-0000-000000000000"}""", HttpStatusCode.BadRequest, "not_writable", "/operations/0/values/version" },
         { """{"id":"x","op":"insert","set":"products","values":{"tenantId":2}}""", HttpStatusCode.BadRequest, "unknown_member", "/operations/0/values" },
-        { """{"id":"x","op":"insert","set":"products","values":{"price":"free"}}""", HttpStatusCode.BadRequest, "type_mismatch", "/operations/0/values" },
-        { """{"id":"x","op":"insert","set":"products","values":{"name":null}}""", HttpStatusCode.BadRequest, "type_mismatch", "/operations/0/values" },
+        { """{"id":"x","op":"insert","set":"products","values":{"price":"free"}}""", HttpStatusCode.BadRequest, "type_mismatch", "/operations/0/values/price" },
+        { """{"id":"x","op":"insert","set":"products","values":{"name":null}}""", HttpStatusCode.BadRequest, "type_mismatch", "/operations/0/values/name" },
         { """{"id":"x","op":"insert","set":"products","key":{"id":1}}""", HttpStatusCode.BadRequest, "invalid_batch", "/operations/0" },
         { """{"id":"x","op":"update","set":"products","key":{"id":1},"values":{"price":1}}""", HttpStatusCode.BadRequest, "invalid_batch", "/operations/0/token" },
         { """{"id":"x","op":"update","set":"products","values":{"price":1},"token":"00000001-0000-0000-0000-000000000000"}""", HttpStatusCode.BadRequest, "invalid_batch", "/operations/0/key" },
@@ -150,7 +150,7 @@ public abstract class BatchTests(ShopDatabase database) : IAsyncLifetime
         { """{"id":"x","op":"insert","set":"nope"}""", HttpStatusCode.NotFound, "not_found", "/operations/0/set" },
         { """{"id":"x","op":"update","set":"products","key":{"id":4},"values":{"price":1},"token":"00000004-0000-0000-0000-000000000000"}""", HttpStatusCode.NotFound, "not_found", "/operations/0" },
         { """{"id":"x","op":"update","set":"products","key":{"id":99},"values":{"price":1},"token":"00000004-0000-0000-0000-000000000000"}""", HttpStatusCode.NotFound, "not_found", "/operations/0" },
-        { """{"id":"x","op":"insert","set":"products","values":{"name":"Saw","categoryId":3}}""", HttpStatusCode.NotFound, "not_found", "/operations/0/values" },
+        { """{"id":"x","op":"insert","set":"products","values":{"name":"Saw","categoryId":3}}""", HttpStatusCode.NotFound, "not_found", "/operations/0/values/categoryId" },
     };
 
     [Theory]

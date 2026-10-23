@@ -183,16 +183,18 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
     {
         foreach (var (name, element) in operation.Values ?? new Dictionary<string, JsonElement>())
         {
+            // An unknown name came from the client and isn't echoed; known members are named by the model.
             var property = mapping.FindProperty(name) ?? throw Invalid(ErrorCodes.UnknownMember, $"{location}/values", operation);
+            var pointer = $"{location}/values/{property.Name}";
             if (!property.IsWritable)
             {
-                throw Invalid(ErrorCodes.NotWritable, $"{location}/values", operation);
+                throw Invalid(ErrorCodes.NotWritable, pointer, operation);
             }
 
-            var value = JsonValues.Read(element, property.ClrType, $"{location}/values");
+            var value = JsonValues.Read(element, property.ClrType, pointer);
             if (value is null && !property.IsNullable)
             {
-                throw Invalid(ErrorCodes.TypeMismatch, $"{location}/values", operation);
+                throw Invalid(ErrorCodes.TypeMismatch, pointer, operation);
             }
 
             property.EntityProperty!.SetValue(entity, value);
@@ -217,7 +219,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         foreach (var navigation in mapping.Navigations)
         {
             if (navigation.ForeignKey is not { } foreignKey || operation.Values?.TryGetValue(foreignKey.Name, out var element) != true
-                || JsonValues.Read(element, foreignKey.ClrType, $"{location}/values") is not { } value)
+                || JsonValues.Read(element, foreignKey.ClrType, $"{location}/values/{foreignKey.Name}") is not { } value)
             {
                 continue;
             }
@@ -225,7 +227,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
             var target = navigation.Target;
             if (await target.FindAsync(db, policies.Filter(target), [value], cancellationToken).ConfigureAwait(false) is null)
             {
-                throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values", operation);
+                throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values/{foreignKey.Name}", operation);
             }
         }
     }
