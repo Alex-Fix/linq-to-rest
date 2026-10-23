@@ -24,7 +24,7 @@ internal sealed class ChangeTracker
 
         foreach (var navigation in type.Navigations)
         {
-            var value = navigation.PropertyInfo.GetValue(entity);
+            var value = navigation.Get(entity);
             if (navigation.IsCollection && value is IList list)
             {
                 for (var index = 0; index < list.Count; index++)
@@ -34,7 +34,7 @@ internal sealed class ChangeTracker
             }
             else if (!navigation.IsCollection && value is not null)
             {
-                navigation.PropertyInfo.SetValue(entity, TrackQueried(value, navigation.Target));
+                navigation.Set(entity, TrackQueried(value, navigation.Target));
             }
         }
 
@@ -158,7 +158,7 @@ internal sealed class ChangeTracker
         for (var index = 0; index < entry.Type.Navigations.Length; index++)
         {
             var navigation = entry.Type.Navigations[index];
-            if (navigation.IsCollection && !Entry.SameItems(entry.Accessors.Navigations[index](entry.Entity), entry.NavigationSnapshot[index]))
+            if (navigation.IsCollection && !Entry.SameItems(navigation.Get(entry.Entity), entry.NavigationSnapshot[index]))
             {
                 throw new NotSupportedException($"Items were added to or removed from {navigation}. Set the foreign key of the child entity instead.");
             }
@@ -168,7 +168,7 @@ internal sealed class ChangeTracker
         for (var index = 0; index < entry.Type.Properties.Length; index++)
         {
             var property = entry.Type.Properties[index];
-            if (property.IsWritable && (entry.Forced.Contains(property) || !Entry.SameValue(entry.Accessors.Properties[index](entry.Entity), entry.Snapshot[index])))
+            if (property.IsWritable && (entry.Forced.Contains(property) || !Entry.SameValue(property.Get(entry.Entity), entry.Snapshot[index])))
             {
                 entry.Modified.Add(property);
             }
@@ -188,14 +188,14 @@ internal sealed class ChangeTracker
                 continue;
             }
 
-            var target = entry.Accessors.Navigations[index](entry.Entity);
+            var target = navigation.Get(entry.Entity);
             var original = entry.NavigationSnapshot.Length > 0 ? entry.NavigationSnapshot[index] : null;
             if (target is null)
             {
                 entry.References.Remove(foreignKey);
                 if (original is not null && foreignKey.IsNullable)
                 {
-                    foreignKey.PropertyInfo.SetValue(entry.Entity, null);
+                    foreignKey.Set(entry.Entity, null);
                 }
 
                 continue;
@@ -215,7 +215,7 @@ internal sealed class ChangeTracker
             else
             {
                 entry.References.Remove(foreignKey);
-                foreignKey.PropertyInfo.SetValue(entry.Entity, targetEntry.Key!.Value.Values[0]);
+                foreignKey.Set(entry.Entity, targetEntry.Key!.Value.Values[0]);
             }
         }
     }
@@ -227,8 +227,6 @@ internal sealed class Entry(object entity, ClientSet type)
     public object Entity { get; } = entity;
 
     public ClientSet Type { get; } = type;
-
-    public Accessors Accessors { get; } = Accessors.For(type);
 
     public EntityState State { get; set; }
 
@@ -248,8 +246,8 @@ internal sealed class Entry(object entity, ClientSet type)
 
     public void TakeSnapshot()
     {
-        Snapshot = [.. Accessors.Properties.Select(get => Copy(get(Entity)))];
-        NavigationSnapshot = [.. Accessors.Navigations.Select(get => Copy(get(Entity)))];
+        Snapshot = [.. Type.Properties.Select(property => Copy(property.Get(Entity)))];
+        NavigationSnapshot = [.. Type.Navigations.Select(navigation => Copy(navigation.Get(Entity)))];
     }
 
     public object? Original(ClientProperty property) => Snapshot[IndexOf(property)];
@@ -257,7 +255,7 @@ internal sealed class Entry(object entity, ClientSet type)
     public void ResetSnapshot(ClientProperty property)
     {
         var index = IndexOf(property);
-        Snapshot[index] = Copy(Accessors.Properties[index](Entity));
+        Snapshot[index] = Copy(Type.Properties[index].Get(Entity));
     }
 
     public static bool SameValue(object? current, object? snapshot) => current switch
@@ -301,7 +299,7 @@ internal readonly struct EntityKey(ClientSet type, object?[] values) : IEquatabl
     public object?[] Values { get; } = values;
 
     public static EntityKey Of(object entity, ClientSet type) =>
-        new(type, [.. Accessors.For(type).Key.Select(get => get(entity))]);
+        new(type, [.. type.Key.Select(property => property.Get(entity))]);
 
     public bool Equals(EntityKey other) => Type == other.Type && Values.SequenceEqual(other.Values);
 

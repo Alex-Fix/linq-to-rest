@@ -110,7 +110,7 @@ public abstract class RestDataContext
                 var saved = value.Deserialize(entry.Type.ClrType, Options.SerializerOptions)!;
                 foreach (var property in entry.Type.Properties)
                 {
-                    property.PropertyInfo.SetValue(entry.Entity, property.PropertyInfo.GetValue(saved));
+                    property.Set(entry.Entity, property.Get(saved));
                 }
             }
 
@@ -170,7 +170,7 @@ public abstract class RestDataContext
         var values = entry.State == EntityState.Deleted
             ? null
             : written.Where(property => !entry.References.ContainsKey(property))
-                .ToDictionary(property => property.WireName, property => JsonValues.ToElement(property.PropertyInfo.GetValue(entry.Entity)), StringComparer.Ordinal);
+                .ToDictionary(property => property.WireName, property => JsonValues.ToElement(property.Get(entry.Entity)), StringComparer.Ordinal);
         var key = entry.State == EntityState.Added
             ? null
             : type.Key.Select((property, index) => (property.WireName, Value: entry.Key!.Value.Values[index]))
