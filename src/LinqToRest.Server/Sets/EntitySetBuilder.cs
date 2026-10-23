@@ -150,6 +150,54 @@ public sealed class EntitySetBuilder<TEntity>
         return this;
     }
 
+    /// <summary>
+    /// Adds a server-only rule on one member: inserts and updates that send the member fail with <paramref name="code"/>
+    /// when <paramref name="rule"/> returns <see langword="false"/>. Not exported to clients.
+    /// </summary>
+    /// <param name="member">The member, exposed with <c>Property(...)</c>: <c>e =&gt; e.Price</c>.</param>
+    /// <param name="rule">Returns whether the value is valid.</param>
+    /// <param name="code">The error code: <c>snake_case</c>, at most 64 characters, not a built-in code.</param>
+    /// <typeparam name="TMember">The member type.</typeparam>
+    /// <returns>The same builder.</returns>
+    public EntitySetBuilder<TEntity> Must<TMember>(Expression<Func<TEntity, TMember>> member, Func<TMember, bool> rule, string code)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        var property = MemberAccess.GetProperty(member, nameof(member));
+        Definition.Rules.Add(new RuleDefinition.Custom(property, entity => rule((TMember)property.GetValue(entity)!), ValidationCodes.Check(code), OnlyWhenSent: true));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a server-only rule on the whole row, checked on every insert and update: it fails with
+    /// <paramref name="code"/> when <paramref name="rule"/> returns <see langword="false"/>. Not exported to clients.
+    /// </summary>
+    /// <param name="rule">Returns whether the row is valid.</param>
+    /// <param name="code">The error code: <c>snake_case</c>, at most 64 characters, not a built-in code.</param>
+    /// <returns>The same builder.</returns>
+    public EntitySetBuilder<TEntity> Must(Func<TEntity, bool> rule, string code)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        Definition.Rules.Add(new RuleDefinition.Custom(null, entity => rule((TEntity)entity), ValidationCodes.Check(code), OnlyWhenSent: false));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a server-only rule on the whole row, checked on every insert and update and reported against
+    /// <paramref name="member"/> (for example the later of two dates). Not exported to clients.
+    /// </summary>
+    /// <param name="rule">Returns whether the row is valid.</param>
+    /// <param name="code">The error code: <c>snake_case</c>, at most 64 characters, not a built-in code.</param>
+    /// <param name="member">The exposed member the error points at.</param>
+    /// <typeparam name="TMember">The member type.</typeparam>
+    /// <returns>The same builder.</returns>
+    public EntitySetBuilder<TEntity> Must<TMember>(Func<TEntity, bool> rule, string code, Expression<Func<TEntity, TMember>> member)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        var property = MemberAccess.GetProperty(member, nameof(member));
+        Definition.Rules.Add(new RuleDefinition.Custom(property, entity => rule((TEntity)entity), ValidationCodes.Check(code), OnlyWhenSent: false));
+        return this;
+    }
+
     /// <summary>Configures pagination. Default: offset and cursor, 50 per page, at most 200, skip at most 10 000.</summary>
     /// <param name="configure">Configures the pagination.</param>
     /// <returns>The same builder.</returns>

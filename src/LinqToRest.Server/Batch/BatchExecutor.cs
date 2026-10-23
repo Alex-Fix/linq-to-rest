@@ -41,6 +41,13 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
                 }
             }
 
+            // Every rule of every operation, before anything is written: a form gets all its errors at once.
+            var issues = Validate(batch);
+            if (issues.Count > 0)
+            {
+                throw RequestException.Validation(issues);
+            }
+
             try
             {
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -126,6 +133,66 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
 
         _applied.Add(operation.Id, new Applied(operation, mapping, entity));
     }
+
+    private List<ValidationIssue> Validate(BatchRequest batch)
+    {
+        var max = server.Limits.MaxValidationErrors;
+        var issues = new List<ValidationIssue>();
+        for (var index = 0; index < batch.Operations.Count && issues.Count <= max; index++)
+        {
+            var operation = batch.Operations[index];
+            if (operation.Op != BatchOperationKind.Delete)
+            {
+                Validate(_applied[operation.Id], $"/operations/{index}", issues);
+            }
+        }
+
+        return issues.Count <= max ? issues : [.. issues.Take(max), new ValidationIssue { Code = ErrorCodes.TooManyErrors }];
+    }
+
+    /// <summary>
+    /// Checks one inserted or updated row: built-in rules, then <c>Must</c> rules. An insert checks every member; an
+    /// update only the members it sends (and every row rule), so older data a newer rule rejects doesn't block an edit.
+    /// One error per member: a member that broke a rule isn't checked again.
+    /// </summary>
+    private static void Validate(Applied applied, string location, List<ValidationIssue> issues)
+    {
+        var (operation, mapping, entity) = applied;
+        var isInsert = operation.Op == BatchOperationKind.Insert;
+        var failed = new HashSet<SetProperty>();
+        foreach (var property in mapping.Properties)
+        {
+            if (property.Rules is { } rules && (isInsert || operation.Values?.ContainsKey(property.Name) == true)
+                && rules.Check(property.EntityProperty!.GetValue(entity)) is { } code)
+            {
+                failed.Add(property);
+                issues.Add(Issue(operation, location, property, code));
+            }
+        }
+
+        foreach (var rule in mapping.Rules)
+        {
+            var skipped = rule.Member is { } member
+                && (failed.Contains(member) || (rule.OnlyWhenSent && !isInsert && operation.Values?.ContainsKey(member.Name) != true));
+            if (!skipped && !rule.IsValid(entity))
+            {
+                if (rule.Member is not null)
+                {
+                    failed.Add(rule.Member);
+                }
+
+                issues.Add(Issue(operation, location, rule.Member, rule.Code));
+            }
+        }
+    }
+
+    private static ValidationIssue Issue(BatchOperation operation, string location, SetProperty? member, string code) => new()
+    {
+        Operation = operation.Id,
+        Location = member is null ? location : $"{location}/values/{member.Name}",
+        Member = member?.Name,
+        Code = code,
+    };
 
     private async Task<object> LoadAsync(SetMapping mapping, BatchOperation operation, string location, CancellationToken cancellationToken)
     {

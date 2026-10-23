@@ -117,6 +117,8 @@ public sealed class SetConfigurationTests
     [InlineData("lengthOnNumber", "only strings and collections have a length")]
     [InlineData("patternOnNumber", "only strings can have one")]
     [InlineData("nonPortablePattern", "doesn't mean the same in .NET and JavaScript")]
+    [InlineData("mustOnUnexposed", "has a Must rule on 'Stock', which isn't exposed")]
+    [InlineData("mustOnReadOnly", "has a Must rule on 'Name', which isn't writable, so it would never run")]
     public void Invalid_product_set_is_rejected(string problem, string expected)
     {
         var error = Assert.Throws<InvalidOperationException>(() => Build(o => o
@@ -152,12 +154,35 @@ public sealed class SetConfigurationTests
     }
 
     [Fact]
+    public void A_row_rule_may_point_at_a_read_only_member()
+    {
+        var server = Build(o => o
+            .AddSet<Product>(b =>
+            {
+                b.ToSet("products").AllowWrites(WriteOperations.Insert);
+                b.Property(p => p.Name).IsReadOnly();
+                b.Must(p => p.Name.Length > 0, "named", p => p.Name);
+                b.Must(p => p.Stock >= 0, "in_stock");
+            })
+            .AddSet(new CategorySet())
+            .AddSet(new SupplierSet())
+            .AddSet(new LineSet()));
+
+        var rules = server.FindSet("products")!.Rules;
+        Assert.Equal([("name", "named", false), (null, "in_stock", false)], rules.Select(rule => (rule.Member?.Name, rule.Code, rule.OnlyWhenSent)));
+        Assert.False(rules[1].IsValid(new Product { Stock = -1 }));
+    }
+
+    [Fact]
     public void Rule_arguments_are_checked_when_configured()
     {
         var builder = new EntitySetBuilder<Product>();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.Property(p => p.Name).HasMaxLength(-1));
         Assert.Throws<ArgumentException>(() => builder.Property(p => p.Name).HasPattern(""));
+        Assert.Throws<ArgumentException>(() => builder.Must(p => p.Stock > 0, "Not-Snake"));
+        Assert.Throws<ArgumentException>(() => builder.Must(p => p.Stock, stock => stock > 0, "required"));
+        Assert.Throws<ArgumentException>(() => builder.Must(p => p.Stock > 0, new string('a', 65)));
     }
 
     [Fact]
@@ -328,6 +353,13 @@ public sealed class SetConfigurationTests
                 break;
             case "nonPortablePattern":
                 b.Property(p => p.Name).HasPattern("(?i)^a");
+                break;
+            case "mustOnUnexposed":
+                b.Must(p => p.Stock, stock => stock > 0, "positive");
+                break;
+            case "mustOnReadOnly":
+                b.Property(p => p.Name).IsReadOnly();
+                b.Must(p => p.Name, name => name.Length > 0, "named");
                 break;
         }
     }

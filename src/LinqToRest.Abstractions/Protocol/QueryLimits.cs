@@ -29,4 +29,10 @@ public sealed class QueryLimits
 
     /// <summary>Gets or sets the most operations in one batch. Default: 100.</summary>
     public int MaxBatchOperations { get; set; } = 100;
+
+    /// <summary>
+    /// Gets or sets the most validation errors one <c>validation_failed</c> problem lists; a final
+    /// <c>too_many_errors</c> entry says more were found. Default: 100.
+    /// </summary>
+    public int MaxValidationErrors { get; set; } = 100;
 }

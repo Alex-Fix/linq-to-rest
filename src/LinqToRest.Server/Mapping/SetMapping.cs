@@ -33,12 +33,16 @@ internal abstract class SetMapping(RestSetModel model, Type entityType)
 
     public SetProperty? ConcurrencyToken { get; private set; }
 
+    /// <summary>Gets the custom (<c>Must</c>) rules, in the order they were configured.</summary>
+    public SetRule[] Rules { get; private set; } = [];
+
     public SetProperty? FindProperty(string name) => _properties.GetValueOrDefault(name);
 
     public SetNavigation? FindNavigation(string name) => _navigations.GetValueOrDefault(name);
 
-    public void Initialize(SetProperty[] properties, SetNavigation[] navigations)
+    public void Initialize(SetProperty[] properties, SetNavigation[] navigations, SetRule[] rules)
     {
+        Rules = rules;
         Properties = properties;
         Navigations = navigations;
         _properties = properties.ToDictionary(property => property.Name, StringComparer.Ordinal);
@@ -188,6 +192,9 @@ internal sealed class SetProperty
 
     public override string ToString() => Name;
 }
+
+/// <summary>A custom rule: <see cref="Member"/> is the property the error points at, or null for the row.</summary>
+internal sealed record SetRule(SetProperty? Member, Func<object, bool> IsValid, string Code, bool OnlyWhenSent);
 
 /// <summary>An exposed navigation to another set.</summary>
 internal sealed class SetNavigation

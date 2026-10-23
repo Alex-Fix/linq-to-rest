@@ -30,6 +30,9 @@ internal sealed class SetDefinition(Type entityType)
 
     public SetPaginationBuilder Pagination { get; } = new();
 
+    /// <summary>Gets the custom rules (<c>Must</c>), in the order they were added.</summary>
+    public List<RuleDefinition.Custom> Rules { get; } = [];
+
     public MemberDefinition GetProperty(PropertyInfo property, LambdaExpression expression)
     {
         if (Members.Find(member => member.Property == property) is { } existing)
@@ -88,6 +91,9 @@ internal sealed class RuleDefinition
         var rules = new RestPropertyRules { IsRequired = IsRequired, MinLength = MinLength, MaxLength = MaxLength, Min = Min, Max = Max, Pattern = Pattern };
         return rules.IsEmpty ? null : rules;
     }
+
+    /// <summary>A <c>Must</c> rule: <paramref name="Member"/> is the property it's about, or null for the row.</summary>
+    public sealed record Custom(PropertyInfo? Member, Func<object, bool> IsValid, string Code, bool OnlyWhenSent);
 }
 
 internal sealed class NavigationDefinition(PropertyInfo property, LambdaExpression expression, Type targetEntity, bool isCollection)

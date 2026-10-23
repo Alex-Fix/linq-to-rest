@@ -68,7 +68,8 @@ internal static class ServerModelBuilder
                     IsCollection = navigation.Definition.IsCollection,
                     IsNullable = navigation.IsNullable,
                     ForeignKey = navigation.ForeignKey is null ? null : properties[navigation.ForeignKey],
-                })]);
+                })],
+                [.. set.Definition.Rules.Select(rule => ResolveRule(set, rule, properties))]);
         }
 
         return new ServerModel(model, [.. mappings.Values.OrderBy(mapping => mapping.Name, StringComparer.Ordinal)], contextType, limits);
@@ -181,6 +182,25 @@ internal static class ServerModelBuilder
             IsSortable = member.IsSortable || isKey,
             IsFilterable = !member.IsNotFilterable,
         };
+    }
+
+    private static SetRule ResolveRule(ResolvedSet set, RuleDefinition.Custom rule, Dictionary<ResolvedProperty, SetProperty> properties)
+    {
+        if (rule.Member is not { } member)
+        {
+            return new SetRule(null, rule.IsValid, rule.Code, OnlyWhenSent: false);
+        }
+
+        var property = set.Properties.Find(property => property.Member.Property == member)
+            ?? throw Invalid(set.Name, set.Definition.EntityType, $"has a Must rule on '{member.Name}', which isn't exposed. Call Property(...)");
+
+        // A member rule runs when the batch sends the member, which only writable members can be.
+        if (rule.OnlyWhenSent && !property.IsWritable)
+        {
+            throw Invalid(set.Name, set.Definition.EntityType, $"has a Must rule on '{member.Name}', which isn't writable, so it would never run");
+        }
+
+        return new SetRule(properties[property], rule.IsValid, rule.Code, rule.OnlyWhenSent);
     }
 
     private static void ResolveNavigations(ResolvedSet set, List<ResolvedSet> sets)
