@@ -1,7 +1,7 @@
 import type { SetModel } from "./model.js";
 
 /** Where a member is used, which decides the flag the client checks before sending. */
-export type Use = "filter" | "select" | "sort";
+export type Use = "filter" | "select" | "sort" | "group" | "aggregate";
 
 /**
  * Translates one request. Lambdas are recorded as functions and only run here, so lambda variables are allocated in
@@ -17,6 +17,9 @@ export class Translator {
   }
 
   use: Use = "filter";
+
+  /** Whether an aggregate over a group is being built, where other collection lambdas aren't allowed. */
+  inGroupAggregate = false;
 
   allocate(): string {
     let name: string;

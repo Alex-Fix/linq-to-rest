@@ -40,6 +40,10 @@ export interface MemberModel {
   readonly filterable: boolean;
   readonly sortable: boolean;
   readonly writable: boolean;
+  /** Whether grouped queries may use the member as a key (`IsGroupable()`). */
+  readonly groupable?: boolean;
+  /** Whether sum, min, max and average over groups may read the member (`IsAggregatable()`). */
+  readonly aggregatable?: boolean;
   readonly rules?: MemberRules;
 }
 
