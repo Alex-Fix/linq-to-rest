@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using LinqToRest.Client.Materialization;
 using LinqToRest.Client.Tracking;
 using LinqToRest.Modeling;
 using LinqToRest.Protocol;
@@ -107,11 +108,8 @@ public abstract class RestDataContext
 
             if (item.Value is { } value)
             {
-                var saved = value.Deserialize(entry.Type.ClrType, Options.SerializerOptions)!;
-                foreach (var property in entry.Type.Properties)
-                {
-                    property.Set(entry.Entity, property.Get(saved));
-                }
+                // New keys, tokens and computed values, straight onto the tracked row.
+                RowReader.ReadInto(entry.Type, value, entry.Entity, $"/results/{item.Id}/value", navigations: false);
             }
 
             Tracker.AcceptSaved(entry);

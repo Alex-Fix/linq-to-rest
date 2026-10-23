@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+using LinqToRest.Client.Materialization;
 using LinqToRest.Client.Translation;
 using LinqToRest.Modeling;
 using LinqToRest.Protocol;
@@ -72,13 +73,22 @@ internal sealed class RestQueryProvider(RestDataContext context) : IQueryProvide
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        var items = root.GetProperty("items").Deserialize<List<T>>(context.Options.SerializerOptions)!;
-        if (query is { HasSelect: false, NoTracking: false } && typeof(T) == query.Type.ClrType)
+        var rows = root.GetProperty("items");
+        List<T> items;
+        if (!query.HasSelect && typeof(T) == query.Type.ClrType)
         {
-            for (var index = 0; index < items.Count; index++)
+            // Full rows: read through the bound delegates, then tracked unless AsNoTracking.
+            items = new List<T>(rows.GetArrayLength());
+            var index = 0;
+            foreach (var row in rows.EnumerateArray())
             {
-                items[index] = (T)context.Tracker.TrackQueried(items[index]!, query.Type);
+                var read = RowReader.Read(query.Type, row, $"/items/{index++}");
+                items.Add((T)(query.NoTracking ? read : context.Tracker.TrackQueried(read, query.Type)));
             }
+        }
+        else
+        {
+            items = rows.Deserialize<List<T>>(context.Options.SerializerOptions)!;
         }
 
         return new QueryResponse<T>(
