@@ -281,6 +281,10 @@ only, as the tests and sample do.
     so a trimmed app gets warning IL2026 where it writes one. They work: suppress the warning there, or project into
     a record through its constructor, which doesn't warn.
   - Collections in projections need `ToList()` or `ToArray()`.
+
+  The server can't be published with Native AOT or trimmed: EF Core compiles each request's query at run time, and
+  EF Core itself isn't trim-safe. For faster startup, publish it ReadyToRun (`<PublishReadyToRun>true</PublishReadyToRun>`,
+  as `samples/Catalog.Api` does).
 - **Concurrency tokens** must be EF Core concurrency tokens (`IsConcurrencyToken()` / `IsRowVersion()`); the server
   refuses to start with one that isn't.
 

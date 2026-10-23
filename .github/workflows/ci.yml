@@ -73,6 +73,10 @@ jobs:
       - name: Publish the Blazor catalog sample (Release, trimmed)
         run: dotnet publish samples/Catalog.Blazor -c Release --no-restore -o artifacts/publish/catalog-blazor
 
+      # The server can't be Native AOT (EF Core compiles each request's query at run time); the sample API ships ReadyToRun.
+      - name: Publish the catalog API (Release, ReadyToRun)
+        run: dotnet publish samples/Catalog.Api -c Release -o artifacts/publish/catalog-api
+
       # Native AOT with reflection-based JSON off: the client must publish without trim/AOT warnings and still work.
       - name: Native AOT smoke test
         run: |
