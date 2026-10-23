@@ -68,6 +68,11 @@ internal static class Evaluator
             return node is ConstantExpression ? node : Expression.Constant(Evaluate(node), node.Type);
         }
 
+        // An initializer's constructor call must stay a constructor call (new T { A = ... }), even when it has no
+        // parameters to depend on; only the assigned values are evaluated.
+        protected override Expression VisitMemberInit(MemberInitExpression node) =>
+            node.Update(node.NewExpression, node.Bindings.Select(VisitMemberBinding));
+
         private static object? Evaluate(Expression node)
         {
             // Captured variables are fields of a closure constant; read them without compiling.

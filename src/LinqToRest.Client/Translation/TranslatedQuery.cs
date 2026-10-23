@@ -18,6 +18,9 @@ internal sealed class TranslatedQuery(ClientSet type)
 
     public bool HasSelect { get; set; }
 
+    /// <summary>Gets or sets the <c>Select</c> lambda, which the projection reader follows to read the results.</summary>
+    public LambdaExpression? Selector { get; set; }
+
     public int? Skip { get; set; }
 
     public int? Take { get; set; }
@@ -100,6 +103,7 @@ internal sealed class TranslatedQuery(ClientSet type)
                 case nameof(Queryable.Select) when !selected && call.Arguments.Count == 2 && Lambda(call.Arguments[1]).Parameters.Count == 1:
                     query.Select = translator.Select(Lambda(call.Arguments[1]));
                     query.HasSelect = query.Select is not null;
+                    query.Selector = query.HasSelect ? Lambda(call.Arguments[1]) : null;
                     selected = true;
                     break;
                 default:

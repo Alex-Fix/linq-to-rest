@@ -86,9 +86,21 @@ internal sealed class RestQueryProvider(RestDataContext context) : IQueryProvide
                 items.Add((T)(query.NoTracking ? read : context.Tracker.TrackQueried(read, query.Type)));
             }
         }
+        else if (query.Selector is null)
+        {
+            // Count and Any ask for empty shapes: only how many items came back matters.
+            items = [.. rows.EnumerateArray().Select(row => (T)(object)row.Clone())];
+        }
         else
         {
-            items = rows.Deserialize<List<T>>(context.Options.SerializerOptions)!;
+            // Projections: read by following the Select lambda; never tracked.
+            var read = ProjectionReader.Create(query.Type, query.Selector!);
+            items = new List<T>(rows.GetArrayLength());
+            var index = 0;
+            foreach (var row in rows.EnumerateArray())
+            {
+                items.Add((T)read(row, $"/items/{index++}")!);
+            }
         }
 
         return new QueryResponse<T>(
