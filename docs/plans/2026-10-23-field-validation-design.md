@@ -1,5 +1,5 @@
 # Field-level validation — design
-Status: approved · Date: 2026-10-23
+Status: approved, implemented (see Implementation notes) · Date: 2026-10-23
 
 Milestone 2 of [`2026-10-20-roadmap.md`](2026-10-20-roadmap.md): "Member-level pointers for batch values" and
 "Problem → field mapping helpers".
@@ -253,6 +253,44 @@ catalog.products.rules.name;         // { required: true, maxLength: 200 }, type
   uniqueness validator, replacing the 409 "duplicate SKU" message.
 - Both editors show errors next to their fields, take required/maxlength from `Rules`, and validate as the user types.
 - README: a "Validation" section, the new codes, the 422 shape. Roadmap: both Milestone 2 items done.
+
+## Implementation notes
+
+Where the implementation differs from the sections above, this list wins.
+
+1. **Portable patterns.** .NET's `RegexOptions.ECMAScript` accepts constructs JavaScript lacks or reads differently
+   (`\p{…}`, inline options, `\A`/`\z`, comments), and its `$` also matches before a final newline, so
+   `"ABC\n"` would pass `^[A-Z]+$` on the server and fail in the browser. A small scanner in Abstractions refuses
+   non-portable constructs (also atomic groups, class subtraction, `[]`) and rewrites the two that differ for .NET:
+   `$` → `\z`, `\s`/`\S` → JavaScript's whitespace set. `RestPropertyRules.Check` is the one definition of the
+   rules, shared by the server and the .NET client.
+2. **Ranges:** `HasRange<T>(T min, T max)` plus `HasMin<T>`/`HasMax<T>` instead of nullable bounds: C# can't infer
+   `T` for `T?` parameters from `0.01m`, so the designed `HasRange(0.01m, 100_000m)` wouldn't compile.
+3. **Foreign keys set through `refs`** aren't checked by built-in rules, on the server or the clients: the value
+   exists only once the referenced insert is saved (a required foreign key would otherwise always fail). Found
+   writing the .NET client.
+4. **Order and cap:** per operation, built-ins, then `Must` rules, then validators (created once per request with
+   `ActivatorUtilities`). A member that broke a rule isn't checked by its other rules (one error per member).
+   `QueryLimits.MaxValidationErrors` (default 100) caps the list, followed by one `too_many_errors` entry. `Must`
+   rules or validators on a set without inserts or updates fail at startup; so does a member `Must` rule on a member
+   that isn't writable (it could never be sent).
+5. **API names:** the issue contract is `ValidationIssue` with `Location` (CA1720; `pointer` on the wire), read and
+   written by `BatchJson.ReadIssues`/`WriteIssues`. The .NET client returns the shared `RestPropertyRules` from
+   `RestSet<T>.Rules(...)` instead of a separate `PropertyRules`; `RestValidationException.IsTruncated` reports
+   `too_many_errors`; `ErrorsFor` lists row errors under `""`. `EntityValidationContext.Request` is the
+   `PolicyContext`.
+6. **TypeScript:** `validate` and `rules` live on the set (`catalog.products.validate(p)`), not the context: a plain
+   object doesn't know its set. The 422 contract is a shared fixture, `tests/golden/response-validation-failed.json`,
+   read by both clients' tests.
+7. **Encoding:** model documents and generated files keep .NET's default JSON escaping, so `+` in a pattern appears
+   as `\u002B` (same value).
+8. **Test models:** the golden and integration shops got lenient rules (name length, non-negative price), so the
+   generator snapshots, end-to-end tests and the Native AOT smoke app (now with a validation scenario) cover rules
+   without changing the golden request bodies. Server integration tests use their own product set with every kind
+   of rule.
+9. **Performance:** not measured yet; the `BatchExecution` and `ChangeDetection` before/after runs were stopped
+   before finishing. Without rules, a batch's extra work is one pass over its operations; with rules, one check per
+   ruled member (a cached `Regex` for patterns).
 
 ## Open questions
 
