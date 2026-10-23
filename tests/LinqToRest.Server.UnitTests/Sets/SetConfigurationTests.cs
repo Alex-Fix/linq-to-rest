@@ -119,6 +119,8 @@ public sealed class SetConfigurationTests
     [InlineData("patternOnNumber", "only strings can have one")]
     [InlineData("nonPortablePattern", "doesn't mean the same in .NET and JavaScript")]
     [InlineData("mustOnUnexposed", "has a Must rule on 'Stock', which isn't exposed")]
+    [InlineData("groupableCollection", "collections and binary values can't be group keys")]
+    [InlineData("aggregatableString", "only numbers, dates and times can be summed")]
     [InlineData("mustOnReadOnly", "has a Must rule on 'Name', which isn't writable, so it would never run")]
     public void Invalid_product_set_is_rejected(string problem, string expected)
     {
@@ -190,6 +192,31 @@ public sealed class SetConfigurationTests
             .AddSet(new LineSet())));
 
         Assert.Contains("allows neither inserts nor updates, so they would never run", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Grouping_flags_are_exported_and_bound()
+    {
+        var server = Build(o => o
+            .AddSet<Product>(b =>
+            {
+                b.ToSet("products");
+                b.Property(p => p.Status).IsGroupable();
+                b.Property(p => p.Stock).IsAggregatable().IsGroupable();
+                b.Computed("label", p => p.Name + "!").IsGroupable();
+                b.Property(p => p.Name);
+            })
+            .AddSet(new CategorySet())
+            .AddSet(new SupplierSet())
+            .AddSet(new LineSet()));
+
+        var products = server.Model.FindSet("products")!;
+        Assert.True(products.FindProperty("status") is { IsGroupable: true, IsAggregatable: false });
+        Assert.True(products.FindProperty("stock") is { IsGroupable: true, IsAggregatable: true });
+        Assert.True(products.FindProperty("label") is { IsGroupable: true });
+        Assert.True(products.FindProperty("name") is { IsGroupable: false, IsAggregatable: false });
+        Assert.Contains("\"name\": \"stock\", \"type\": \"int64\", \"groupable\": true, \"aggregatable\": true", server.Model.ToJson(), StringComparison.Ordinal);
+        Assert.True(server.FindSet("products")!.FindProperty("stock") is { IsGroupable: true, IsAggregatable: true });
     }
 
     [Fact]
@@ -372,6 +399,12 @@ public sealed class SetConfigurationTests
                 break;
             case "nonPortablePattern":
                 b.Property(p => p.Name).HasPattern("(?i)^a");
+                break;
+            case "groupableCollection":
+                b.Computed("lineIds", p => p.Lines.Select(l => l.Id).ToList()).IsGroupable();
+                break;
+            case "aggregatableString":
+                b.Property(p => p.Name).IsAggregatable();
                 break;
             case "mustOnUnexposed":
                 b.Must(p => p.Stock, stock => stock > 0, "positive");

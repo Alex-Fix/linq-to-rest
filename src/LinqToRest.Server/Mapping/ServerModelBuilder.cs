@@ -187,6 +187,8 @@ internal static class ServerModelBuilder
             IsWritable = writable,
             IsSortable = member.IsSortable || isKey,
             IsFilterable = !member.IsNotFilterable,
+            IsGroupable = member.IsGroupable,
+            IsAggregatable = member.IsAggregatable,
         };
     }
 
@@ -267,6 +269,8 @@ internal static class ServerModelBuilder
             IsSortable = property.IsSortable,
             IsFilterable = property.IsFilterable,
             Rules = property.Rules,
+            IsGroupable = property.IsGroupable,
+            IsAggregatable = property.IsAggregatable,
         })],
         Navigations = [.. set.Navigations.Select(navigation => new RestNavigationModel
         {
@@ -321,8 +325,14 @@ internal static class ServerModelBuilder
 
         public RestPropertyRules? Rules { get; init; }
 
+        public bool IsGroupable { get; init; }
+
+        public bool IsAggregatable { get; init; }
+
         public SetProperty ToSetProperty() => new()
         {
+            IsGroupable = IsGroupable,
+            IsAggregatable = IsAggregatable,
             Rules = Rules,
             Name = Name,
             Binding = Binding,

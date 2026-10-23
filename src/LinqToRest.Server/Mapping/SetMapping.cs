@@ -198,6 +198,10 @@ internal sealed class SetProperty
 
     public bool IsFilterable { get; init; }
 
+    public bool IsGroupable { get; init; }
+
+    public bool IsAggregatable { get; init; }
+
     /// <summary>Gets the built-in validation rules, or <see langword="null"/>.</summary>
     public RestPropertyRules? Rules { get; init; }
 
