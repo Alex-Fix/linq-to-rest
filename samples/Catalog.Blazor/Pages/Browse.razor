@@ -2,77 +2,108 @@
 @implements IDisposable
 @inject Session Session
 
-<div class="browse">
-    <aside>
-        <h2>Categories</h2>
-        <CategoryTree Categories="_categories" Selected="_categoryId" OnSelect="SelectCategoryAsync" />
-        <h2>Brands</h2>
-        <ul class="brands">
+<GridRow Gutter="24">
+    <GridCol Xs="24" Md="7" Lg="5">
+        <Card Title="Categories" Size="CardSize.Small">
+            <CategoryTree Categories="_categories" Selected="_categoryId" OnSelect="SelectCategoryAsync" />
+        </Card>
+        <Card Title="Brands" Size="CardSize.Small" Style="margin-top: 16px">
             @foreach (var brand in _brands)
             {
-                <li>
-                    <label>
-                        <input type="checkbox" checked="@_brandIds.Contains(brand.Id)" @onchange="e => ToggleBrandAsync(brand.Id, (bool)e.Value!)" />
-                        @brand.Name <span class="muted">(@brand.ProductCount)</span>
-                    </label>
-                </li>
+                <div>
+                    <Checkbox Checked="@_brandIds.Contains(brand.Id)" CheckedChanged="selected => ToggleBrandAsync(brand.Id, selected)">
+                        @brand.Name <Text Type="TextElementType.Secondary">@brand.ProductCount</Text>
+                    </Checkbox>
+                </div>
             }
-        </ul>
-    </aside>
-    <section>
-        <div class="filters">
-            <input type="search" placeholder="Search products" @bind="_search" @bind:event="oninput" @bind:after="ReloadAsync" />
-            <input type="number" placeholder="Min price" min="0" @bind="_minPrice" @bind:after="ReloadAsync" />
-            <input type="number" placeholder="Max price" min="0" @bind="_maxPrice" @bind:after="ReloadAsync" />
-            <label><input type="checkbox" @bind="_inStockOnly" @bind:after="ReloadAsync" /> In stock</label>
-            <select @bind="_sort" @bind:after="ReloadAsync">
-                <option value="name">Name</option>
-                <option value="price">Price: low to high</option>
-                <option value="priceDesc">Price: high to low</option>
-                <option value="newest">Newest</option>
-            </select>
-        </div>
+        </Card>
+    </GridCol>
+    <GridCol Xs="24" Md="17" Lg="19">
+        <Card Size="CardSize.Small" Style="margin-bottom: 16px">
+            <Space Wrap Size="SpaceSize.Middle">
+                <SpaceItem>
+                    <Search Placeholder="Search products" AllowClear Style="width: 260px" @bind-Value="_search" BindOnInput OnChange="_ => ReloadAsync()" />
+                </SpaceItem>
+                <SpaceItem>
+                    <AntDesign.InputNumber TValue="decimal?" Min="0" Placeholder="Min price" @bind-Value="_minPrice" OnChange="_ => ReloadAsync()" />
+                    <AntDesign.InputNumber TValue="decimal?" Min="0" Placeholder="Max price" @bind-Value="_maxPrice" OnChange="_ => ReloadAsync()" />
+                </SpaceItem>
+                <SpaceItem>
+                    <Switch @bind-Value="_inStockOnly" OnChange="_ => ReloadAsync()" /> <Text>In stock only</Text>
+                </SpaceItem>
+                <SpaceItem>
+                    <Select TItem="SortOption" TItemValue="string" DataSource="Sorts" ItemValue="item => item.Value" ItemLabel="item => item.Label"
+                            @bind-Value="_sort" OnSelectedItemChanged="_ => ReloadAsync()" Style="width: 190px" />
+                </SpaceItem>
+            </Space>
+        </Card>
         @if (_error is not null)
         {
-            <p class="error">@_error</p>
+            <Alert Type="AlertType.Error" ShowIcon="true" Message="@_error" Style="margin-bottom: 16px" />
         }
-        @if (_cards is not null)
+        @if (_cards is null)
         {
-            <p class="muted">@_total products@(Session.IsEditor ? " (including drafts and discontinued)" : "")</p>
-            <ul class="grid">
-                @foreach (var card in _cards)
-                {
-                    <li class="card">
-                        <a href="products/@card.Id">
-                            @if (card.Images.Count > 0)
-                            {
-                                <img src="@card.Images[0]" alt="" />
-                            }
-                            else
-                            {
-                                <div class="noimage"></div>
-                            }
-                            <span class="name">@card.Name</span>
-                        </a>
-                        <span class="price">@card.Price.ToString("F2")</span>
-                        @if (!card.InStock)
-                        {
-                            <span class="badge">Out of stock</span>
-                        }
-                        @if (card.Status != ProductStatus.Active)
-                        {
-                            <span class="badge draft">@card.Status</span>
-                        }
-                    </li>
-                }
-            </ul>
+            <Skeleton Active />
+        }
+        else
+        {
+            <Paragraph Type="TextElementType.Secondary">@_total products@(Session.IsEditor ? " (including drafts and discontinued)" : "")</Paragraph>
+            @if (_cards.Count == 0)
+            {
+                <Empty Description="@("No products match these filters")" />
+            }
+            else
+            {
+                <GridRow Gutter="(16, 16)">
+                    @foreach (var card in _cards)
+                    {
+                        <GridCol Xs="24" Sm="12" Xl="8" Xxl="6">
+                            <a href="products/@card.Id">
+                                <Card Hoverable Class="product-card">
+                                    <Cover>
+                                        @if (card.Images.Count > 0)
+                                        {
+                                            <img src="@card.Images[0]" alt="" />
+                                        }
+                                        else
+                                        {
+                                            <div class="placeholder"><Icon Type="picture" /></div>
+                                        }
+                                    </Cover>
+                                    <ChildContent>
+                                        <CardMeta Title="@card.Name">
+                                            <DescriptionTemplate><Text Strong>@card.Price.ToString("F2")</Text></DescriptionTemplate>
+                                        </CardMeta>
+                                        <div style="margin-top: 8px">
+                                            @if (card.InStock)
+                                            {
+                                                <Tag Color="TagColor.Green">In stock</Tag>
+                                            }
+                                            else
+                                            {
+                                                <Tag>Out of stock</Tag>
+                                            }
+                                            @if (card.Status != ProductStatus.Active)
+                                            {
+                                                <Tag Color="@(card.Status == ProductStatus.Draft ? TagColor.Gold : TagColor.Red)">@card.Status</Tag>
+                                            }
+                                        </div>
+                                    </ChildContent>
+                                </Card>
+                            </a>
+                        </GridCol>
+                    }
+                </GridRow>
+            }
             @if (_next is not null)
             {
-                <button type="button" disabled="@_loadingMore" @onclick="LoadMoreAsync">@(_loadingMore ? "Loading…" : "Load more")</button>
+                <div style="text-align: center; margin-top: 24px">
+                    <Button Loading="_loadingMore" OnClick="LoadMoreAsync">Load more</Button>
+                </div>
             }
         }
-    </section>
-</div>
+    </GridCol>
+</GridRow>
 
 @code {
     private List<CategoryNode> _categories = [];
@@ -91,6 +122,16 @@
     private decimal? _maxPrice;
     private bool _inStockOnly;
     private string _sort = "name";
+
+    private sealed record SortOption(string Value, string Label);
+
+    private static readonly SortOption[] Sorts =
+    [
+        new("name", "Name"),
+        new("price", "Price: low to high"),
+        new("priceDesc", "Price: high to low"),
+        new("newest", "Newest"),
+    ];
 
     protected override async Task OnInitializedAsync()
     {

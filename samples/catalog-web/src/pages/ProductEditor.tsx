@@ -1,3 +1,5 @@
+import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Col, Form, Input, InputNumber, Result, Row, Select, Skeleton, Space } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { RestConcurrencyError } from "linqtorest";
@@ -167,11 +169,15 @@ export function ProductEditor() {
   }, [catalog, id]);
 
   if (!isEditor) {
-    return <p>Sign in as an editor to change products.</p>;
+    return <Result status="403" title="Editors only" subTitle="Sign in as an editor to change products." />;
   }
 
   if (form === undefined || options === undefined) {
-    return error === undefined ? <p className="muted">Loading…</p> : <p className="error">{error}</p>;
+    return error === undefined ? (
+      <Skeleton active paragraph={{ rows: 10 }} />
+    ) : (
+      <Alert type="error" showIcon title={error} />
+    );
   }
 
   const update = (change: Partial<Form>) => {
@@ -225,171 +231,178 @@ export function ProductEditor() {
   };
 
   return (
-    <form
-      className="editor"
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit(loaded);
-      }}
+    <Card
+      title={id === undefined ? "New product" : `Edit ${loaded?.product.name ?? ""}`}
+      style={{ maxWidth: 900, margin: "0 auto" }}
     >
-      <h1>{id === undefined ? "New product" : `Edit ${loaded?.product.name ?? ""}`}</h1>
-      <label>
-        SKU
-        <input
-          required
-          value={form.sku}
-          onChange={(event) => {
-            update({ sku: event.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Name
-        <input
-          required
-          value={form.name}
-          onChange={(event) => {
-            update({ name: event.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Description
-        <textarea
-          value={form.description}
-          onChange={(event) => {
-            update({ description: event.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Price
-        <input
-          type="number"
-          min={0}
-          step="0.01"
-          value={form.price}
-          onChange={(event) => {
-            update({ price: event.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Stock
-        <input
-          type="number"
-          min={0}
-          value={form.stock}
-          onChange={(event) => {
-            update({ stock: event.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Status
-        <select
-          value={form.status}
-          onChange={(event) => {
-            update({ status: event.target.value as ProductStatus });
-          }}
-        >
-          <option>Draft</option>
-          <option>Active</option>
-          <option>Discontinued</option>
-        </select>
-      </label>
-      <label>
-        Category
-        <select
-          value={form.categoryId}
-          onChange={(event) => {
-            update({ categoryId: Number(event.target.value) });
-          }}
-        >
-          {options.categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Brand
-        <select
-          value={form.brandId}
-          onChange={(event) => {
-            update({ brandId: Number(event.target.value) });
-          }}
-        >
-          {options.brands.map((brand) => (
-            <option key={brand.id} value={brand.id}>
-              {brand.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <fieldset>
-        <legend>Images (the first one is the card image)</legend>
-        {images.map((row, index) => (
-          <div key={row.key} className="image-row">
-            <input
-              type="url"
-              required
-              value={row.url}
-              onChange={(event) => {
-                update({
-                  images: images.map((other) =>
-                    other.key === row.key ? { ...other, url: event.target.value } : other,
-                  ),
-                });
-              }}
-            />
-            <button
-              type="button"
-              disabled={index === 0}
+      <Form
+        layout="vertical"
+        onFinish={() => {
+          submit(loaded);
+        }}
+      >
+        <Row gutter={16}>
+          <Col xs={24} md={8}>
+            <Form.Item label="SKU" required>
+              <Input
+                value={form.sku}
+                onChange={(event) => {
+                  update({ sku: event.target.value });
+                }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={16}>
+            <Form.Item label="Name" required>
+              <Input
+                value={form.name}
+                onChange={(event) => {
+                  update({ name: event.target.value });
+                }}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item label="Description">
+          <Input.TextArea
+            rows={3}
+            value={form.description}
+            onChange={(event) => {
+              update({ description: event.target.value });
+            }}
+          />
+        </Form.Item>
+        <Row gutter={16}>
+          <Col xs={12} md={6}>
+            <Form.Item label="Price">
+              <InputNumber
+                style={{ width: "100%" }}
+                min={0}
+                step={0.01}
+                value={Number(form.price)}
+                onChange={(value) => {
+                  update({ price: String(value ?? 0) });
+                }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={6}>
+            <Form.Item label="Stock">
+              <InputNumber
+                style={{ width: "100%" }}
+                min={0}
+                value={Number(form.stock)}
+                onChange={(value) => {
+                  update({ stock: String(value ?? 0) });
+                }}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item label="Status">
+              <Select<ProductStatus>
+                value={form.status}
+                onChange={(status) => {
+                  update({ status });
+                }}
+                options={(["Draft", "Active", "Discontinued"] as const).map((status) => ({
+                  value: status,
+                  label: status,
+                }))}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} md={12}>
+            <Form.Item label="Category">
+              <Select
+                showSearch={{ optionFilterProp: "label" }}
+                value={form.categoryId}
+                onChange={(categoryId) => {
+                  update({ categoryId });
+                }}
+                options={options.categories.map((category) => ({ value: category.id, label: category.name }))}
+              />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={12}>
+            <Form.Item label="Brand">
+              <Select
+                value={form.brandId}
+                onChange={(brandId) => {
+                  update({ brandId });
+                }}
+                options={options.brands.map((brand) => ({ value: brand.id, label: brand.name }))}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item label="Images" extra="The first image is the card image.">
+          <Space orientation="vertical" style={{ width: "100%" }}>
+            {images.map((row, index) => (
+              <Space.Compact key={row.key} style={{ width: "100%" }}>
+                <Input
+                  type="url"
+                  placeholder="https://…"
+                  value={row.url}
+                  onChange={(event) => {
+                    update({
+                      images: images.map((other) =>
+                        other.key === row.key ? { ...other, url: event.target.value } : other,
+                      ),
+                    });
+                  }}
+                />
+                <Button
+                  icon={<ArrowUpOutlined />}
+                  disabled={index === 0}
+                  onClick={() => {
+                    move(index, -1);
+                  }}
+                />
+                <Button
+                  icon={<ArrowDownOutlined />}
+                  disabled={index === images.length - 1}
+                  onClick={() => {
+                    move(index, 1);
+                  }}
+                />
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => {
+                    update({ images: images.filter((other) => other.key !== row.key) });
+                  }}
+                />
+              </Space.Compact>
+            ))}
+            <Button
+              type="dashed"
+              block
+              icon={<PlusOutlined />}
               onClick={() => {
-                move(index, -1);
+                update({ images: [...images, { key: crypto.randomUUID(), id: undefined, url: "" }] });
               }}
             >
-              ↑
-            </button>
-            <button
-              type="button"
-              disabled={index === images.length - 1}
-              onClick={() => {
-                move(index, 1);
-              }}
-            >
-              ↓
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                update({ images: images.filter((other) => other.key !== row.key) });
-              }}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => {
-            update({ images: [...images, { key: crypto.randomUUID(), id: undefined, url: "" }] });
-          }}
-        >
-          Add image
-        </button>
-      </fieldset>
-      {error !== undefined && <p className="error">{error}</p>}
-      {conflict && (
-        <button type="button" onClick={reloadAndReapply} disabled={saving}>
-          Reload and reapply my changes
-        </button>
-      )}
-      <button type="submit" disabled={saving}>
-        {saving ? "Saving…" : "Save"}
-      </button>
-    </form>
+              Add image
+            </Button>
+          </Space>
+        </Form.Item>
+        {error !== undefined && (
+          <Alert type={conflict ? "warning" : "error"} showIcon title={error} style={{ marginBottom: 16 }} />
+        )}
+        <Space>
+          <Button type="primary" htmlType="submit" loading={saving}>
+            Save
+          </Button>
+          {conflict && (
+            <Button icon={<ReloadOutlined />} onClick={reloadAndReapply} disabled={saving}>
+              Reload and reapply my changes
+            </Button>
+          )}
+        </Space>
+      </Form>
+    </Card>
   );
 }

@@ -1,3 +1,21 @@
+import { EditOutlined, PictureOutlined } from "@ant-design/icons";
+import {
+  Alert,
+  Breadcrumb,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Empty,
+  Image,
+  List,
+  Result,
+  Row,
+  Skeleton,
+  Space,
+  Tag,
+  Typography,
+} from "antd";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { Product } from "../catalog.generated";
@@ -48,47 +66,98 @@ export function ProductPage() {
   }, [catalog, id]);
 
   if (error !== undefined) {
-    return <p className="error">{error}</p>;
+    return <Alert type="error" showIcon title={error} />;
   }
 
   if (product === undefined) {
-    return <p className="muted">Loading…</p>;
+    return <Skeleton active paragraph={{ rows: 8 }} />;
   }
 
   if (product === null) {
-    return <p>This product doesn't exist, or you can't see it.</p>;
+    return (
+      <Result
+        status="404"
+        title="Product not found"
+        subTitle="It doesn't exist, or you can't see it."
+        extra={<Link to="/">Back to the catalog</Link>}
+      />
+    );
   }
 
   const images = [...product.images].sort((left, right) => left.sortOrder - right.sortOrder);
   return (
-    <article className="product">
-      <p className="muted">
-        {product.category?.name} · {product.brand?.name} · {product.sku}
-      </p>
-      <h1>{product.name}</h1>
-      {product.status !== "Active" && <span className="badge draft">{product.status}</span>}
-      <p className="price">{product.price.toFixed(2)}</p>
-      <p>{product.inStock ? `${String(product.stock)} in stock` : "Out of stock"}</p>
-      {product.description !== null && <p>{product.description}</p>}
-      {product.tags.length > 0 && <p className="muted">Tags: {product.tags.join(", ")}</p>}
-      <div className="gallery">
-        {images.map((image) => (
-          <img key={image.id} src={image.url} alt="" />
-        ))}
-      </div>
-      {isEditor && <Link to={`/products/${String(product.id)}/edit`}>Edit</Link>}
+    <>
+      <Breadcrumb
+        style={{ marginBottom: 16 }}
+        items={[{ title: <Link to="/">Catalog</Link> }, { title: product.category?.name }, { title: product.name }]}
+      />
+      <Row gutter={32}>
+        <Col xs={24} lg={12}>
+          <Card>
+            {images.length === 0 ? (
+              <Empty image={<PictureOutlined style={{ fontSize: 48, color: "#bfbfbf" }} />} description="No images" />
+            ) : (
+              <Image.PreviewGroup>
+                <Space wrap>
+                  {images.map((image, index) => (
+                    <Image key={image.id} src={image.url} width={index === 0 ? "100%" : 120} alt="" />
+                  ))}
+                </Space>
+              </Image.PreviewGroup>
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+            <Space align="center" wrap>
+              <Typography.Title level={2} style={{ margin: 0 }}>
+                {product.name}
+              </Typography.Title>
+              {product.status !== "Active" && (
+                <Tag color={product.status === "Draft" ? "gold" : "red"}>{product.status}</Tag>
+              )}
+            </Space>
+            <Typography.Title level={3} type="success" style={{ margin: 0 }}>
+              {product.price.toFixed(2)}
+            </Typography.Title>
+            {product.description !== null && <Typography.Paragraph>{product.description}</Typography.Paragraph>}
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="SKU">{product.sku}</Descriptions.Item>
+              <Descriptions.Item label="Brand">{product.brand?.name}</Descriptions.Item>
+              <Descriptions.Item label="Category">{product.category?.name}</Descriptions.Item>
+              <Descriptions.Item label="Availability">
+                {product.inStock ? <Tag color="green">{product.stock} in stock</Tag> : <Tag>Out of stock</Tag>}
+              </Descriptions.Item>
+              {product.tags.length > 0 && (
+                <Descriptions.Item label="Tags">
+                  {product.tags.map((tag) => (
+                    <Tag key={tag}>{tag}</Tag>
+                  ))}
+                </Descriptions.Item>
+              )}
+            </Descriptions>
+            {isEditor && (
+              <Link to={`/products/${String(product.id)}/edit`}>
+                <Button type="primary" icon={<EditOutlined />}>
+                  Edit
+                </Button>
+              </Link>
+            )}
+          </Space>
+        </Col>
+      </Row>
       {related.length > 0 && (
-        <>
-          <h2>More in this category</h2>
-          <ul>
-            {related.map((item) => (
-              <li key={item.id}>
-                <Link to={`/products/${String(item.id)}`}>{item.name}</Link> {item.price.toFixed(2)}
-              </li>
-            ))}
-          </ul>
-        </>
+        <Card title="More in this category" style={{ marginTop: 24 }}>
+          <List
+            dataSource={related}
+            renderItem={(item) => (
+              <List.Item extra={<Typography.Text strong>{item.price.toFixed(2)}</Typography.Text>}>
+                <Link to={`/products/${String(item.id)}`}>{item.name}</Link>
+              </List.Item>
+            )}
+          />
+        </Card>
       )}
-    </article>
+    </>
   );
 }

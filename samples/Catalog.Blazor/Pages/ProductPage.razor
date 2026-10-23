@@ -4,56 +4,102 @@
 
 @if (_error is not null)
 {
-    <p class="error">@_error</p>
+    <Alert Type="AlertType.Error" ShowIcon="true" Message="@_error" />
 }
 else if (!_loaded)
 {
-    <p class="muted">Loading…</p>
+    <Skeleton Active />
 }
 else if (_product is null)
 {
-    <p>This product doesn't exist, or you can't see it.</p>
+    <Result Status="ResultStatus.Http404" Title="Product not found" SubTitle="It doesn't exist, or you can't see it." />
 }
 else
 {
-    <article class="product">
-        <p class="muted">@_product.Category?.Name · @_product.Brand?.Name · @_product.Sku</p>
-        <h1>@_product.Name</h1>
-        @if (_product.Status != ProductStatus.Active)
-        {
-            <span class="badge draft">@_product.Status</span>
-        }
-        <p class="price">@_product.Price.ToString("F2")</p>
-        <p>@(_product.InStock ? $"{_product.Stock} in stock" : "Out of stock")</p>
-        @if (_product.Description is not null)
-        {
-            <p>@_product.Description</p>
-        }
-        @if (_product.Tags.Count > 0)
-        {
-            <p class="muted">Tags: @string.Join(", ", _product.Tags)</p>
-        }
-        <div class="gallery">
-            @foreach (var image in _product.Images.OrderBy(i => i.SortOrder))
-            {
-                <img src="@image.Url" alt="" />
-            }
-        </div>
-        @if (Session.IsEditor)
-        {
-            <a href="products/@_product.Id/edit">Edit</a>
-        }
-        @if (_related.Count > 0)
-        {
-            <h2>More in this category</h2>
-            <ul>
-                @foreach (var item in _related)
+    <Breadcrumb Style="margin-bottom: 16px">
+        <BreadcrumbItem Href="">Catalog</BreadcrumbItem>
+        <BreadcrumbItem>@_product.Category?.Name</BreadcrumbItem>
+        <BreadcrumbItem>@_product.Name</BreadcrumbItem>
+    </Breadcrumb>
+    <GridRow Gutter="32">
+        <GridCol Xs="24" Lg="12">
+            <Card>
+                @if (_product.Images.Count == 0)
                 {
-                    <li><a href="products/@item.Id">@item.Name</a> @item.Price.ToString("F2")</li>
+                    <Empty Description="@("No images")" />
                 }
-            </ul>
-        }
-    </article>
+                else
+                {
+                    <ImagePreviewGroup>
+                        <Space Wrap>
+                            @foreach (var (image, index) in _product.Images.OrderBy(i => i.SortOrder).Select((image, index) => (image, index)))
+                            {
+                                <SpaceItem><Image Src="@image.Url" Width="@(index == 0 ? "100%" : "120px")" /></SpaceItem>
+                            }
+                        </Space>
+                    </ImagePreviewGroup>
+                }
+            </Card>
+        </GridCol>
+        <GridCol Xs="24" Lg="12">
+            <Space Direction="SpaceDirection.Vertical" Size="SpaceSize.Middle" Style="width: 100%">
+                <SpaceItem>
+                    <Title Level="2" Style="margin: 0">@_product.Name</Title>
+                    @if (_product.Status != ProductStatus.Active)
+                    {
+                        <Tag Color="@(_product.Status == ProductStatus.Draft ? TagColor.Gold : TagColor.Red)">@_product.Status</Tag>
+                    }
+                </SpaceItem>
+                <SpaceItem><Title Level="3" Type="TextElementType.Success" Style="margin: 0">@_product.Price.ToString("F2")</Title></SpaceItem>
+                @if (_product.Description is not null)
+                {
+                    <SpaceItem><Paragraph>@_product.Description</Paragraph></SpaceItem>
+                }
+                <SpaceItem>
+                    <Descriptions Bordered Column="1" Size="DescriptionsSize.Small">
+                        <DescriptionsItem Title="SKU">@_product.Sku</DescriptionsItem>
+                        <DescriptionsItem Title="Brand">@_product.Brand?.Name</DescriptionsItem>
+                        <DescriptionsItem Title="Category">@_product.Category?.Name</DescriptionsItem>
+                        <DescriptionsItem Title="Availability">
+                            @if (_product.InStock)
+                            {
+                                <Tag Color="TagColor.Green">@_product.Stock in stock</Tag>
+                            }
+                            else
+                            {
+                                <Tag>Out of stock</Tag>
+                            }
+                        </DescriptionsItem>
+                        @if (_product.Tags.Count > 0)
+                        {
+                            <DescriptionsItem Title="Tags">
+                                @foreach (var tag in _product.Tags)
+                                {
+                                    <Tag>@tag</Tag>
+                                }
+                            </DescriptionsItem>
+                        }
+                    </Descriptions>
+                </SpaceItem>
+                @if (Session.IsEditor)
+                {
+                    <SpaceItem>
+                        <a href="products/@_product.Id/edit"><Button Type="ButtonType.Primary" Icon="edit">Edit</Button></a>
+                    </SpaceItem>
+                }
+            </Space>
+        </GridCol>
+    </GridRow>
+    @if (_related.Count > 0)
+    {
+        <Card Title="More in this category" Style="margin-top: 24px">
+            <AntList DataSource="_related" TItem="RelatedRow">
+                <ListItem Extra="@PriceText(context.Price)">
+                    <a href="products/@context.Id">@context.Name</a>
+                </ListItem>
+            </AntList>
+        </Card>
+    }
 }
 
 @code {
@@ -105,4 +151,6 @@ else
     }
 
     private sealed record RelatedRow(int Id, string Name, decimal Price);
+
+    private static RenderFragment PriceText(decimal price) => builder => builder.AddContent(0, price.ToString("F2", System.Globalization.CultureInfo.CurrentCulture));
 }

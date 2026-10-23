@@ -13,6 +13,8 @@
     "check": "npm run format && npm run lint && npm run typecheck && npm run build"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.3.4",
+    "antd": "^6.6.7",
     "linqtorest": "file:../../clients/typescript",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

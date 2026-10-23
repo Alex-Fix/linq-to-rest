@@ -1,3 +1,21 @@
+import { PictureOutlined } from "@ant-design/icons";
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  Col,
+  Empty,
+  Input,
+  InputNumber,
+  Row,
+  Select,
+  Skeleton,
+  Space,
+  Switch,
+  Tag,
+  Typography,
+} from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import type { CatalogContext } from "../catalog.generated";
@@ -80,14 +98,14 @@ function productQuery(catalog: CatalogContext, filters: Filters, categories: rea
     .take(24);
 }
 
-type Card = Awaited<ReturnType<ReturnType<typeof productQuery>["toList"]>>[number];
+type ProductCard = Awaited<ReturnType<ReturnType<typeof productQuery>["toList"]>>[number];
 
 export function Browse() {
   const { catalog, isEditor } = useSession();
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [brands, setBrands] = useState<{ id: number; name: string; productCount: number }[]>([]);
-  const [page, setPage] = useState<{ cards: Card[]; next: string | undefined; total: number | undefined }>();
+  const [page, setPage] = useState<{ cards: ProductCard[]; next: string | undefined; total: number | undefined }>();
   const [error, setError] = useState<string>();
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -164,115 +182,143 @@ export function Browse() {
   };
 
   return (
-    <div className="browse">
-      <aside>
-        <h2>Categories</h2>
-        <CategoryTree
-          categories={categories}
-          selected={filters.categoryId}
-          onSelect={(categoryId) => {
-            update({ categoryId });
-          }}
-        />
-        <h2>Brands</h2>
-        <ul className="brands">
-          {brands.map((brand) => (
-            <li key={brand.id}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={filters.brandIds.includes(brand.id)}
-                  onChange={(event) => {
-                    update({
-                      brandIds: event.target.checked
-                        ? [...filters.brandIds, brand.id]
-                        : filters.brandIds.filter((id) => id !== brand.id),
-                    });
-                  }}
-                />
-                {brand.name} <span className="muted">({brand.productCount})</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      </aside>
-      <section>
-        <div className="filters">
-          <input
-            type="search"
-            placeholder="Search products"
-            value={filters.search}
-            onChange={(event) => {
-              update({ search: event.target.value });
+    <Row gutter={24}>
+      <Col xs={24} md={7} lg={5}>
+        <Card title="Categories" size="small">
+          <CategoryTree
+            categories={categories}
+            selected={filters.categoryId}
+            onSelect={(categoryId) => {
+              update({ categoryId });
             }}
           />
-          <input
-            type="number"
-            placeholder="Min price"
-            min={0}
-            value={filters.minPrice ?? ""}
-            onChange={(event) => {
-              update({ minPrice: event.target.value === "" ? undefined : Number(event.target.value) });
+        </Card>
+        <Card title="Brands" size="small" style={{ marginTop: 16 }}>
+          <Checkbox.Group
+            style={{ display: "flex", flexDirection: "column", gap: 4 }}
+            value={[...filters.brandIds]}
+            onChange={(values) => {
+              update({ brandIds: values });
             }}
+            options={brands.map((brand) => ({
+              value: brand.id,
+              label: (
+                <span>
+                  {brand.name} <Typography.Text type="secondary">{brand.productCount}</Typography.Text>
+                </span>
+              ),
+            }))}
           />
-          <input
-            type="number"
-            placeholder="Max price"
-            min={0}
-            value={filters.maxPrice ?? ""}
-            onChange={(event) => {
-              update({ maxPrice: event.target.value === "" ? undefined : Number(event.target.value) });
-            }}
-          />
-          <label>
-            <input
-              type="checkbox"
-              checked={filters.inStockOnly}
+        </Card>
+      </Col>
+      <Col xs={24} md={17} lg={19}>
+        <Card size="small" style={{ marginBottom: 16 }}>
+          <Space wrap size="middle">
+            <Input.Search
+              allowClear
+              placeholder="Search products"
+              style={{ width: 260 }}
+              value={filters.search}
               onChange={(event) => {
-                update({ inStockOnly: event.target.checked });
+                update({ search: event.target.value });
               }}
             />
-            In stock
-          </label>
-          <select
-            value={filters.sort}
-            onChange={(event) => {
-              update({ sort: event.target.value as Sort });
-            }}
-          >
-            <option value="name">Name</option>
-            <option value="price">Price: low to high</option>
-            <option value="priceDesc">Price: high to low</option>
-            <option value="newest">Newest</option>
-          </select>
-        </div>
-        {error !== undefined && <p className="error">{error}</p>}
-        {page !== undefined && (
+            <Space.Compact>
+              <InputNumber
+                min={0}
+                placeholder="Min price"
+                value={filters.minPrice ?? null}
+                onChange={(value) => {
+                  update({ minPrice: value ?? undefined });
+                }}
+              />
+              <InputNumber
+                min={0}
+                placeholder="Max price"
+                value={filters.maxPrice ?? null}
+                onChange={(value) => {
+                  update({ maxPrice: value ?? undefined });
+                }}
+              />
+            </Space.Compact>
+            <Space>
+              <Switch
+                checked={filters.inStockOnly}
+                onChange={(inStockOnly) => {
+                  update({ inStockOnly });
+                }}
+              />
+              <Typography.Text>In stock only</Typography.Text>
+            </Space>
+            <Select<Sort>
+              style={{ width: 190 }}
+              value={filters.sort}
+              onChange={(sort) => {
+                update({ sort });
+              }}
+              options={[
+                { value: "name", label: "Name" },
+                { value: "price", label: "Price: low to high" },
+                { value: "priceDesc", label: "Price: high to low" },
+                { value: "newest", label: "Newest" },
+              ]}
+            />
+          </Space>
+        </Card>
+        {error !== undefined && <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} />}
+        {page === undefined ? (
+          <Skeleton active />
+        ) : (
           <>
-            <p className="muted">
+            <Typography.Paragraph type="secondary">
               {page.total} products{isEditor ? " (including drafts and discontinued)" : ""}
-            </p>
-            <ul className="grid">
-              {page.cards.map((card) => (
-                <li key={card.id} className="card">
-                  <Link to={`/products/${String(card.id)}`}>
-                    {card.images[0] !== undefined ? <img src={card.images[0]} alt="" /> : <div className="noimage" />}
-                    <span className="name">{card.name}</span>
-                  </Link>
-                  <span className="price">{card.price.toFixed(2)}</span>
-                  {!card.inStock && <span className="badge">Out of stock</span>}
-                  {card.status !== "Active" && <span className="badge draft">{card.status}</span>}
-                </li>
-              ))}
-            </ul>
+            </Typography.Paragraph>
+            {page.cards.length === 0 ? (
+              <Empty description="No products match these filters" />
+            ) : (
+              <Row gutter={[16, 16]}>
+                {page.cards.map((card) => (
+                  <Col key={card.id} xs={24} sm={12} xl={8} xxl={6}>
+                    <Link to={`/products/${String(card.id)}`}>
+                      <Card
+                        hoverable
+                        className="product-card"
+                        cover={
+                          card.images[0] !== undefined ? (
+                            <img src={card.images[0]} alt="" />
+                          ) : (
+                            <div className="placeholder">
+                              <PictureOutlined />
+                            </div>
+                          )
+                        }
+                      >
+                        <Card.Meta
+                          title={card.name}
+                          description={<Typography.Text strong>{card.price.toFixed(2)}</Typography.Text>}
+                        />
+                        <Space size={4} style={{ marginTop: 8 }} wrap>
+                          {card.inStock ? <Tag color="green">In stock</Tag> : <Tag>Out of stock</Tag>}
+                          {card.status !== "Active" && (
+                            <Tag color={card.status === "Draft" ? "gold" : "red"}>{card.status}</Tag>
+                          )}
+                        </Space>
+                      </Card>
+                    </Link>
+                  </Col>
+                ))}
+              </Row>
+            )}
             {page.next !== undefined && (
-              <button type="button" onClick={loadMore} disabled={loadingMore}>
-                {loadingMore ? "Loading…" : "Load more"}
-              </button>
+              <div style={{ textAlign: "center", marginTop: 24 }}>
+                <Button onClick={loadMore} loading={loadingMore}>
+                  Load more
+                </Button>
+              </div>
             )}
           </>
         )}
-      </section>
-    </div>
+      </Col>
+    </Row>
   );
 }

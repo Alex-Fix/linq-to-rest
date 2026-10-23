@@ -6,6 +6,7 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 
 var api = new Uri(new Uri(builder.Configuration["CatalogApi"] ?? "http://localhost:5095/"), "api/");
+builder.Services.AddAntDesign();
 builder.Services.AddSingleton<Session>();
 builder.Services.AddTransient<BearerTokenHandler>();
 

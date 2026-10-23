@@ -5,80 +5,84 @@
 
 @if (!Session.IsEditor)
 {
-    <p>Sign in as an editor to change products.</p>
+    <Result Status="ResultStatus.Http403" Title="Editors only" SubTitle="Sign in as an editor to change products." />
 }
 else if (_form is null)
 {
     @if (_error is null)
     {
-        <p class="muted">Loading…</p>
+        <Skeleton Active />
     }
     else
     {
-        <p class="error">@_error</p>
+        <Alert Type="AlertType.Error" ShowIcon="true" Message="@_error" />
     }
 }
 else
 {
-    <form class="editor" @onsubmit="() => SaveAsync(_loaded)">
-        <h1>@(Id is null ? "New product" : $"Edit {_loaded?.Product.Name}")</h1>
-        <label>SKU <input required @bind="_form.Sku" /></label>
-        <label>Name <input required @bind="_form.Name" /></label>
-        <label>Description <textarea @bind="_form.Description"></textarea></label>
-        <label>Price <input type="number" min="0" step="0.01" @bind="_form.Price" /></label>
-        <label>Stock <input type="number" min="0" @bind="_form.Stock" /></label>
-        <label>
-            Status
-            <select @bind="_form.Status">
-                @foreach (var status in Enum.GetValues<ProductStatus>())
+    <Card Title="@(Id is null ? "New product" : $"Edit {_loaded?.Product.Name}")" Style="max-width: 900px; margin: 0 auto">
+        <Form Model="_form" Layout="@FormLayout.Vertical" OnFinish="() => SaveAsync(_loaded)">
+            <GridRow Gutter="16">
+                <GridCol Xs="24" Md="8">
+                    <FormItem Label="SKU" Required><Input @bind-Value="_form.Sku" /></FormItem>
+                </GridCol>
+                <GridCol Xs="24" Md="16">
+                    <FormItem Label="Name" Required><Input @bind-Value="_form.Name" /></FormItem>
+                </GridCol>
+            </GridRow>
+            <FormItem Label="Description"><TextArea Rows="3" @bind-Value="_form.Description" /></FormItem>
+            <GridRow Gutter="16">
+                <GridCol Xs="12" Md="6">
+                    <FormItem Label="Price"><AntDesign.InputNumber TValue="decimal" Min="0" Step="0.01m" Style="width: 100%" @bind-Value="_form.Price" /></FormItem>
+                </GridCol>
+                <GridCol Xs="12" Md="6">
+                    <FormItem Label="Stock"><AntDesign.InputNumber TValue="int" Min="0" Style="width: 100%" @bind-Value="_form.Stock" /></FormItem>
+                </GridCol>
+                <GridCol Xs="24" Md="12">
+                    <FormItem Label="Status"><EnumSelect TEnum="ProductStatus" @bind-Value="_form.Status" /></FormItem>
+                </GridCol>
+            </GridRow>
+            <GridRow Gutter="16">
+                <GridCol Xs="24" Md="12">
+                    <FormItem Label="Category">
+                        <Select TItem="CategoryNode" TItemValue="int" DataSource="_categories" ItemValue="item => item.Id" ItemLabel="item => item.Name"
+                                @bind-Value="_form.CategoryId" EnableSearch />
+                    </FormItem>
+                </GridCol>
+                <GridCol Xs="24" Md="12">
+                    <FormItem Label="Brand">
+                        <Select TItem="BrandRow" TItemValue="int" DataSource="_brands" ItemValue="item => item.Id" ItemLabel="item => item.Name"
+                                @bind-Value="_form.BrandId" />
+                    </FormItem>
+                </GridCol>
+            </GridRow>
+            <FormItem Label="Images" Extra="The first image is the card image.">
+                @for (var index = 0; index < _form.Images.Count; index++)
                 {
-                    <option value="@status">@status</option>
+                    var position = index;
+                    var row = _form.Images[position];
+                    <div @key="row" style="display: flex; gap: 8px; margin-bottom: 8px">
+                        <Input Placeholder="https://…" @bind-Value="row.Url" />
+                        <Button Icon="arrow-up" Disabled="@(position == 0)" OnClick="() => Move(position, -1)" />
+                        <Button Icon="arrow-down" Disabled="@(position == _form.Images.Count - 1)" OnClick="() => Move(position, 1)" />
+                        <Button Danger Icon="delete" OnClick="() => _form.Images.Remove(row)" />
+                    </div>
                 }
-            </select>
-        </label>
-        <label>
-            Category
-            <select @bind="_form.CategoryId">
-                @foreach (var category in _categories)
-                {
-                    <option value="@category.Id">@category.Name</option>
-                }
-            </select>
-        </label>
-        <label>
-            Brand
-            <select @bind="_form.BrandId">
-                @foreach (var brand in _brands)
-                {
-                    <option value="@brand.Id">@brand.Name</option>
-                }
-            </select>
-        </label>
-        <fieldset>
-            <legend>Images (the first one is the card image)</legend>
-            @for (var index = 0; index < _form.Images.Count; index++)
+                <Button Type="ButtonType.Dashed" Block Icon="plus" OnClick="() => _form.Images.Add(new ImageRow(null, string.Empty))">Add image</Button>
+            </FormItem>
+            @if (_error is not null)
             {
-                var position = index;
-                var row = _form.Images[position];
-                <div class="image-row" @key="row">
-                    <input type="url" required @bind="row.Url" />
-                    <button type="button" disabled="@(position == 0)" @onclick="() => Move(position, -1)">↑</button>
-                    <button type="button" disabled="@(position == _form.Images.Count - 1)" @onclick="() => Move(position, 1)">↓</button>
-                    <button type="button" @onclick="() => _form.Images.Remove(row)">Remove</button>
-                </div>
+                <Alert Type="@(_conflict ? AlertType.Warning : AlertType.Error)" ShowIcon="true" Message="@_error" Style="margin-bottom: 16px" />
             }
-            <button type="button" @onclick="() => _form.Images.Add(new ImageRow(null, string.Empty))">Add image</button>
-        </fieldset>
-        @if (_error is not null)
-        {
-            <p class="error">@_error</p>
-        }
-        @if (_conflict)
-        {
-            <button type="button" disabled="@_saving" @onclick="ReloadAndReapplyAsync">Reload and reapply my changes</button>
-        }
-        <button type="submit" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
-    </form>
+            <Space>
+                <SpaceItem><Button Type="ButtonType.Primary" HtmlType="submit" Loading="_saving">Save</Button></SpaceItem>
+                @if (_conflict)
+                {
+                    <SpaceItem><Button Icon="reload" Disabled="_saving" OnClick="ReloadAndReapplyAsync">Reload and reapply my changes</Button></SpaceItem>
+                }
+            </Space>
+        </Form>
+    </Card>
 }
 
 @code {

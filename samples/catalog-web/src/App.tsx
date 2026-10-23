@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Link, Route, Routes } from "react-router";
+import { AppstoreOutlined, PlusOutlined, ShopOutlined } from "@ant-design/icons";
+import { App as AntApp, Layout, Menu, Segmented, Space, Typography } from "antd";
+import { Link, Route, Routes, useLocation } from "react-router";
 import type { Role } from "./api";
 import { Browse } from "./pages/Browse";
 import { CategoriesAdmin } from "./pages/CategoriesAdmin";
@@ -8,16 +9,28 @@ import { ProductPage } from "./pages/ProductPage";
 import { useSession } from "./session";
 
 export function App() {
+  const { isEditor } = useSession();
+  const location = useLocation();
+  const items = [
+    { key: "/", icon: <ShopOutlined />, label: <Link to="/">Catalog</Link> },
+    ...(isEditor
+      ? [
+          { key: "/products/new", icon: <PlusOutlined />, label: <Link to="/products/new">New product</Link> },
+          { key: "/categories", icon: <AppstoreOutlined />, label: <Link to="/categories">Categories</Link> },
+        ]
+      : []),
+  ];
+
   return (
-    <>
-      <header className="header">
-        <Link to="/" className="brand">
-          Catalog
-        </Link>
-        <EditorLinks />
+    <Layout className="shell">
+      <Layout.Header className="header">
+        <Typography.Title level={4} className="logo">
+          <Link to="/">Catalog</Link>
+        </Typography.Title>
+        <Menu theme="dark" mode="horizontal" selectedKeys={[location.pathname]} items={items} className="menu" />
         <RoleSwitcher />
-      </header>
-      <main>
+      </Layout.Header>
+      <Layout.Content className="content">
         <Routes>
           <Route path="/" element={<Browse />} />
           <Route path="/products/new" element={<ProductEditor />} />
@@ -25,50 +38,29 @@ export function App() {
           <Route path="/products/:id/edit" element={<ProductEditor />} />
           <Route path="/categories" element={<CategoriesAdmin />} />
         </Routes>
-      </main>
-    </>
+      </Layout.Content>
+      <Layout.Footer className="footer">LinqToRest catalog sample — React + Ant Design</Layout.Footer>
+    </Layout>
   );
-}
-
-function EditorLinks() {
-  const { isEditor } = useSession();
-  return isEditor ? (
-    <nav className="editor-links">
-      <Link to="/products/new">New product</Link>
-      <Link to="/categories">Categories</Link>
-    </nav>
-  ) : null;
 }
 
 /** Anonymous, viewer or editor: switching re-runs the queries, so drafts appear and disappear. */
 function RoleSwitcher() {
   const { role, signIn } = useSession();
-  const [error, setError] = useState<string>();
-  const choose = (next: Role | undefined) => {
-    setError(undefined);
-    signIn(next).catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    });
-  };
-
+  const { message } = AntApp.useApp();
   return (
-    <div className="roles" role="group" aria-label="Signed in as">
-      {(["anonymous", "viewer", "editor"] as const).map((option) => {
-        const value = option === "anonymous" ? undefined : option;
-        return (
-          <button
-            key={option}
-            type="button"
-            aria-pressed={role === value}
-            onClick={() => {
-              choose(value);
-            }}
-          >
-            {option}
-          </button>
-        );
-      })}
-      {error !== undefined && <span className="error">{error}</span>}
-    </div>
+    <Space>
+      <Typography.Text className="signed-in">Signed in as</Typography.Text>
+      <Segmented<string>
+        value={role ?? "anonymous"}
+        options={["anonymous", "viewer", "editor"]}
+        onChange={(value) => {
+          const next = value === "anonymous" ? undefined : (value as Role);
+          signIn(next).catch((reason: unknown) => {
+            void message.error(reason instanceof Error ? reason.message : String(reason));
+          });
+        }}
+      />
+    </Space>
   );
 }

@@ -9,8 +9,8 @@ Design: [`docs/plans/2026-10-20-catalog-sample-design.md`](../docs/plans/2026-10
 |---|---|
 | `Catalog.Api` | ASP.NET Core + EF Core (SQLite by default), sets, role policies, dev login, CORS, `model.json` |
 | `Catalog.Client` | `CatalogContext.generated.cs`, generated from `model.json` (never edit it) |
-| `catalog-web` | React + Vite on `catalog.generated.ts`, generated from the same `model.json` |
-| `Catalog.Blazor` | Blazor WebAssembly on `Catalog.Client` |
+| `catalog-web` | React + Vite + [Ant Design](https://ant.design) on `catalog.generated.ts`, generated from the same `model.json` |
+| `Catalog.Blazor` | Blazor WebAssembly + [Ant Design Blazor](https://antblazor.com) on `Catalog.Client` |
 
 ## Run it
 
