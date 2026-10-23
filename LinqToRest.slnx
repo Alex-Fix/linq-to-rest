@@ -27,6 +27,7 @@
 	<Folder Name="/tests/">
 		<File Path="tests/Directory.Build.props" />
 		<Project Path="tests/LinqToRest.Abstractions.UnitTests/LinqToRest.Abstractions.UnitTests.csproj" />
+		<Project Path="tests/LinqToRest.AotSmoke/LinqToRest.AotSmoke.csproj" />
 		<Project Path="tests/LinqToRest.Client.UnitTests/LinqToRest.Client.UnitTests.csproj" />
 		<Project Path="tests/LinqToRest.EndToEnd.Tests/LinqToRest.EndToEnd.Tests.csproj" />
 		<Project Path="tests/LinqToRest.Samples.Tests/LinqToRest.Samples.Tests.csproj" />

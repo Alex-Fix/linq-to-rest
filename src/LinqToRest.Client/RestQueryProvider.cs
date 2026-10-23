@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Text.Json;
 using LinqToRest.Client.Materialization;
@@ -15,6 +16,9 @@ internal sealed class RestQueryProvider(RestDataContext context) : IQueryProvide
     public IQueryable CreateQuery(Expression expression) =>
         throw new NotSupportedException("LinqToRest builds queries through the generic CreateQuery<TElement>; use the Queryable operators.");
 
+    // C# builds decimal comparisons and arithmetic in lambdas without naming the operator method, so
+    // System.Linq.Expressions looks it up by reflection; keep decimal's operators for trimmed and Native AOT apps.
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(decimal))]
     public IQueryable<TElement> CreateQuery<TElement>(Expression expression) => new RestQueryable<TElement>(this, expression);
 
     public object Execute(Expression expression) => throw Synchronous();

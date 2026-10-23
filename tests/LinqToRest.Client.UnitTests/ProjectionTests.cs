@@ -52,10 +52,10 @@ public sealed class ProjectionTests
     public async Task Navigations_and_conversions()
     {
         var (shop, http) = Shop.Create();
-        http.Respond("""{"items":[{"category":{"id":2,"name":"Games"},"none":null,"id":7}]}""");
+        http.Respond("""{"items":[{"category":{"id":2,"name":"Games"},"none":null,"id":7,"categoryKey":null}]}""");
 
         var rows = await shop.Products
-            .Select(p => new { p.Category, None = p.Category, Id = (double)p.Id })
+            .Select(p => new { p.Category, None = p.Category, Id = (double)p.Id, CategoryKey = (int?)p.Category!.Id })
             .Take(1)
             .ToListAsync(Token);
 
@@ -63,6 +63,7 @@ public sealed class ProjectionTests
         Assert.Equal("Games", row.Category!.Name);
         Assert.Null(row.None);
         Assert.Equal(7d, row.Id);
+        Assert.Null(row.CategoryKey);
     }
 
     [Fact]

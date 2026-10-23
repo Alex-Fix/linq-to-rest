@@ -33,10 +33,12 @@ internal sealed class ProjectionReader
         switch (expression)
         {
             case UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert when convert.Type != convert.Operand.Type:
-                // The server computes the operand; the conversion happens here, as it would have in the lambda.
+                // The server computes the operand; the conversion happens here, as it would have in the lambda. A
+                // conversion to a nullable type may come back null (a missing navigation, say).
                 var operand = Build(convert.Operand);
                 var target = convert.Type;
-                return (element, location) => ConvertValue(operand(element, location), target);
+                var nullable = !target.IsValueType || Nullable.GetUnderlyingType(target) is not null;
+                return (element, location) => nullable && element.ValueKind == JsonValueKind.Null ? null : ConvertValue(operand(element, location), target);
             case UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked or ExpressionType.Quote } same:
                 return Build(same.Operand);
             case NewExpression { Arguments.Count: > 0, Constructor: { } constructor } created:
@@ -44,9 +46,9 @@ internal sealed class ProjectionReader
             case MemberInitExpression initializer:
                 return Initialize(initializer);
             case MethodCallExpression { Method.Name: nameof(Enumerable.ToList) or nameof(Enumerable.ToArray) } call when call.Method.DeclaringType == typeof(Enumerable):
-                return Collection(call.Arguments[0], call.Type);
+                return Collection(call.Arguments[0], call);
             case MethodCallExpression { Method.Name: nameof(Enumerable.Select) } call when call.Method.DeclaringType == typeof(Enumerable) && call.Arguments.Count == 2:
-                return Collection(call, call.Type);
+                return Collection(call, null);
         }
 
         if (TryMember(expression, out var property, out var navigation))
@@ -117,13 +119,17 @@ internal sealed class ProjectionReader
     }
 
     /// <summary>A projected collection: <c>x.Select(...)</c>, a collection member, optionally with <c>ToList</c>/<c>ToArray</c>.</summary>
-    private Func<JsonElement, string, object?> Collection(Expression source, Type resultType)
+    /// <summary>Reads a collection; <paramref name="materialize"/> is the developer's <c>ToList()</c>/<c>ToArray()</c>.</summary>
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "An array of the element type of the developer's own ToList<T>: shared code for reference types, and value-type arrays exist; the AOT smoke app covers both.")]
+    private Func<JsonElement, string, object?> Collection(Expression source, MethodCallExpression? materialize)
     {
-        if (resultType.IsInterface)
+        if (materialize is null)
         {
-            throw new NotSupportedException($"Collections in projections need ToList() or ToArray() (here: {resultType.Name}).");
+            throw new NotSupportedException($"Collections in projections need ToList() or ToArray() (here: {source.Type.Name}).");
         }
 
+        var toList = materialize.Method.Name == nameof(Enumerable.ToList) ? materialize.Method : null;
+        var arrayType = toList is null ? materialize.Type : materialize.Type.GetGenericArguments()[0].MakeArrayType();
         var element = Element(source);
         return (json, location) =>
         {
@@ -139,7 +145,14 @@ internal sealed class ProjectionReader
                 items.Add(element(item, $"{location}/{index++}"));
             }
 
-            return CollectionOf(resultType, items);
+            var array = Array.CreateInstanceFromArrayType(arrayType, items.Count);
+            for (var position = 0; position < items.Count; position++)
+            {
+                array.SetValue(items[position], position);
+            }
+
+            // The developer's own closed Enumerable.ToList<T> builds the list: no constructor looked up at run time.
+            return toList is null ? array : toList.Invoke(null, [array]);
         };
     }
 
@@ -242,31 +255,4 @@ internal sealed class ProjectionReader
     private static Expression StripQuote(Expression expression) =>
         expression is UnaryExpression { NodeType: ExpressionType.Quote } quote ? quote.Operand : expression;
 
-    /// <summary>
-    /// The one place a collection is created for a type only known at run time. The type is the result type of the
-    /// developer's own <c>ToList()</c>/<c>ToArray()</c> or member, so the expression tree that names it keeps it (and its
-    /// constructor, which <c>ToList</c> itself uses) for trimming and Native AOT; the AOT smoke app exercises it.
-    /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "The list type comes from the caller's expression tree, which roots it and its constructor.")]
-    private static object CollectionOf(Type resultType, List<object?> items)
-    {
-        if (resultType.IsArray)
-        {
-            var array = Array.CreateInstanceFromArrayType(resultType, items.Count);
-            for (var index = 0; index < items.Count; index++)
-            {
-                array.SetValue(items[index], index);
-            }
-
-            return array;
-        }
-
-        var list = (IList)Activator.CreateInstance(resultType)!;
-        foreach (var item in items)
-        {
-            list.Add(item);
-        }
-
-        return list;
-    }
 }
