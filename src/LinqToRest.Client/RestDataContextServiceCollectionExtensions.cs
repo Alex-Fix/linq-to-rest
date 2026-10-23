@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LinqToRest.Client;
@@ -14,7 +15,7 @@ public static class RestDataContextServiceCollectionExtensions
     /// <param name="configureClient">Configures the client; set its base address to the API root, ending with <c>/</c>.</param>
     /// <typeparam name="TContext">The context type; its constructor takes <see cref="RestDataContextOptions{TContext}"/>.</typeparam>
     /// <returns>The HTTP client builder.</returns>
-    public static IHttpClientBuilder AddRestDataContext<TContext>(this IServiceCollection services, ClientModel model, Action<HttpClient> configureClient)
+    public static IHttpClientBuilder AddRestDataContext<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TContext>(this IServiceCollection services, ClientModel model, Action<HttpClient> configureClient)
         where TContext : RestDataContext
     {
         ArgumentNullException.ThrowIfNull(services);

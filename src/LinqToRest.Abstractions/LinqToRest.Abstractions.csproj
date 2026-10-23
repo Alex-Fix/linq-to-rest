@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>LinqToRest</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
     <Description>The model document, query tree and wire contracts shared by LinqToRest clients, servers and generators.</Description>
   </PropertyGroup>
 </Project>

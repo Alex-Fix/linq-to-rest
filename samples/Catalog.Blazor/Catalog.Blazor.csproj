@@ -8,10 +8,4 @@
   <ItemGroup>
     <ProjectReference Include="..\Catalog.Client\Catalog.Client.csproj" />
   </ItemGroup>
-
-  <!-- Stopgap until the client is trim-safe (roadmap, Milestone 2): it reaches the generated classes' properties by
-       reflection, so a trimmed Release publish must keep them. -->
-  <ItemGroup>
-    <TrimmerRootAssembly Include="Catalog.Client" />
-  </ItemGroup>
 </Project>

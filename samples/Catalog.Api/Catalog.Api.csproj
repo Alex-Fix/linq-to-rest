@@ -1,4 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Native AOT isn't possible for a LinqToRest server: EF Core compiles each request's query at run time. ReadyToRun
+       precompiles the app instead, for faster startup with nothing given up (publish only; builds are unchanged). -->
+  <PropertyGroup>
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />

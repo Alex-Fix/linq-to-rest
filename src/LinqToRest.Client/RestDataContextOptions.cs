@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -24,13 +25,21 @@ public class RestDataContextOptions
     public HttpClient HttpClient { get; }
 
     /// <summary>
-    /// Gets the JSON options used to read results (camelCase, enums by name, no numbers as strings). They're shared by
-    /// every context and read-only, so serialization metadata is built once rather than per context.
+    /// Gets JSON options matching the wire (camelCase, enums by name, no numbers as strings). The client no longer reads
+    /// results with them: rows and projections are read through the model's bindings, without serializer metadata.
     /// </summary>
-    public JsonSerializerOptions SerializerOptions { get; } = SharedSerializerOptions;
+    [Obsolete("Results are read through the model's bindings; these options aren't used. Will be removed in the next breaking release.")]
+    public JsonSerializerOptions SerializerOptions
+    {
+        [RequiresUnreferencedCode("Uses reflection-based serializer metadata.")]
+        [RequiresDynamicCode("Uses reflection-based serializer metadata.")]
+        get => _serializerOptions ??= CreateSerializerOptions();
+    }
 
-    private static readonly JsonSerializerOptions SharedSerializerOptions = CreateSerializerOptions();
+    private static JsonSerializerOptions? _serializerOptions;
 
+    [RequiresUnreferencedCode("Uses reflection-based serializer metadata.")]
+    [RequiresDynamicCode("Uses reflection-based serializer metadata.")]
     private static JsonSerializerOptions CreateSerializerOptions()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)

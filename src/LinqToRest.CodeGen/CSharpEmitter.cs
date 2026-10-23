@@ -6,7 +6,8 @@ namespace LinqToRest.CodeGen;
 
 /// <summary>
 /// Writes the C# client for a model document: an enum per enum, a <c>partial</c> class per set, the context with a
-/// <c>RestSet</c> per set and its bound <c>ClientModel</c>, and an <c>Add{Context}</c> registration extension.
+/// <c>RestSet</c> per set and its <c>ClientModel</c> bound through generated delegates, and an <c>Add{Context}</c>
+/// registration extension.
 /// </summary>
 internal sealed class CSharpEmitter(RestModel model, string ns, string context, string source)
 {
@@ -108,14 +109,13 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
         body.Append(CultureInfo.InvariantCulture, $"\npublic sealed partial class {context}(RestDataContextOptions<{context}> options) : RestDataContext(options)\n{{\n");
         body.Append("    /// <summary>Gets the model document bound to the generated classes.</summary>\n");
         body.Append("    public static ClientModel Model { get; } = ClientModel.Bind(\n");
-        body.Append(CultureInfo.InvariantCulture, $"        RestModel.Parse(\"\"\"{model.ToJson(indented: false)}\"\"\"),\n");
-        body.Append("        new Dictionary<string, Type>\n        {\n");
+        body.Append(CultureInfo.InvariantCulture, $"        RestModel.Parse(\"\"\"{model.ToJson(indented: false)}\"\"\")");
         foreach (var set in sets)
         {
-            body.Append(CultureInfo.InvariantCulture, $"            [\"{set.Name}\"] = typeof({set.TypeName}),\n");
+            WriteBinding(body, set);
         }
 
-        body.Append("        });\n");
+        body.Append(");\n");
         foreach (var set in sets)
         {
             var property = Pascal(set.Name);
@@ -137,6 +137,26 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
         body.Append(CultureInfo.InvariantCulture, $"        services.AddRestDataContext<{context}>({context}.Model, configureClient);\n");
         body.Append("}\n");
     }
+
+    // Compile-time delegates for every member, so the client reads and writes rows without reflection (trim- and
+    // AOT-safe).
+    private static void WriteBinding(StringBuilder body, RestSetModel set)
+    {
+        var type = set.TypeName;
+        body.Append(CultureInfo.InvariantCulture, $",\n        new SetBinding<{type}>(\"{set.Name}\", static () => new {type}())");
+        foreach (var property in set.Properties)
+        {
+            WriteMember(body, property.IsCollection ? "Values" : "Property", type, property.Name, Member(set, property.Name));
+        }
+
+        foreach (var navigation in set.Navigations)
+        {
+            WriteMember(body, navigation.IsCollection ? "Collection" : "Reference", type, navigation.Name, Member(set, navigation.Name));
+        }
+    }
+
+    private static void WriteMember(StringBuilder body, string method, string type, string wireName, string member) =>
+        body.Append(CultureInfo.InvariantCulture, $"\n            .{method}(\"{wireName}\", nameof({type}.{member}), static e => e.{member}, static (e, v) => e.{member} = v)");
 
     private static string Member(RestSetModel set, string wireName)
     {

@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using LinqToRest.Client.Materialization;
 using LinqToRest.Client.Tracking;
 using LinqToRest.Modeling;
 using LinqToRest.Protocol;
@@ -107,11 +108,8 @@ public abstract class RestDataContext
 
             if (item.Value is { } value)
             {
-                var saved = value.Deserialize(entry.Type.ClrType, Options.SerializerOptions)!;
-                foreach (var property in entry.Type.Properties)
-                {
-                    property.PropertyInfo.SetValue(entry.Entity, property.PropertyInfo.GetValue(saved));
-                }
+                // New keys, tokens and computed values, straight onto the tracked row.
+                RowReader.ReadInto(entry.Type, value, entry.Entity, new RowPointer($"/results/{item.Id}/value"), navigations: false);
             }
 
             Tracker.AcceptSaved(entry);
@@ -170,7 +168,7 @@ public abstract class RestDataContext
         var values = entry.State == EntityState.Deleted
             ? null
             : written.Where(property => !entry.References.ContainsKey(property))
-                .ToDictionary(property => property.WireName, property => JsonValues.ToElement(property.PropertyInfo.GetValue(entry.Entity)), StringComparer.Ordinal);
+                .ToDictionary(property => property.WireName, property => JsonValues.ToElement(property.Get(entry.Entity)), StringComparer.Ordinal);
         var key = entry.State == EntityState.Added
             ? null
             : type.Key.Select((property, index) => (property.WireName, Value: entry.Key!.Value.Values[index]))

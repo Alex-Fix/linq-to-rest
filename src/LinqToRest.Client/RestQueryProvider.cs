@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Text.Json;
+using LinqToRest.Client.Materialization;
 using LinqToRest.Client.Translation;
 using LinqToRest.Modeling;
 using LinqToRest.Protocol;
@@ -9,14 +11,14 @@ namespace LinqToRest.Client;
 /// <summary>Builds LinqToRest queries and runs them over HTTP QUERY.</summary>
 internal sealed class RestQueryProvider(RestDataContext context) : IQueryProvider
 {
-    public IQueryable CreateQuery(Expression expression)
-    {
-        var elementType = expression.Type.GetInterfaces().Append(expression.Type)
-            .First(type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IQueryable<>))
-            .GetGenericArguments()[0];
-        return (IQueryable)Activator.CreateInstance(typeof(RestQueryable<>).MakeGenericType(elementType), this, expression)!;
-    }
+    // Building RestQueryable<T> for a runtime T needs MakeGenericType, which Native AOT can't promise; the Queryable
+    // operators always call the generic overload.
+    public IQueryable CreateQuery(Expression expression) =>
+        throw new NotSupportedException("LinqToRest builds queries through the generic CreateQuery<TElement>; use the Queryable operators.");
 
+    // C# builds decimal comparisons and arithmetic in lambdas without naming the operator method, so
+    // System.Linq.Expressions looks it up by reflection; keep decimal's operators for trimmed and Native AOT apps.
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(decimal))]
     public IQueryable<TElement> CreateQuery<TElement>(Expression expression) => new RestQueryable<TElement>(this, expression);
 
     public object Execute(Expression expression) => throw Synchronous();
@@ -72,12 +74,33 @@ internal sealed class RestQueryProvider(RestDataContext context) : IQueryProvide
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        var items = root.GetProperty("items").Deserialize<List<T>>(context.Options.SerializerOptions)!;
-        if (query is { HasSelect: false, NoTracking: false } && typeof(T) == query.Type.ClrType)
+        var rows = root.GetProperty("items");
+        List<T> items;
+        if (!query.HasSelect && typeof(T) == query.Type.ClrType)
         {
-            for (var index = 0; index < items.Count; index++)
+            // Full rows: read through the bound delegates, then tracked unless AsNoTracking.
+            items = new List<T>(rows.GetArrayLength());
+            var index = 0;
+            foreach (var row in rows.EnumerateArray())
             {
-                items[index] = (T)context.Tracker.TrackQueried(items[index]!, query.Type);
+                var read = RowReader.Read(query.Type, row, new RowPointer("/items", index++));
+                items.Add((T)(query.NoTracking ? read : context.Tracker.TrackQueried(read, query.Type)));
+            }
+        }
+        else if (query.Selector is null)
+        {
+            // Count and Any ask for empty shapes: only how many items came back matters.
+            items = [.. rows.EnumerateArray().Select(row => (T)(object)row.Clone())];
+        }
+        else
+        {
+            // Projections: read by following the Select lambda; never tracked.
+            var read = ProjectionReader.Create(query.Type, query.Selector!);
+            items = new List<T>(rows.GetArrayLength());
+            var index = 0;
+            foreach (var row in rows.EnumerateArray())
+            {
+                items.Add((T)read(row, $"/items/{index++}")!);
             }
         }
 

@@ -53,7 +53,7 @@ public class ClientTranslation
     }
 }
 
-/// <summary>Response JSON → tracked DTOs.</summary>
+/// <summary>Response JSON → tracked DTOs, and → an anonymous projection.</summary>
 public class ClientMaterialization
 {
     private byte[] _response = [];
@@ -74,6 +74,13 @@ public class ClientMaterialization
     {
         var shop = BenchmarkShop.Create(_response);
         return (await shop.Products.Take(Rows).ToListAsync()).Count;
+    }
+
+    [Benchmark]
+    public async Task<int> Project()
+    {
+        var shop = BenchmarkShop.Create(_response);
+        return (await shop.Products.Select(p => new { p.Id, p.Name, p.Price, p.Tags }).Take(Rows).ToListAsync()).Count;
     }
 }
 

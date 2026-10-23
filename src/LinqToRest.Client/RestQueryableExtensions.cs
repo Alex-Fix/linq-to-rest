@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using LinqToRest.Client.Translation;
 using LinqToRest.Protocol;
@@ -9,9 +8,6 @@ namespace LinqToRest.Client;
 /// <summary>LinqToRest query operators: includes, cursors and the async terminal operators.</summary>
 public static class RestQueryableExtensions
 {
-    private static readonly MethodInfo IncludeMethod = typeof(RestQueryableExtensions).GetMethod(nameof(Include))!;
-    private static readonly MethodInfo AfterMethod = typeof(RestQueryableExtensions).GetMethod(nameof(After))!;
-    private static readonly MethodInfo AsNoTrackingMethod = typeof(RestQueryableExtensions).GetMethod(nameof(AsNoTracking))!;
     private static readonly NewNode Nothing = new([]);
 
     /// <summary>Loads a navigation (or a navigation of a navigation, <c>d =&gt; d.Category.Products</c>) with the full entities.</summary>
@@ -25,7 +21,7 @@ public static class RestQueryableExtensions
     {
         ArgumentNullException.ThrowIfNull(navigation);
         return Provider(source).CreateQuery<TEntity>(
-            Expression.Call(null, IncludeMethod.MakeGenericMethod(typeof(TEntity), typeof(TProperty)), source.Expression, Expression.Quote(navigation)));
+            Expression.Call(null, new Func<IQueryable<TEntity>, Expression<Func<TEntity, TProperty>>, IQueryable<TEntity>>(Include).Method, source.Expression, Expression.Quote(navigation)));
     }
 
     /// <summary>Continues keyset pagination after a cursor from <see cref="CursorPage{T}.NextCursor"/>.</summary>
@@ -36,7 +32,7 @@ public static class RestQueryableExtensions
     public static IQueryable<T> After<T>(this IQueryable<T> source, string cursor)
     {
         ArgumentNullException.ThrowIfNull(cursor);
-        return Provider(source).CreateQuery<T>(Expression.Call(null, AfterMethod.MakeGenericMethod(typeof(T)), source.Expression, Expression.Constant(cursor)));
+        return Provider(source).CreateQuery<T>(Expression.Call(null, new Func<IQueryable<T>, string, IQueryable<T>>(After).Method, source.Expression, Expression.Constant(cursor)));
     }
 
     /// <summary>Returns the entities without tracking them.</summary>
@@ -44,7 +40,7 @@ public static class RestQueryableExtensions
     /// <typeparam name="T">The element type.</typeparam>
     /// <returns>The query.</returns>
     public static IQueryable<T> AsNoTracking<T>(this IQueryable<T> source) =>
-        Provider(source).CreateQuery<T>(Expression.Call(null, AsNoTrackingMethod.MakeGenericMethod(typeof(T)), source.Expression));
+        Provider(source).CreateQuery<T>(Expression.Call(null, new Func<IQueryable<T>, IQueryable<T>>(AsNoTracking).Method, source.Expression));
 
     /// <summary>
     /// Runs the query and returns one page. Requires <c>Take</c>, so a server page size can never be mistaken for

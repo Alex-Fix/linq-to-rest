@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Proves the client works under Native AOT with reflection-based JSON off: CI publishes it with PublishAot and runs
+       it. Every trim/AOT warning is an error (warnings as errors), so a reflection regression fails the publish. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LinqToRest.Client\LinqToRest.Client.csproj" />
+  </ItemGroup>
+</Project>

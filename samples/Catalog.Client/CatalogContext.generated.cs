@@ -73,13 +73,43 @@ public sealed partial class CatalogContext(RestDataContextOptions<CatalogContext
     /// <summary>Gets the model document bound to the generated classes.</summary>
     public static ClientModel Model { get; } = ClientModel.Bind(
         RestModel.Parse("""{"v":1,"enums":{"ProductStatus":["Draft","Active","Discontinued"]},"sets":[{"name":"brands","type":"Brand","key":["id"],"writes":["insert","update"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"sortable":true},{"name":"productCount","type":"int32"}],"navigations":[{"name":"products","target":"products","collection":true}]},{"name":"categories","type":"Category","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"sortable":true},{"name":"parentId","type":"int32","nullable":true,"writable":true},{"name":"productCount","type":"int32"}],"navigations":[{"name":"parent","target":"categories","nullable":true,"foreignKey":["parentId"]},{"name":"children","target":"categories","collection":true},{"name":"products","target":"products","collection":true}]},{"name":"productImages","type":"ProductImage","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"productId","type":"int32","writable":true},{"name":"url","type":"string","writable":true},{"name":"sortOrder","type":"int32","writable":true,"sortable":true}],"navigations":[{"name":"product","target":"products","foreignKey":["productId"]}]},{"name":"products","type":"Product","key":["id"],"concurrencyToken":"version","writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":24,"maxPageSize":96,"maxSkip":1000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"sku","type":"string","writable":true},{"name":"name","type":"string","writable":true,"sortable":true},{"name":"description","type":"string","nullable":true,"writable":true,"filterable":false},{"name":"price","type":"decimal","writable":true,"sortable":true},{"name":"status","type":"ProductStatus","writable":true},{"name":"stock","type":"int32","writable":true,"sortable":true},{"name":"categoryId","type":"int32","writable":true},{"name":"brandId","type":"int32","writable":true},{"name":"createdAt","type":"dateTime","sortable":true},{"name":"version","type":"guid"},{"name":"inStock","type":"bool"},{"name":"tags","type":"string","collection":true},{"name":"imageCount","type":"int32"}],"navigations":[{"name":"category","target":"categories","foreignKey":["categoryId"]},{"name":"brand","target":"brands","foreignKey":["brandId"]},{"name":"images","target":"productImages","collection":true}]}]}"""),
-        new Dictionary<string, Type>
-        {
-            ["brands"] = typeof(Brand),
-            ["categories"] = typeof(Category),
-            ["productImages"] = typeof(ProductImage),
-            ["products"] = typeof(Product),
-        });
+        new SetBinding<Brand>("brands", static () => new Brand())
+            .Property("id", nameof(Brand.Id), static e => e.Id, static (e, v) => e.Id = v)
+            .Property("name", nameof(Brand.Name), static e => e.Name, static (e, v) => e.Name = v)
+            .Property("productCount", nameof(Brand.ProductCount), static e => e.ProductCount, static (e, v) => e.ProductCount = v)
+            .Collection("products", nameof(Brand.Products), static e => e.Products, static (e, v) => e.Products = v),
+        new SetBinding<Category>("categories", static () => new Category())
+            .Property("id", nameof(Category.Id), static e => e.Id, static (e, v) => e.Id = v)
+            .Property("name", nameof(Category.Name), static e => e.Name, static (e, v) => e.Name = v)
+            .Property("parentId", nameof(Category.ParentId), static e => e.ParentId, static (e, v) => e.ParentId = v)
+            .Property("productCount", nameof(Category.ProductCount), static e => e.ProductCount, static (e, v) => e.ProductCount = v)
+            .Reference("parent", nameof(Category.Parent), static e => e.Parent, static (e, v) => e.Parent = v)
+            .Collection("children", nameof(Category.Children), static e => e.Children, static (e, v) => e.Children = v)
+            .Collection("products", nameof(Category.Products), static e => e.Products, static (e, v) => e.Products = v),
+        new SetBinding<ProductImage>("productImages", static () => new ProductImage())
+            .Property("id", nameof(ProductImage.Id), static e => e.Id, static (e, v) => e.Id = v)
+            .Property("productId", nameof(ProductImage.ProductId), static e => e.ProductId, static (e, v) => e.ProductId = v)
+            .Property("url", nameof(ProductImage.Url), static e => e.Url, static (e, v) => e.Url = v)
+            .Property("sortOrder", nameof(ProductImage.SortOrder), static e => e.SortOrder, static (e, v) => e.SortOrder = v)
+            .Reference("product", nameof(ProductImage.Product), static e => e.Product, static (e, v) => e.Product = v),
+        new SetBinding<Product>("products", static () => new Product())
+            .Property("id", nameof(Product.Id), static e => e.Id, static (e, v) => e.Id = v)
+            .Property("sku", nameof(Product.Sku), static e => e.Sku, static (e, v) => e.Sku = v)
+            .Property("name", nameof(Product.Name), static e => e.Name, static (e, v) => e.Name = v)
+            .Property("description", nameof(Product.Description), static e => e.Description, static (e, v) => e.Description = v)
+            .Property("price", nameof(Product.Price), static e => e.Price, static (e, v) => e.Price = v)
+            .Property("status", nameof(Product.Status), static e => e.Status, static (e, v) => e.Status = v)
+            .Property("stock", nameof(Product.Stock), static e => e.Stock, static (e, v) => e.Stock = v)
+            .Property("categoryId", nameof(Product.CategoryId), static e => e.CategoryId, static (e, v) => e.CategoryId = v)
+            .Property("brandId", nameof(Product.BrandId), static e => e.BrandId, static (e, v) => e.BrandId = v)
+            .Property("createdAt", nameof(Product.CreatedAt), static e => e.CreatedAt, static (e, v) => e.CreatedAt = v)
+            .Property("version", nameof(Product.Version), static e => e.Version, static (e, v) => e.Version = v)
+            .Property("inStock", nameof(Product.InStock), static e => e.InStock, static (e, v) => e.InStock = v)
+            .Values("tags", nameof(Product.Tags), static e => e.Tags, static (e, v) => e.Tags = v)
+            .Property("imageCount", nameof(Product.ImageCount), static e => e.ImageCount, static (e, v) => e.ImageCount = v)
+            .Reference("category", nameof(Product.Category), static e => e.Category, static (e, v) => e.Category = v)
+            .Reference("brand", nameof(Product.Brand), static e => e.Brand, static (e, v) => e.Brand = v)
+            .Collection("images", nameof(Product.Images), static e => e.Images, static (e, v) => e.Images = v));
 
     public RestSet<Brand> Brands => Set<Brand>();
 

@@ -40,6 +40,13 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
 - Server expression building: `System.Linq.Expressions` nodes only, from the type-checked AST. Resolve members via
   the server model built from set configurations, never `Type.GetProperty(clientString)`. No `Expression.Compile()` on the request path.
   The client may compile captured-variable subtrees (developer code).
+- Trim/AOT: Abstractions and Client are `IsAotCompatible`, so the trim and AOT analyzers fail the build on
+  unannotated reflection. No `MakeGenericType`/`MakeGenericMethod`, `Activator`, `Compile()` (the client's
+  interpreted captured-variable evaluator is the exception) or reflection-based `JsonSerializer` on the client path;
+  bind members through `SetBinding<T>` delegates. A deliberate exception gets `[UnconditionalSuppressMessage]` with a
+  justification and a scenario in `tests/LinqToRest.AotSmoke`. The analyzers miss runtime lookups inside
+  System.Linq.Expressions (`decimal` operators, for example), so client changes run the smoke app under Native AOT
+  too.
 - JSON: System.Text.Json with a strict source-generated `JsonSerializerContext` for batch contracts; the query tree is
   read from a size-capped `JsonDocument` by a hand-written reader that enforces the limits while building nodes.
   Wire values go through `JsonValues` (strict, enums by name). camelCase on the wire.
@@ -56,8 +63,7 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
 
 ## Samples (`samples/`)
 - The catalog sample: `Catalog.Api` (SQLite default, role policies, dev-only JWT login, CORS,
-  `model.json`), `Catalog.Client` (generated), `Catalog.Blazor` (WebAssembly; trimmed Release publish in CI, with
-  `Catalog.Client` as a trimmer root until the client is trim-safe) and `catalog-web` (React, see the
+  `model.json`), `Catalog.Client` (generated), `Catalog.Blazor` (WebAssembly; trimmed Release publish in CI) and `catalog-web` (React, see the
   `typescript-client` skill). `samples/Directory.Build.props` makes them non-packable. They're documentation and
   people copy them: keep them clear. `samples/README.md` lists which screen shows which feature; keep it true.
 - Run: `dotnet run --project samples/Catalog.Api` (Development, http://localhost:5095), then
@@ -75,6 +81,11 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
   modify → save → re-query, status codes, ProblemDetails, typed client exceptions). It links the integration tests'
   `Shop/*.cs` (entities, set configurations, policies, seed) instead of copying them, and uses the client generated
   from `tests/golden/model.json`.
+- `LinqToRest.AotSmoke` (not a test project): a console app with a context generated from `tests/golden/model.json`
+  and canned responses, published with Native AOT and reflection-based JSON off; CI publishes and runs it, and it
+  exits non-zero on any failed check. Locally: `dotnet publish tests/LinqToRest.AotSmoke -c Release -o
+  artifacts/publish/aot-smoke && artifacts/publish/aot-smoke/LinqToRest.AotSmoke` (`dotnet run` checks the logic
+  on JIT only).
 - `LinqToRest.CodeGen.UnitTests`: generator output for both targets is golden-tested against the checked-in
   generated files.
 - To prove an expression runs in SQL, assert on `ShopServer.Sql` (every executed command), not just on results.
