@@ -59,12 +59,32 @@ public sealed partial class ShopClient(RestDataContextOptions<ShopClient> option
     /// <summary>Gets the model document bound to the generated classes.</summary>
     public static ClientModel Model { get; } = ClientModel.Bind(
         RestModel.Parse("""{"v":1,"enums":{"ProductStatus":["Draft","Active","Retired"]},"sets":[{"name":"categories","type":"Category","key":["id"],"writes":["insert","update"],"pagination":{"modes":["cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"sortable":true}],"navigations":[{"name":"products","target":"products","collection":true}]},{"name":"orderLines","type":"OrderLine","key":["id"],"writes":[],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"productId","type":"int32"},{"name":"sku","type":"string"},{"name":"quantity","type":"int32"},{"name":"unitPrice","type":"decimal"}],"navigations":[]},{"name":"products","type":"Product","key":["id"],"concurrencyToken":"version","writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":10,"maxPageSize":20,"maxSkip":100},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true},{"name":"description","type":"string","nullable":true,"writable":true},{"name":"price","type":"decimal","writable":true,"sortable":true},{"name":"status","type":"ProductStatus","writable":true,"sortable":true},{"name":"version","type":"guid"},{"name":"createdAt","type":"dateTime","writable":true,"sortable":true},{"name":"releasedOn","type":"dateOnly","nullable":true,"writable":true,"sortable":true},{"name":"rating","type":"float64","writable":true,"filterable":false},{"name":"isFeatured","type":"bool","writable":true},{"name":"categoryId","type":"int32","nullable":true,"writable":true},{"name":"tags","type":"string","collection":true},{"name":"categoryName","type":"string","nullable":true}],"navigations":[{"name":"category","target":"categories","nullable":true,"foreignKey":["categoryId"]},{"name":"lines","target":"orderLines","collection":true}]}]}"""),
-        new Dictionary<string, Type>
-        {
-            ["categories"] = typeof(Category),
-            ["orderLines"] = typeof(OrderLine),
-            ["products"] = typeof(Product),
-        });
+        new SetBinding<Category>("categories", static () => new Category())
+            .Property("id", nameof(Category.Id), static e => e.Id, static (e, v) => e.Id = v)
+            .Property("name", nameof(Category.Name), static e => e.Name, static (e, v) => e.Name = v)
+            .Collection("products", nameof(Category.Products), static e => e.Products, static (e, v) => e.Products = v),
+        new SetBinding<OrderLine>("orderLines", static () => new OrderLine())
+            .Property("id", nameof(OrderLine.Id), static e => e.Id, static (e, v) => e.Id = v)
+            .Property("productId", nameof(OrderLine.ProductId), static e => e.ProductId, static (e, v) => e.ProductId = v)
+            .Property("sku", nameof(OrderLine.Sku), static e => e.Sku, static (e, v) => e.Sku = v)
+            .Property("quantity", nameof(OrderLine.Quantity), static e => e.Quantity, static (e, v) => e.Quantity = v)
+            .Property("unitPrice", nameof(OrderLine.UnitPrice), static e => e.UnitPrice, static (e, v) => e.UnitPrice = v),
+        new SetBinding<Product>("products", static () => new Product())
+            .Property("id", nameof(Product.Id), static e => e.Id, static (e, v) => e.Id = v)
+            .Property("name", nameof(Product.Name), static e => e.Name, static (e, v) => e.Name = v)
+            .Property("description", nameof(Product.Description), static e => e.Description, static (e, v) => e.Description = v)
+            .Property("price", nameof(Product.Price), static e => e.Price, static (e, v) => e.Price = v)
+            .Property("status", nameof(Product.Status), static e => e.Status, static (e, v) => e.Status = v)
+            .Property("version", nameof(Product.Version), static e => e.Version, static (e, v) => e.Version = v)
+            .Property("createdAt", nameof(Product.CreatedAt), static e => e.CreatedAt, static (e, v) => e.CreatedAt = v)
+            .Property("releasedOn", nameof(Product.ReleasedOn), static e => e.ReleasedOn, static (e, v) => e.ReleasedOn = v)
+            .Property("rating", nameof(Product.Rating), static e => e.Rating, static (e, v) => e.Rating = v)
+            .Property("isFeatured", nameof(Product.IsFeatured), static e => e.IsFeatured, static (e, v) => e.IsFeatured = v)
+            .Property("categoryId", nameof(Product.CategoryId), static e => e.CategoryId, static (e, v) => e.CategoryId = v)
+            .Values("tags", nameof(Product.Tags), static e => e.Tags, static (e, v) => e.Tags = v)
+            .Property("categoryName", nameof(Product.CategoryName), static e => e.CategoryName, static (e, v) => e.CategoryName = v)
+            .Reference("category", nameof(Product.Category), static e => e.Category, static (e, v) => e.Category = v)
+            .Collection("lines", nameof(Product.Lines), static e => e.Lines, static (e, v) => e.Lines = v));
 
     public RestSet<Category> Categories => Set<Category>();
 
