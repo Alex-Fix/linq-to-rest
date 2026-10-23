@@ -155,6 +155,34 @@ public abstract class ValidationTests(ShopDatabase database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_required_foreign_key_set_through_refs_counts_as_present()
+    {
+        database.SkipIfUnavailable();
+        await using var server = await ShopServer.StartAsync(database, sets: options => options
+            .AddSet<Product>(b =>
+            {
+                b.ToSet("products").AllowWrites(WriteOperations.Insert);
+                b.Property(p => p.Name);
+                b.Property(p => p.CategoryId).IsRequired();
+                b.HasOne(p => p.Category).WithForeignKey(p => p.CategoryId);
+            })
+            .AddSet<Category>(b => b.ToSet("categories").AllowWrites(WriteOperations.Insert).Property(c => c.Name)));
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/$batch");
+        request.Content = new StringContent("""
+            {"v":1,"operations":[
+              {"id":"c","op":"insert","set":"categories","values":{"name":"Puzzles"}},
+              {"id":"p","op":"insert","set":"products","values":{"name":"Cube"},"refs":{"categoryId":"c"}},
+              {"id":"q","op":"insert","set":"products","values":{"name":"Orphan"}}]}
+            """, Encoding.UTF8, "application/json");
+
+        using var response = await server.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal([("q", "/operations/2/values/categoryId", "categoryId", "required")], Errors(problem));
+    }
+
+    [Fact]
     public async Task Valid_writes_are_saved()
     {
         var response = await BatchAsync("""{"v":1,"operations":[{"id":"p","op":"insert","set":"products","values":{"name":"Cube","description":"Puzzle","price":9.5,"releasedOn":"2026-01-01","status":"Active"}}]}""", HttpStatusCode.OK);

@@ -170,7 +170,8 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         var failed = new HashSet<SetProperty>();
         foreach (var property in scope.Mapping.Properties)
         {
-            if (property.Rules is { } rules && (isInsert || scope.IsSent(property))
+            // A foreign key set through refs gets its value when the row it references is saved.
+            if (property.Rules is { } rules && (isInsert || scope.IsSent(property)) && operation.Refs?.ContainsKey(property.Name) != true
                 && rules.Check(property.EntityProperty!.GetValue(entity)) is { } code)
             {
                 failed.Add(property);
