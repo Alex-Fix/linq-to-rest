@@ -43,6 +43,27 @@ internal sealed class EntityBound(Expression expression, SetMapping mapping, Exp
     public bool NeedsLifting => IsNullable || Guard is not null;
 }
 
+/// <summary>
+/// A value of a value type (an EF complex or owned member), read through <see cref="Owner"/>. Its members are columns
+/// of the owner's row; the whole value can only be selected or compared with null.
+/// </summary>
+internal sealed class ValueObjectBound(Expression expression, ServerValueType valueType, EntityBound owner, bool isNullable, bool isFilterable) : Bound
+{
+    public Expression Expression { get; } = expression;
+
+    public ServerValueType ValueType { get; } = valueType;
+
+    public EntityBound Owner { get; } = owner;
+
+    /// <summary>Gets whether the value, or a value holding it, may be null.</summary>
+    public bool IsNullable { get; } = isNullable;
+
+    /// <summary>Gets whether every property on the path to the value is filterable.</summary>
+    public bool IsFilterable { get; } = isFilterable;
+
+    public bool NeedsLifting => IsNullable || Owner.NeedsLifting;
+}
+
 /// <summary>A collection navigation or primitive collection.</summary>
 // Source is the sequence lambdas compose over; Value is the materialized collection to project (primitive collections only).
 internal sealed class CollectionBound(Expression source, Type elementType, SetMapping? elementMapping, Expression? value) : Bound

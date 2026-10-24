@@ -23,6 +23,8 @@ internal sealed partial class QueryBinder
                         return new ValueShape(row.Add(value.Expression));
                     case EntityBound entity:
                         return DefaultShape(entity, row, null);
+                    case ValueObjectBound value:
+                        return ValueShape(value, row);
                     case CollectionBound { ElementMapping: null } collection:
                         return new ValueShape(row.Add(collection.Value!));
                     case CollectionBound collection:
@@ -45,7 +47,7 @@ internal sealed partial class QueryBinder
         var fields = new List<KeyValuePair<string, Shape>>();
         foreach (var property in entity.Mapping.Properties)
         {
-            fields.Add(new(property.Name, new ValueShape(row.Add(PropertyValue(entity, property)))));
+            fields.Add(new(property.Name, property.ValueType is null ? new ValueShape(row.Add(PropertyValue(entity, property))) : ValueShape(Value(entity, property), row)));
         }
 
         foreach (var (navigation, children) in includes?.Children ?? [])
@@ -54,6 +56,18 @@ internal sealed partial class QueryBinder
         }
 
         return new ObjectShape(fields, presence);
+    }
+
+    /// <summary>A value of a value type, as an object of its members (null when the value or its owner is missing).</summary>
+    private static ObjectShape ValueShape(ValueObjectBound value, Row row)
+    {
+        int? presence = value.NeedsLifting ? row.Add(ValuePresence(value)) : null;
+        var fields = value.ValueType.Properties.Select(member => KeyValuePair.Create(
+            member.Name,
+            member.ValueType is null
+                ? (Shape)new ValueShape(row.Add(ValueMember(value, member, MemberUse.Select, null).Expression))
+                : ValueShape(NestedValue(value, member), row)));
+        return new ObjectShape([.. fields], presence);
     }
 
     private Shape NavigationShape(EntityBound entity, SetNavigation navigation, Row row, IncludeTree children)

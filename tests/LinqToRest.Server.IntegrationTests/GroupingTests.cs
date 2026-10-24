@@ -18,7 +18,7 @@ public abstract class GroupingTests(ShopDatabase database) : IAsyncLifetime
             ? await ShopServer.StartAsync(
                 database,
                 options => options.AddPolicy<ProductPolicy>().AddPolicy<CategoryPolicy>().Limits(limits => limits.MaxGroups = 3),
-                sets: options => options.AddSet<Product>(ConfigureProducts).AddSet<Category>(ConfigureCategories).AddSet(new OrderLineSet()))
+                sets: options => options.AddSet<Product>(ConfigureProducts).AddSet<Category>(ConfigureCategories).AddSet(new OrderLineSet()).AddShopValueTypes())
             : null;
 
     public async ValueTask DisposeAsync()
