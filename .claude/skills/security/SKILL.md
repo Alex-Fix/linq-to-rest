@@ -105,6 +105,9 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
 - README documents QUERY-specific concerns: proxy/WAF allow-listing of the method and CORS preflight.
 - `POST /{set}/$query` is the same handler as QUERY. Keep requiring `application/json` on every endpoint: it forces a
   CORS preflight, so cross-site form posts can't reach the POST endpoints.
+- CORS: `AllowLinqToRest()` sets methods, headers and max-age but never origins or credentials. Samples and docs use
+  explicit origins and a named policy on the group (`RequireCors`), never origin reflection or
+  `SetIsOriginAllowed(_ => true)` with `AllowCredentials()`.
 
 ## Review checklist
 - [ ] New AST node / operator: in the closed list, type-checked, limited, and covered by a SQLite translation test?
@@ -113,6 +116,7 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
 - [ ] Can a client write to a set (or an operation) that didn't opt in with `AllowWrites(...)`?
 - [ ] Is the policy `Filter` applied to reads, counts, cursor pages, includes, updates and deletes?
 - [ ] Can `values` set anything not bound with `Property(...)` (computed, key, token, read-only)?
+- [ ] CORS: explicit origins, no origin reflection with credentials, scoped to the endpoints that need it?
 - [ ] Is every limit enforced before allocation and tested at and past its boundary?
 - [ ] Any `Compile()`, reflection on client strings, string-built query or dynamic LINQ on the server? → reject.
 - [ ] Error responses and logs free of raw values, type names and member names as typed?
