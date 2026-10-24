@@ -21,7 +21,7 @@ internal sealed class SetDefinition(Type entityType)
 
     public MemberDefinition? ConcurrencyToken { get; set; }
 
-    /// <summary>Gets the exposed scalar members, in the order they were first configured.</summary>
+    /// <summary>Gets the exposed scalar and value-type members, in the order they were first configured.</summary>
     public List<MemberDefinition> Members { get; } = [];
 
     public List<NavigationDefinition> Navigations { get; } = [];
@@ -36,23 +36,54 @@ internal sealed class SetDefinition(Type entityType)
     /// <summary>Gets the validator types (<c>ValidateWith</c>), in the order they were added.</summary>
     public List<Type> Validators { get; } = [];
 
-    public MemberDefinition GetProperty(PropertyInfo property, LambdaExpression expression)
+    public MemberDefinition GetProperty(PropertyInfo property, LambdaExpression expression) => Members.GetMember(property, expression, valueType: null);
+
+    public MemberDefinition GetValue(PropertyInfo property, LambdaExpression expression) => Members.GetMember(property, expression, expression.ReturnType);
+}
+
+/// <summary>What a <see cref="ValueTypeBuilder{TValue}"/> collected, validated when the server model is built.</summary>
+internal sealed class ValueTypeDefinition(Type clrType)
+{
+    public Type ClrType { get; } = clrType;
+
+    public string? TypeName { get; set; }
+
+    /// <summary>Gets the exposed scalar and nested value members, in the order they were first configured.</summary>
+    public List<MemberDefinition> Members { get; } = [];
+
+    public MemberDefinition GetProperty(PropertyInfo property, LambdaExpression expression) => Members.GetMember(property, expression, valueType: null);
+
+    public MemberDefinition GetValue(PropertyInfo property, LambdaExpression expression) => Members.GetMember(property, expression, expression.ReturnType);
+}
+
+internal static class MemberDefinitions
+{
+    /// <summary>Returns the member configured for <paramref name="property"/>, adding it on first use.</summary>
+    public static MemberDefinition GetMember(this List<MemberDefinition> members, PropertyInfo property, LambdaExpression expression, Type? valueType)
     {
-        if (Members.Find(member => member.Property == property) is { } existing)
+        if (members.Find(member => member.Property == property) is { } existing)
         {
-            return existing;
+            return existing.ValueType == valueType
+                ? existing
+                : throw new ArgumentException($"'{property.Name}' is configured both with Property(...) and Value(...).", nameof(property));
         }
 
-        var created = new MemberDefinition(property, null, expression);
-        Members.Add(created);
+        var created = new MemberDefinition(property, null, expression) { ValueType = valueType };
+        members.Add(created);
         return created;
     }
 }
 
-/// <summary>A configured property (<see cref="Property"/> set) or computed value (<see cref="ComputedName"/> set).</summary>
+/// <summary>
+/// A configured property (<see cref="Property"/> set), value-type property (<see cref="ValueType"/> set too) or
+/// computed value (<see cref="ComputedName"/> set).
+/// </summary>
 internal sealed class MemberDefinition(PropertyInfo? property, string? computedName, LambdaExpression expression)
 {
     public PropertyInfo? Property { get; } = property;
+
+    /// <summary>Gets the value type of a member configured with <c>Value(...)</c>.</summary>
+    public Type? ValueType { get; init; }
 
     public string? ComputedName { get; } = computedName;
 

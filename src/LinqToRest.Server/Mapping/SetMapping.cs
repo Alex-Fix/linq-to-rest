@@ -223,7 +223,7 @@ internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQ
     }
 }
 
-/// <summary>An exposed scalar or primitive-collection member.</summary>
+/// <summary>An exposed scalar, primitive-collection or value-type member (of a set or of a value type).</summary>
 internal sealed class SetProperty
 {
     /// <summary>Gets the wire name.</summary>
@@ -243,6 +243,9 @@ internal sealed class SetProperty
 
     public bool IsCollection => ElementType is not null;
 
+    /// <summary>Gets the value type of a member exposed with <c>Value(...)</c>.</summary>
+    public ServerValueType? ValueType { get; init; }
+
     public required bool IsNullable { get; init; }
 
     public bool IsWritable { get; init; }
@@ -260,6 +263,41 @@ internal sealed class SetProperty
 
     public override string ToString() => Name;
 }
+
+/// <summary>An exposed value type: its members as lambdas over the value, and how batches build one.</summary>
+internal sealed class ServerValueType(RestValueTypeModel model, Type clrType)
+{
+    private Dictionary<string, SetProperty> _properties = [];
+
+    /// <summary>Gets the value type as described in the model document.</summary>
+    public RestValueTypeModel Model { get; } = model;
+
+    public string Name => Model.Name;
+
+    public Type ClrType { get; } = clrType;
+
+    public SetProperty[] Properties { get; private set; } = [];
+
+    /// <summary>Gets how batches construct a value, or <see langword="null"/> when no writable property uses the type.</summary>
+    public ValueConstruction? Construction { get; private set; }
+
+    public SetProperty? FindProperty(string name) => _properties.GetValueOrDefault(name);
+
+    public void Initialize(SetProperty[] properties, ValueConstruction? construction)
+    {
+        Properties = properties;
+        Construction = construction;
+        _properties = properties.ToDictionary(property => property.Name, StringComparer.Ordinal);
+    }
+
+    public override string ToString() => Name;
+}
+
+/// <summary>
+/// Builds a value from its members: the constructor and the members passed to it in parameter order, then the members
+/// assigned through their setters. Resolved once at startup from the configured members only.
+/// </summary>
+internal sealed record ValueConstruction(ConstructorInfo Constructor, SetProperty[] Arguments, SetProperty[] Setters);
 
 /// <summary>A custom rule: <see cref="Member"/> is the property the error points at, or null for the row.</summary>
 internal sealed record SetRule(SetProperty? Member, Func<object, bool> IsValid, string Code, bool OnlyWhenSent);

@@ -262,6 +262,14 @@ Where the implementation differs from the sections above, this list wins.
    that (it projects member columns). `tests/LinqToRest.Server.IntegrationTests/ValueTypeProviderTests.cs` keeps
    these checks.
 
+2. **Server configuration (step 3).** Value-type members can't be collections. A value type used by several properties
+   must map the same members with the same types and nullability everywhere (startup error otherwise), since the
+   model has one shape per type. A writable use requires every EF-mapped member (non-shadow, non-key properties,
+   complex properties and owned references) to be exposed; nested values are written with the outermost property, so
+   only that one is `writable` in the model. The constructor is the public one with the most parameters that all match
+   members by name (ignoring case) and type; the other members need a public `set` or `init`. The golden models gain
+   value types in steps 4 (integration shop) and 7 (golden client model), when something reads them.
+
 ## Open questions
 
 - Collections of value objects, whole-value equality and partial updates: later, on demand.

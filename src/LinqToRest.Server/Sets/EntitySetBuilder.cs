@@ -99,6 +99,21 @@ public sealed class EntitySetBuilder<TEntity>
     }
 
     /// <summary>
+    /// Exposes an EF Core complex or owned property (<c>OwnsOne</c>, also with <c>ToJson()</c>) whose type is a
+    /// configured value type: <c>e =&gt; e.ShippingAddress</c>. Its wire name is the camelCase property name. It's
+    /// filterable through its members, and writable as a whole when the set allows inserts or updates.
+    /// </summary>
+    /// <param name="value">The complex or owned property.</param>
+    /// <typeparam name="TValue">The value type, configured with an <see cref="IValueTypeConfiguration{TValue}"/>.</typeparam>
+    /// <returns>A builder for the property's options.</returns>
+    public ValueUseBuilder Value<TValue>(Expression<Func<TEntity, TValue?>> value)
+        where TValue : class
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return new ValueUseBuilder(Definition.GetValue(MemberAccess.GetProperty(value, nameof(value)), value));
+    }
+
+    /// <summary>
     /// Exposes a read-only value computed from the entity, such as <c>e =&gt; e.Category!.Name</c>. The expression
     /// must translate on EF Core. It reads what it references without the policy filters of other sets, so keep it
     /// within what this set may show.

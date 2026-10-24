@@ -24,7 +24,7 @@ public static class LinqToRestServiceCollectionExtensions
             throw new InvalidOperationException("LinqToRest needs a DbContext. Call UseDbContext<TContext>().");
         }
 
-        services.AddSingleton(provider => ServerModelBuilder.Build(provider, builder.Sets, builder.ContextType, builder.QueryLimits));
+        services.AddSingleton(provider => ServerModelBuilder.Build(provider, builder.Sets, builder.ValueTypes, builder.ContextType, builder.QueryLimits));
         return services;
     }
 }
