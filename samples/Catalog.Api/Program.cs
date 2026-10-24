@@ -23,11 +23,12 @@ builder.Services.AddLinqToRest(options => options
     .AddPolicy<ProductImagePolicy>());
 builder.Services.AddDevLoginAuthentication(builder.Configuration);
 
-// The browser apps call the API directly, so they need CORS, including the QUERY method (browsers preflight it).
-builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
+// The browser apps call the API from their own origins, so they need CORS; every LinqToRest call is preflighted.
+// A named policy applies only to the endpoints that require it, rather than to the whole app.
+const string corsPolicy = "linqtorest";
+builder.Services.AddCors(options => options.AddPolicy(corsPolicy, policy => policy
     .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [])
-    .WithMethods("QUERY", "POST")
-    .WithHeaders("Content-Type", "Authorization")));
+    .AllowLinqToRest()));
 
 var app = builder.Build();
 
@@ -52,10 +53,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // Reads are public, so the group doesn't require authorization; the policies let only editors write.
-app.MapLinqToRest("/api");
+app.MapLinqToRest("/api").RequireCors(corsPolicy);
 if (app.Environment.IsDevelopment())
 {
-    app.MapDevLogin(app.Configuration, app.Services.GetRequiredService<TimeProvider>());
+    app.MapDevLogin(app.Configuration, app.Services.GetRequiredService<TimeProvider>()).RequireCors(corsPolicy);
 }
 
 await app.RunAsync();

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using LinqToRest.Server.Hosting;
 using Microsoft.Extensions.Hosting;
 
@@ -84,21 +85,35 @@ public sealed class CatalogTests(CatalogApi api) : IClassFixture<CatalogApi>
     {
         var client = await api.ClientAsync();
 
-        using var allowed = await client.SendAsync(Preflight("http://localhost:5173"), TestContext.Current.CancellationToken);
-        using var other = await client.SendAsync(Preflight("https://evil.example"), TestContext.Current.CancellationToken);
+        using var allowed = await client.SendAsync(Preflight("/api/products", "QUERY", "http://localhost:5173"), TestContext.Current.CancellationToken);
+        using var other = await client.SendAsync(Preflight("/api/products", "QUERY", "https://evil.example"), TestContext.Current.CancellationToken);
 
         Assert.Equal("http://localhost:5173", Assert.Single(allowed.Headers.GetValues("Access-Control-Allow-Origin")));
         Assert.Contains("QUERY", allowed.Headers.GetValues("Access-Control-Allow-Methods").Single(), StringComparison.Ordinal);
+        Assert.Equal("600", Assert.Single(allowed.Headers.GetValues("Access-Control-Max-Age")));
         Assert.False(other.Headers.Contains("Access-Control-Allow-Origin"));
+    }
 
-        static HttpRequestMessage Preflight(string origin)
-        {
-            var request = new HttpRequestMessage(HttpMethod.Options, "/api/products");
-            request.Headers.Add("Origin", origin);
-            request.Headers.Add("Access-Control-Request-Method", "QUERY");
-            request.Headers.Add("Access-Control-Request-Headers", "content-type,authorization");
-            return request;
-        }
+    [Fact]
+    public async Task Cors_allows_the_dev_login_preflight()
+    {
+        using var response = await api.CreateClient().SendAsync(Preflight("/auth/dev-login", "POST", "http://localhost:5174"), TestContext.Current.CancellationToken);
+
+        Assert.Equal("http://localhost:5174", Assert.Single(response.Headers.GetValues("Access-Control-Allow-Origin")));
+    }
+
+    [Fact]
+    public async Task Cors_allows_a_cross_origin_query_response()
+    {
+        var client = await api.ClientAsync();
+        using var request = new HttpRequestMessage(HttpMethod.Query, "/api/brands");
+        request.Content = new StringContent("""{"v":1}""", Encoding.UTF8, "application/json");
+        request.Headers.Add("Origin", "http://localhost:5173");
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("http://localhost:5173", Assert.Single(response.Headers.GetValues("Access-Control-Allow-Origin")));
     }
 
     [Fact]
@@ -125,6 +140,15 @@ public sealed class CatalogTests(CatalogApi api) : IClassFixture<CatalogApi>
         {
             File.Delete(path);
         }
+    }
+
+    private static HttpRequestMessage Preflight(string path, string method, string origin)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Options, path);
+        request.Headers.Add("Origin", origin);
+        request.Headers.Add("Access-Control-Request-Method", method);
+        request.Headers.Add("Access-Control-Request-Headers", "content-type,authorization");
+        return request;
     }
 }
 

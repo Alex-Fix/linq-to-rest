@@ -73,7 +73,9 @@ for saves, the affected `entities`); other failures throw `RestHttpError`.
 
 - Dates, times, `Guid` and binary values are ISO 8601 / canonical strings, never `Date` objects.
 - `transport: "post"` sends queries to `POST {set}/$query` instead of HTTP `QUERY`, for infrastructure that blocks
-  unknown methods. Browser apps on another origin need CORS on the API for the method, `Content-Type` and auth headers.
+  unknown methods. Either way, browser apps on another origin need CORS on the API: see the main README's
+  [CORS](../../README.md#cors) section (`AllowLinqToRest()` on the server). For cookie authentication, pass
+  `fetch: (url, init) => fetch(url, { ...init, credentials: "include" })`.
 - One context per unit of work (a form, a page): tracked rows are plain objects in an identity map.
 
 MIT licensed.

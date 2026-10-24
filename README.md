@@ -356,17 +356,7 @@ only, as the tests and sample do.
 
 - **HTTP QUERY**: some proxies, WAFs and CDNs reject unknown methods. Allow `QUERY` on the API routes, or send the same
   body to `POST /api/{set}/$query`.
-- **CORS**: browsers always preflight `QUERY` (it isn't a "simple" method) and requests with `application/json` or an
-  `Authorization` header. A front end on another origin needs the API to allow its origin, the methods and those
-  headers; never allow any origin together with credentials:
-
-  ```csharp
-  builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
-      .WithOrigins("https://shop.example")
-      .WithMethods("QUERY", "POST")
-      .WithHeaders("Content-Type", "Authorization")));
-  app.UseCors();
-  ```
+- **CORS**: browser front ends on another origin need it; see [CORS](#cors) below.
 - **OpenAPI**: OpenAPI 3.1 (what ASP.NET Core 10's `AddOpenApi()` generates) can't describe QUERY, so the QUERY route is
   excluded from descriptions; `POST {set}/$query` and `POST $batch` carry full metadata.
 - **Trimming and Native AOT**: the .NET client is trim- and AOT-compatible. Generated contexts bind their classes
@@ -384,6 +374,39 @@ only, as the tests and sample do.
   as `samples/Catalog.Api` does).
 - **Concurrency tokens** must be EF Core concurrency tokens (`IsConcurrencyToken()` / `IsRowVersion()`); the server
   refuses to start with one that isn't.
+
+### CORS
+
+A browser app needs CORS only when it calls the API from another origin (scheme, host or port). Hosting the front end
+on the API's origin, or a dev-server proxy such as Vite's `server.proxy`, needs none.
+
+Every LinqToRest call is preflighted: `QUERY` isn't a "simple" method, and `application/json` or an `Authorization`
+header force a preflight anyway, so `POST {set}/$query` doesn't avoid it. `AllowLinqToRest()` allows what the clients
+send (methods `QUERY`, `POST`, `GET`; headers `Content-Type`, `Authorization`, `If-None-Match`; exposes `ETag` for
+`$model`) and lets browsers cache preflights for 10 minutes (`AllowLinqToRest(TimeSpan)` changes it). Without a
+max-age, Chrome repeats the preflight after 5 seconds, which roughly doubles the round trips. You choose the origins:
+
+```csharp
+builder.Services.AddCors(o => o.AddPolicy("linqtorest", p => p
+    .WithOrigins("https://shop.example")
+    .AllowLinqToRest()
+    .WithHeaders("X-Tenant")));          // only headers your app adds itself
+app.UseCors();
+app.MapLinqToRest("/api").RequireCors("linqtorest");
+```
+
+- A named policy with `RequireCors` applies only to the LinqToRest endpoints (and any others you add it to, such as a
+  login endpoint), not to the whole app.
+- Headers your app adds (the TypeScript `headers` option, a .NET `HttpClient` handler) must be allowed with
+  `WithHeaders`.
+- Bearer tokens need nothing more. Cookie authentication needs `AllowCredentials()` on the policy and
+  `credentials: "include"` on the browser's requests (in the TypeScript client:
+  `fetch: (url, init) => fetch(url, { ...init, credentials: "include" })`).
+- Never allow any origin with credentials, including through `SetIsOriginAllowed(_ => true)` or by echoing the
+  request's `Origin`: any site the user visits could then read and change their data. ASP.NET Core rejects
+  `AllowAnyOrigin()` with `AllowCredentials()`, but not those.
+- Every endpoint requires `application/json`, which is what keeps cross-site HTML form posts (which aren't preflighted)
+  out; don't relax it.
 
 ## Development
 

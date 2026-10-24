@@ -7,7 +7,7 @@ Design: [`docs/plans/2026-10-20-catalog-sample-design.md`](../docs/plans/2026-10
 
 | Project | What it is |
 |---|---|
-| `Catalog.Api` | ASP.NET Core + EF Core (SQLite by default), sets, validation rules and a validator, role policies, dev login, CORS, `model.json`; published ReadyToRun |
+| `Catalog.Api` | ASP.NET Core + EF Core (SQLite by default), sets, validation rules and a validator, role policies, dev login, CORS (`AllowLinqToRest()` scoped to the API and dev login), `model.json`; published ReadyToRun |
 | `Catalog.Client` | `CatalogContext.generated.cs`, generated from `model.json` (never edit it) |
 | `catalog-web` | React + Vite + [Ant Design](https://ant.design) on `catalog.generated.ts`, generated from the same `model.json` |
 | `Catalog.Blazor` | Blazor WebAssembly + [Ant Design Blazor](https://antblazor.com) on `Catalog.Client` |
