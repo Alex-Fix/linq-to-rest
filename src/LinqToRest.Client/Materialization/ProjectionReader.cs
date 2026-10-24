@@ -58,7 +58,7 @@ internal sealed class ProjectionReader
                 return navigation.IsCollection ? (element, location) => Rows(navigation, element, location) : (element, location) => Row(navigation.Target, element, location);
             }
 
-            if (property is { IsCollection: true })
+            if (property is { IsCollection: true } or { ValueType: not null })
             {
                 return (element, location) => property.Read(element, location);
             }
@@ -207,6 +207,18 @@ internal sealed class ProjectionReader
 
         foreach (var member in members)
         {
+            // A member of a value (an address) once the path has entered one.
+            if (property?.ValueType is { } valueType)
+            {
+                property = Array.Find(valueType.Properties, candidate => candidate.Name == member.Name);
+                if (property is null)
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
             if (set is null)
             {
                 return false;

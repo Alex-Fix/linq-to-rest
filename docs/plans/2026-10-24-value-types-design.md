@@ -277,6 +277,15 @@ Where the implementation differs from the sections above, this list wins.
    validation errors carry the slash path as `member` (`size/weight/unit`), the same form as query paths and
    pointers; `EntityValidationContext.IsModified` / `AddError` accept `e => e.Size.Weight.Unit`.
 
+4. **.NET client (step 6).** `ValueBinding<T>` takes a factory of the member values in binding order
+   (`v => new Address { Street = (string)v[0]!, … }`), so immutable records with `required`/`init` members work
+   without reflection; `SetBinding<T>.Value(...)` and `ValueBinding<T>.Value(...)` take the nested binding, so
+   `ClientModel.Bind` keeps its signature. Hand-written classes bound by reflection get a reflected value binding
+   (constructor matching members, then setters). Change tracking snapshots a value's member values (nested too)
+   rather than relying on record equality, so a mutable value changed in place is detected as well. A whole value
+   that's compared with anything but null, sorted or grouped throws `NotSupportedException` before sending. The
+   golden request bodies come with the golden model in step 7, once the generator emits value types.
+
 ## Open questions
 
 - Collections of value objects, whole-value equality and partial updates: later, on demand.

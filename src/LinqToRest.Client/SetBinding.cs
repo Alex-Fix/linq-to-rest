@@ -82,6 +82,30 @@ public sealed class SetBinding<T> : SetBinding
         });
     }
 
+    /// <summary>Binds a property holding a value type, such as an address.</summary>
+    /// <param name="name">The wire name.</param>
+    /// <param name="member">The CLR property name.</param>
+    /// <param name="binding">The value type's binding.</param>
+    /// <param name="get">Reads the property.</param>
+    /// <param name="set">Writes the property.</param>
+    /// <typeparam name="TValue">The value type.</typeparam>
+    /// <returns>The same binding.</returns>
+    public SetBinding<T> Value<TValue>(string name, string member, ValueBinding<TValue> binding, Func<T, TValue?> get, Action<T, TValue?> set)
+        where TValue : class
+    {
+        ArgumentNullException.ThrowIfNull(binding);
+        ArgumentNullException.ThrowIfNull(get);
+        ArgumentNullException.ThrowIfNull(set);
+        return Add(new MemberBinding(name, member, MemberKind.Value, typeof(TValue), null)
+        {
+            Get = entity => get((T)entity),
+            Set = (entity, value) => set((T)entity, (TValue?)value),
+            Read = binding.Read,
+            ReadInto = (entity, element, location) => set((T)entity, (TValue?)binding.Read(element, location)),
+            Value = binding,
+        });
+    }
+
     /// <summary>Binds a reference navigation to another set.</summary>
     /// <param name="name">The wire name.</param>
     /// <param name="member">The CLR property name.</param>
@@ -138,6 +162,9 @@ internal enum MemberKind
 {
     Property,
     Values,
+
+    /// <summary>A value type (<see cref="MemberBinding.Value"/> binds it).</summary>
+    Value,
     Reference,
     Collection,
 }
@@ -178,4 +205,7 @@ internal sealed class MemberBinding
 
     /// <summary>Gets a factory of an empty list, for collection navigations.</summary>
     public Func<IList>? NewList { get; init; }
+
+    /// <summary>Gets the binding of a value-type member.</summary>
+    public ValueBinding? Value { get; init; }
 }

@@ -51,6 +51,7 @@ public sealed class ClientModel
         }
 
         var bound = new Dictionary<string, ClientSet>(StringComparer.Ordinal);
+        var valueTypes = new Dictionary<ValueBinding, ClientValueType>();
         foreach (var set in document.Sets)
         {
             var matching = sets.Where(binding => binding.SetName == set.Name).ToList();
@@ -70,7 +71,8 @@ public sealed class ClientModel
                 throw Mismatch(set, binding.ClrType, $"binds '{extra.Name}', which the model doesn't have");
             }
 
-            bound.Add(set.Name, new ClientSet(set, binding.ClrType, binding.Create, [.. set.Properties.Select(property => BindProperty(document, set, binding, property))]));
+            var properties = set.Properties.Select(property => BindProperty(document, binding.Members, property, valueTypes, problem => Mismatch(set, binding.ClrType, problem)));
+            bound.Add(set.Name, new ClientSet(set, binding.ClrType, binding.Create, [.. properties.Select(property => property.OfSet(set))]));
         }
 
         foreach (var set in bound.Values)
@@ -111,7 +113,7 @@ public sealed class ClientModel
                 throw Mismatch(set, type, "must be a class with a public parameterless constructor");
             }
 
-            bindings.Add(ReflectedBinding.For(set, type));
+            bindings.Add(ReflectedBinding.For(document, set, type));
         }
 
         return Bind(document, [.. bindings]);
@@ -119,14 +121,26 @@ public sealed class ClientModel
 
     internal ClientSet? FindSet(Type type) => _byType.GetValueOrDefault(type);
 
-    private static ClientProperty BindProperty(RestModel document, RestSetModel set, SetBinding binding, RestPropertyModel model)
+    /// <summary>Binds a property of a set or of a value type (<paramref name="members"/> are its class's bindings).</summary>
+    private static ClientProperty BindProperty(
+        RestModel document, List<MemberBinding> members, RestPropertyModel model, Dictionary<ValueBinding, ClientValueType> valueTypes, Func<string, InvalidOperationException> mismatch)
     {
-        var member = binding.Members.Find(candidate => candidate.Name == model.Name && candidate.Kind is MemberKind.Property or MemberKind.Values)
-            ?? throw Mismatch(set, binding.ClrType, $"has no binding for '{model.Name}'");
-        var elementType = member.Kind == MemberKind.Values ? member.ElementType : null;
-        if (model.IsCollection != elementType is not null)
+        var member = members.Find(candidate => candidate.Name == model.Name && candidate.Kind is MemberKind.Property or MemberKind.Values or MemberKind.Value)
+            ?? throw mismatch($"has no binding for '{model.Name}'");
+        if (document.FindValueType(model.Type) is { } valueModel)
         {
-            throw Mismatch(set, binding.ClrType, $"has '{member.Member}' as {(elementType is null ? "a single value" : "a collection")}, but the model says otherwise");
+            if (member.Value is not { } valueBinding || valueBinding.TypeName != valueModel.Name)
+            {
+                throw mismatch($"binds '{member.Member}' {(member.Value is null ? "as a scalar" : $"to the value type '{member.Value.TypeName}'")}, but the model says {model.Type}");
+            }
+
+            return new ClientProperty(member, model) { ValueType = BindValueType(document, valueModel, valueBinding, valueTypes) };
+        }
+
+        var elementType = member.Kind == MemberKind.Values ? member.ElementType : null;
+        if (member.Kind == MemberKind.Value || model.IsCollection != elementType is not null)
+        {
+            throw mismatch($"has '{member.Member}' as {(elementType is null ? "a single value" : "a collection")}, but the model says otherwise");
         }
 
         var valueType = elementType ?? member.ValueType;
@@ -137,19 +151,35 @@ public sealed class ClientModel
                 && Enum.GetNames(underlying).Order(StringComparer.Ordinal).SequenceEqual(enumModel.Members.Order(StringComparer.Ordinal));
         if (!fits)
         {
-            throw Mismatch(set, binding.ClrType, $"has '{member.Member}' of type {member.ValueType.Name}, but the model says {model.Type}");
+            throw mismatch($"has '{member.Member}' of type {member.ValueType.Name}, but the model says {model.Type}");
         }
 
         if (model is { IsNullable: true, IsCollection: false } && valueType.IsValueType && Nullable.GetUnderlyingType(valueType) is null)
         {
-            throw Mismatch(set, binding.ClrType, $"has '{member.Member}' as non-nullable, but the model says it can be null");
+            throw mismatch($"has '{member.Member}' as non-nullable, but the model says it can be null");
         }
 
-        return new ClientProperty(member, model)
+        return new ClientProperty(member, model);
+    }
+
+    /// <summary>Binds a value type once per binding: every member of the model, nothing else.</summary>
+    private static ClientValueType BindValueType(RestModel document, RestValueTypeModel model, ValueBinding binding, Dictionary<ValueBinding, ClientValueType> valueTypes)
+    {
+        if (valueTypes.TryGetValue(binding, out var existing))
         {
-            IsKey = set.Key.Contains(model.Name),
-            IsConcurrencyToken = set.ConcurrencyToken == model.Name,
-        };
+            return existing;
+        }
+
+        InvalidOperationException ValueMismatch(string problem) => new($"{binding.ClrType.Name}, the class of the value type '{model.Name}', {problem}.");
+        foreach (var extra in binding.Members.Where(member => model.FindProperty(member.Name) is null))
+        {
+            throw ValueMismatch($"binds '{extra.Name}', which the model doesn't have");
+        }
+
+        var properties = model.Properties.Select(property => BindProperty(document, binding.Members, property, valueTypes, ValueMismatch)).ToArray();
+        var bound = new ClientValueType(model, binding, properties);
+        valueTypes.Add(binding, bound);
+        return bound;
     }
 
     private static ClientNavigation BindNavigation(ClientSet set, SetBinding binding, RestNavigationModel model, Dictionary<string, ClientSet> sets)
@@ -181,12 +211,26 @@ public sealed class ClientModel
         {
         }
 
-        public static ReflectedBinding For(RestSetModel set, Type type)
+        public static ReflectedBinding For(RestModel document, RestSetModel set, Type type)
         {
             var binding = new ReflectedBinding(set.Name, type);
             foreach (var property in set.Properties)
             {
-                var info = FindClrProperty(set, type, property.Name);
+                var info = FindClrProperty(type, property.Name) ?? throw Mismatch(set, type, $"has no public read-write property for '{property.Name}'");
+                if (document.FindValueType(property.Type) is { } valueModel)
+                {
+                    var valueBinding = ReflectedValueBinding.For(document, valueModel, info.PropertyType);
+                    binding.Members.Add(new MemberBinding(property.Name, info.Name, MemberKind.Value, info.PropertyType, null)
+                    {
+                        Get = Getter(info),
+                        Set = info.SetValue,
+                        Read = valueBinding.Read,
+                        ReadInto = (row, element, location) => info.SetValue(row, valueBinding.Read(element, location)),
+                        Value = valueBinding,
+                    });
+                    continue;
+                }
+
                 var elementType = ScalarTypes.GetCollectionElementType(info.PropertyType);
                 binding.Members.Add(new MemberBinding(property.Name, info.Name, elementType is null ? MemberKind.Property : MemberKind.Values, info.PropertyType, elementType)
                 {
@@ -199,7 +243,7 @@ public sealed class ClientModel
 
             foreach (var navigation in set.Navigations)
             {
-                var info = FindClrProperty(set, type, navigation.Name);
+                var info = FindClrProperty(type, navigation.Name) ?? throw Mismatch(set, type, $"has no public read-write property for '{navigation.Name}'");
                 var target = navigation.IsCollection ? ScalarTypes.GetCollectionElementType(info.PropertyType) : info.PropertyType;
                 binding.Members.Add(new MemberBinding(navigation.Name, info.Name, navigation.IsCollection ? MemberKind.Collection : MemberKind.Reference, info.PropertyType, target)
                 {
@@ -212,14 +256,13 @@ public sealed class ClientModel
             return binding;
         }
 
-        private static PropertyInfo FindClrProperty(RestSetModel set, Type type, string wireName) =>
+        public static PropertyInfo? FindClrProperty(Type type, string wireName, bool settable = true) =>
             type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .FirstOrDefault(info => info.GetIndexParameters().Length == 0 && info.GetMethod?.IsPublic == true && info.SetMethod?.IsPublic == true
-                    && JsonNamingPolicy.CamelCase.ConvertName(info.Name) == wireName)
-            ?? throw Mismatch(set, type, $"has no public read-write property for '{wireName}'");
+                .FirstOrDefault(info => info.GetIndexParameters().Length == 0 && info.GetMethod?.IsPublic == true && (!settable || info.SetMethod?.IsPublic == true)
+                    && JsonNamingPolicy.CamelCase.ConvertName(info.Name) == wireName);
 
         // Compiled once per property: change detection reads every member of every tracked row.
-        private static Func<object, object?> Getter(PropertyInfo property)
+        public static Func<object, object?> Getter(PropertyInfo property)
         {
             var entity = Expression.Parameter(typeof(object), "entity");
             var value = Expression.Property(Expression.Convert(entity, property.DeclaringType!), property);
@@ -229,6 +272,133 @@ public sealed class ClientModel
         private static IList NewList(Type propertyType, Type elementType) =>
             (IList)Activator.CreateInstance(propertyType.IsInterface ? typeof(List<>).MakeGenericType(elementType) : propertyType)!;
     }
+
+    /// <summary>
+    /// The reflection-based binding of a hand-written value class: members by camelCase name (read-only ones too), built
+    /// through the public constructor with the most parameters that all match members, the other members set after.
+    /// </summary>
+    [RequiresUnreferencedCode("Finds properties and constructors by reflection.")]
+    [RequiresDynamicCode("Compiles getters at run time.")]
+    private sealed class ReflectedValueBinding : ValueBinding
+    {
+        private readonly ConstructorInfo _constructor;
+        private readonly int[] _arguments;
+        private readonly (PropertyInfo Property, int Index)[] _setters;
+
+        private ReflectedValueBinding(RestValueTypeModel model, Type type, List<MemberBinding> members, List<PropertyInfo> properties)
+            : base(model.Name, type)
+        {
+            Members.AddRange(members);
+            (ConstructorInfo Constructor, int[] Arguments)? best = null;
+            foreach (var constructor in type.GetConstructors())
+            {
+                var arguments = constructor.GetParameters()
+                    .Select(parameter => properties.FindIndex(property => string.Equals(property.Name, parameter.Name, StringComparison.OrdinalIgnoreCase) && property.PropertyType == parameter.ParameterType))
+                    .ToArray();
+                if (!arguments.Contains(-1) && arguments.Distinct().Count() == arguments.Length && (best is null || arguments.Length > best.Value.Arguments.Length))
+                {
+                    best = (constructor, arguments);
+                }
+            }
+
+            (_constructor, _arguments) = best ?? throw new InvalidOperationException($"{type.Name}, the class of the value type '{model.Name}', needs a public constructor whose parameters match its members, or a parameterless one.");
+            _setters = [.. properties.Select((property, index) => (property, index)).Where(pair => !_arguments.Contains(pair.index))];
+            if (_setters.FirstOrDefault(pair => pair.Property.SetMethod?.IsPublic != true).Property is { } readOnly)
+            {
+                throw new InvalidOperationException($"{type.Name}, the class of the value type '{model.Name}', can't set '{readOnly.Name}': it's neither a constructor parameter nor settable.");
+            }
+        }
+
+        public static ReflectedValueBinding For(RestModel document, RestValueTypeModel model, Type type)
+        {
+            var members = new List<MemberBinding>();
+            var properties = new List<PropertyInfo>();
+            foreach (var property in model.Properties)
+            {
+                var info = ReflectedBinding.FindClrProperty(type, property.Name, settable: false)
+                    ?? throw new InvalidOperationException($"{type.Name}, the class of the value type '{model.Name}', has no public property for '{property.Name}'.");
+                var nested = document.FindValueType(property.Type) is { } nestedModel ? For(document, nestedModel, info.PropertyType) : null;
+                properties.Add(info);
+                members.Add(new MemberBinding(property.Name, info.Name, nested is null ? MemberKind.Property : MemberKind.Value, info.PropertyType, null)
+                {
+                    Get = ReflectedBinding.Getter(info),
+                    Set = static (_, _) => throw new InvalidOperationException("Members of a value are set when it's built."),
+                    Read = nested is null ? (element, location) => JsonValues.Read(element, info.PropertyType, location) : nested.Read,
+                    Value = nested,
+                });
+            }
+
+            return new ReflectedValueBinding(model, type, members, properties);
+        }
+
+        private protected override object Create(object?[] values)
+        {
+            var created = _constructor.Invoke([.. _arguments.Select(index => values[index])]);
+            foreach (var (property, index) in _setters)
+            {
+                property.SetValue(created, values[index]);
+            }
+
+            return created;
+        }
+    }
+}
+
+/// <summary>A value type bound to its client class: its members in model order, and how to write and compare values.</summary>
+internal sealed class ClientValueType(RestValueTypeModel model, ValueBinding binding, ClientProperty[] properties)
+{
+    public RestValueTypeModel Model { get; } = model;
+
+    public string Name => Model.Name;
+
+    public Type ClrType => binding.ClrType;
+
+    /// <summary>Gets the members, in model order.</summary>
+    public ClientProperty[] Properties { get; } = properties;
+
+    public ClientProperty? FindProperty(string wireName) => Array.Find(Properties, property => property.WireName == wireName);
+
+    /// <summary>Writes a value as the JSON object batches send: every member, in model order.</summary>
+    public void Write(Utf8JsonWriter writer, object? value)
+    {
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        writer.WriteStartObject();
+        foreach (var property in Properties)
+        {
+            writer.WritePropertyName(property.WireName);
+            if (property.ValueType is { } nested)
+            {
+                nested.Write(writer, property.Get(value));
+            }
+            else
+            {
+                JsonValues.Write(writer, property.Get(value));
+            }
+        }
+
+        writer.WriteEndObject();
+    }
+
+    /// <summary>
+    /// Copies a value's members (nested values too), so change detection sees a value changed in place as well as a
+    /// replaced one.
+    /// </summary>
+    public object?[]? Snapshot(object? value) =>
+        value is null ? null : [.. Properties.Select(property => property.ValueType is { } nested ? nested.Snapshot(property.Get(value)) : property.Get(value))];
+
+    public bool Same(object? value, object? snapshot) => SameValues(Snapshot(value), snapshot as object?[]);
+
+    private static bool SameValues(object?[]? left, object?[]? right) =>
+        left is null || right is null
+            ? left is null && right is null
+            : left.Length == right.Length && left.Zip(right).All(pair => pair.First is object?[] nested ? SameValues(nested, pair.Second as object?[]) : Equals(pair.First, pair.Second));
+
+    public override string ToString() => Name;
 }
 
 /// <summary>A set bound to its client class.</summary>
@@ -279,6 +449,24 @@ internal sealed class ClientSet(RestSetModel model, Type clrType, Func<object> c
 
     public ClientNavigation? FindNavigation(string wireName) => _navigations.GetValueOrDefault(wireName);
 
+    /// <summary>
+    /// The dotted CLR path of a wire member path, such as <c>address/city</c> → <c>Address.City</c>, or
+    /// <see langword="null"/> when the model has no such member.
+    /// </summary>
+    public string? MemberPath(string wirePath)
+    {
+        var segments = wirePath.Split('/');
+        var property = FindProperty(segments[0]);
+        var path = property?.Name;
+        foreach (var segment in segments.AsSpan(1))
+        {
+            property = property?.ValueType?.FindProperty(segment);
+            path = property is null ? null : $"{path}.{property.Name}";
+        }
+
+        return path;
+    }
+
     public bool Allows(WriteOperations operations) => Model.Allows(operations);
 
     /// <summary>Gets the properties, then the navigations, with their UTF-8 wire names.</summary>
@@ -298,7 +486,7 @@ internal sealed class ClientSet(RestSetModel model, Type clrType, Func<object> c
     public override string ToString() => ClrType.Name;
 }
 
-/// <summary>A scalar or primitive-collection property bound to its client property.</summary>
+/// <summary>A scalar, primitive-collection or value-type property (of a set or of a value type) bound to its client property.</summary>
 internal sealed class ClientProperty(MemberBinding binding, RestPropertyModel model)
 {
     /// <summary>Gets the CLR property name.</summary>
@@ -312,11 +500,22 @@ internal sealed class ClientProperty(MemberBinding binding, RestPropertyModel mo
 
     public bool IsCollection => ElementType is not null;
 
+    /// <summary>Gets the value type of a property holding one.</summary>
+    public ClientValueType? ValueType { get; init; }
+
     public bool IsNullable => model.IsNullable;
 
-    public bool IsKey { get; init; }
+    public bool IsKey { get; private set; }
 
-    public bool IsConcurrencyToken { get; init; }
+    public bool IsConcurrencyToken { get; private set; }
+
+    /// <summary>Marks a set's key and concurrency token, once the set is bound.</summary>
+    public ClientProperty OfSet(RestSetModel set)
+    {
+        IsKey = set.Key.Contains(model.Name);
+        IsConcurrencyToken = set.ConcurrencyToken == model.Name;
+        return this;
+    }
 
     public bool IsWritable => model.IsWritable;
 
@@ -334,6 +533,24 @@ internal sealed class ClientProperty(MemberBinding binding, RestPropertyModel mo
     public Func<object, object?> Get => binding.Get;
 
     public Action<object, object?> Set => binding.Set;
+
+    /// <summary>Encodes a value of the property as a batch sends it (a value type as an object of its members).</summary>
+    public JsonElement ToElement(object? value)
+    {
+        if (ValueType is not { } valueType)
+        {
+            return JsonValues.ToElement(value);
+        }
+
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            valueType.Write(writer, value);
+        }
+
+        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        return document.RootElement.Clone();
+    }
 
     /// <summary>Gets the reader of the property's JSON value.</summary>
     public Func<JsonElement, string, object?> Read => binding.Read!;

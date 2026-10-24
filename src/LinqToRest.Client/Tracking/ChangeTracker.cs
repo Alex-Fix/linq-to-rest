@@ -168,7 +168,7 @@ internal sealed class ChangeTracker
         for (var index = 0; index < entry.Type.Properties.Length; index++)
         {
             var property = entry.Type.Properties[index];
-            if (property.IsWritable && (entry.Forced.Contains(property) || !Entry.SameValue(property.Get(entry.Entity), entry.Snapshot[index])))
+            if (property.IsWritable && (entry.Forced.Contains(property) || !Entry.SameValue(property, property.Get(entry.Entity), entry.Snapshot[index])))
             {
                 entry.Modified.Add(property);
             }
@@ -246,7 +246,7 @@ internal sealed class Entry(object entity, ClientSet type)
 
     public void TakeSnapshot()
     {
-        Snapshot = [.. Type.Properties.Select(property => Copy(property.Get(Entity)))];
+        Snapshot = [.. Type.Properties.Select(property => Copy(property, property.Get(Entity)))];
         NavigationSnapshot = [.. Type.Navigations.Select(navigation => Copy(navigation.Get(Entity)))];
     }
 
@@ -255,8 +255,11 @@ internal sealed class Entry(object entity, ClientSet type)
     public void ResetSnapshot(ClientProperty property)
     {
         var index = IndexOf(property);
-        Snapshot[index] = Copy(Type.Properties[index].Get(Entity));
+        Snapshot[index] = Copy(Type.Properties[index], Type.Properties[index].Get(Entity));
     }
+
+    public static bool SameValue(ClientProperty property, object? current, object? snapshot) =>
+        property.ValueType is { } valueType ? valueType.Same(current, snapshot) : SameValue(current, snapshot);
 
     public static bool SameValue(object? current, object? snapshot) => current switch
     {
@@ -282,6 +285,9 @@ internal sealed class Entry(object entity, ClientSet type)
 
         throw new ArgumentException($"{property} doesn't belong to {Type}.", nameof(property));
     }
+
+    private static object? Copy(ClientProperty property, object? value) =>
+        property.ValueType is { } valueType ? valueType.Snapshot(value) : Copy(value);
 
     private static object? Copy(object? value) => value switch
     {
