@@ -39,10 +39,10 @@ public static class DevLogin
         services.AddAuthorization();
     }
 
-    public static void MapDevLogin(this IEndpointRouteBuilder endpoints, IConfiguration configuration, TimeProvider time)
+    public static RouteHandlerBuilder MapDevLogin(this IEndpointRouteBuilder endpoints, IConfiguration configuration, TimeProvider time)
     {
         var key = SigningKey(configuration) ?? throw new InvalidOperationException("Configure DevLogin:SigningKey (appsettings.Development.json has one).");
-        endpoints.MapPost("/auth/dev-login", (DevLoginRequest request) =>
+        return endpoints.MapPost("/auth/dev-login", (DevLoginRequest request) =>
         {
             if (Array.IndexOf(Roles, request.Role) < 0)
             {
