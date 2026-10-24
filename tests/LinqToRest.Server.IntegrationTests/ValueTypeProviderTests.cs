@@ -39,7 +39,7 @@ public abstract class ValueTypeProviderTests(ShopDatabase database)
         var none = await shop.Db.Products.CountAsync(p => p.Origin == null, TestContext.Current.CancellationToken);
 
         Assert.Equal([1, 3], rows.Select(r => (int)r[0]!));
-        Assert.Equal(new object?[] { "IN", null }, (object?[])rows[0][1]!);
+        Assert.Equal(["IN", null], (object?[])rows[0][1]!);
         Assert.Equal(3, none);
         AssertNullTestInSql(shop);
     }
@@ -56,7 +56,7 @@ public abstract class ValueTypeProviderTests(ShopDatabase database)
         var withContact = await shop.Db.Categories.CountAsync(c => c.Contact != null && c.Contact.Email.EndsWith("@shop.example"), TestContext.Current.CancellationToken);
 
         Assert.Null(rows[0][1]);
-        Assert.Equal(new object?[] { "games@shop.example", "+380 44 000" }, (object?[])rows[1][1]!);
+        Assert.Equal(["games@shop.example", "+380 44 000"], (object?[])rows[1][1]!);
         Assert.Equal(2, withContact);
         AssertNullTestInSql(shop);
     }
@@ -73,7 +73,7 @@ public abstract class ValueTypeProviderTests(ShopDatabase database)
             .ToListAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal([21, 11], rows.Select(r => (int)r[0]!));
-        Assert.Equal(new object?[] { "UA", "Lviv" }, (object?[])rows[1][1]!);
+        Assert.Equal(["UA", "Lviv"], (object?[])rows[1][1]!);
         AssertNullTestInSql(shop);
     }
 

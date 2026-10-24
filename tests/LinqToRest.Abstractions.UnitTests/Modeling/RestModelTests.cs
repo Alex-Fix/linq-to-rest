@@ -293,6 +293,103 @@ public sealed class RestModelTests
         Assert.Contains("key 'products.id'", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Reads_and_round_trips_value_types()
+    {
+        var json = WithValueTypes().ToJsonString();
+
+        var model = RestModel.Parse(json);
+
+        var address = model.FindValueType("Address")!;
+        Assert.Equal(["street", "city", "geo"], address.Properties.Select(p => p.Name));
+        Assert.True(address.FindProperty("city")!.IsSortable);
+        Assert.True(address.FindProperty("geo") is { Type: "Geo", IsNullable: true });
+        Assert.True(model.FindSet("products")!.FindProperty("shippingAddress") is { Type: "Address", IsNullable: true, IsWritable: true });
+        Assert.Null(model.FindValueType("Product"));
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(json)!["valueTypes"], JsonNode.Parse(model.ToJson())!["valueTypes"]));
+        Assert.Equal(model.ToJson(), RestModel.Parse(model.ToJson()).ToJson());
+    }
+
+    [Theory]
+    [InlineData("/valueTypes/0/extra", "1", "unknown key 'extra'")]
+    [InlineData("/valueTypes/0/name", "\"address\"", "value type name 'address' is invalid")]
+    [InlineData("/valueTypes/0/name", "\"Product\"", "type name 'Product' is used twice")]
+    [InlineData("/valueTypes/0/properties", "[]", "value type 'Address' has no members")]
+    [InlineData("/valueTypes/0/properties/1/name", "\"street\"", "duplicate member name 'street'")]
+    [InlineData("/valueTypes/0/properties/0/writable", "true", "writability belongs to the property that uses the value type")]
+    [InlineData("/valueTypes/0/properties/0/type", "\"Money\"", "'Address.street' has the unknown type 'Money'")]
+    [InlineData("/valueTypes/1/properties/0/type", "\"Address\"", "contains itself")]
+    [InlineData("/sets/0/properties/5/type", "\"Missing\"", "unknown type 'Missing'")]
+    [InlineData("/sets/0/properties/5/type", "\"string\"", "value type 'Address' isn't used")]
+    [InlineData("/sets/0/properties/5/sortable", "true", "can only be nullable, writable or not filterable")]
+    [InlineData("/sets/0/properties/5/collection", "true", "can only be nullable, writable or not filterable")]
+    [InlineData("/sets/0/properties/5/groupable", "true", "can only be nullable, writable or not filterable")]
+    [InlineData("/sets/0/properties/5/rules", "{\"required\":true}", "can only be nullable, writable or not filterable")]
+    [InlineData("/valueTypes/0/properties/2/sortable", "true", "can only be nullable, writable or not filterable")]
+    [InlineData("/sets/0/concurrencyToken", "\"shippingAddress\"", "concurrency token 'products.shippingAddress'")]
+    public void Rejects_inconsistent_value_types(string location, string value, string message)
+    {
+        var json = WithValueTypes();
+        Set(json, location, JsonNode.Parse(value));
+
+        var exception = Assert.Throws<FormatException>(() => RestModel.Parse(json.ToJsonString()));
+
+        Assert.Contains(message, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Value_type_members_take_rules_without_being_writable()
+    {
+        var json = WithValueTypes();
+        Set(json, "/valueTypes/0/properties/0/rules", JsonNode.Parse("""{"required":true,"maxLength":200}"""));
+
+        var street = RestModel.Parse(json.ToJsonString()).FindValueType("Address")!.FindProperty("street")!;
+
+        Assert.Equal(200, street.Rules!.MaxLength);
+    }
+
+    [Fact]
+    public void Value_types_nest_at_most_three_levels()
+    {
+        static string Nested(int levels)
+        {
+            var json = Minimal();
+            json["valueTypes"] = new JsonArray([.. Enumerable.Range(0, levels).Select(index => new JsonObject
+            {
+                ["name"] = $"V{index}",
+                ["properties"] = new JsonArray(index + 1 < levels
+                    ? new JsonObject { ["name"] = "inner", ["type"] = $"V{index + 1}" }
+                    : new JsonObject { ["name"] = "leaf", ["type"] = "string" }),
+            })]);
+            json["sets"]![1]!["properties"]!.AsArray().Add(new JsonObject { ["name"] = "value", ["type"] = "V0" });
+            return json.ToJsonString();
+        }
+
+        Assert.Equal(RestModel.MaxValueTypeDepth, RestModel.Parse(Nested(RestModel.MaxValueTypeDepth)).ValueTypes.Count);
+        var exception = Assert.Throws<FormatException>(() => RestModel.Parse(Nested(RestModel.MaxValueTypeDepth + 1)));
+        Assert.Contains("more than 3 levels deep", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Documents_without_value_types_do_not_mention_them()
+    {
+        Assert.DoesNotContain("valueTypes", RestModel.Parse(Minimal().ToJsonString()).ToJson(), StringComparison.Ordinal);
+    }
+
+    private static JsonObject WithValueTypes()
+    {
+        var json = Minimal();
+        json["valueTypes"] = JsonNode.Parse("""
+            [{"name": "Address", "properties": [
+               {"name": "street", "type": "string"},
+               {"name": "city", "type": "string", "sortable": true, "groupable": true},
+               {"name": "geo", "type": "Geo", "nullable": true}]},
+             {"name": "Geo", "properties": [{"name": "lat", "type": "float64"}, {"name": "lng", "type": "float64"}]}]
+            """);
+        json["sets"]![0]!["properties"]!.AsArray().Add(JsonNode.Parse("""{"name": "shippingAddress", "type": "Address", "nullable": true, "writable": true}"""));
+        return json;
+    }
+
     private static JsonObject Minimal() => JsonNode.Parse("""
         {
           "v": 1,

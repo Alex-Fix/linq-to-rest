@@ -11,6 +11,7 @@ internal static class RestModelJson
     internal const int MaxSets = 1000;
     internal const int MaxMembers = 1000;
     internal const int MaxEnums = 1000;
+    internal const int MaxValueTypes = 1000;
     private const int LineWidth = 120;
 
     public static RestModel Read(ReadOnlySpan<byte> utf8Json)
@@ -52,6 +53,20 @@ internal static class RestModelJson
                 }
 
                 writer.WriteEndObject();
+            }
+
+            if (model.ValueTypes.Count > 0)
+            {
+                writer.WriteStartArray("valueTypes");
+                foreach (var valueType in model.ValueTypes)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("name", valueType.Name);
+                    WriteProperties(writer, valueType.Properties);
+                    writer.WriteEndObject();
+                }
+
+                writer.WriteEndArray();
             }
 
             writer.WriteStartArray("sets");
@@ -130,7 +145,7 @@ internal static class RestModelJson
 
     private static RestModel ReadModel(JsonElement root)
     {
-        var properties = Object(root, "", "v", "enums", "sets");
+        var properties = Object(root, "", "v", "enums", "valueTypes", "sets");
         if (properties.GetValueOrDefault("v") is not { ValueKind: JsonValueKind.Number } version || !version.TryGetInt32(out var number))
         {
             throw Invalid("/v", "must be a number");
@@ -160,10 +175,24 @@ internal static class RestModelJson
             }
         }
 
+        var valueTypes = properties.TryGetValue("valueTypes", out var valueTypesElement)
+            ? Array(valueTypesElement, "/valueTypes", MaxValueTypes).Select((element, index) => ReadValueType(element, $"/valueTypes/{index}")).ToList()
+            : [];
         var sets = Array(Required(properties, "", "sets"), "/sets", MaxSets)
             .Select((element, index) => ReadSet(element, $"/sets/{index}"))
             .ToList();
-        return new RestModel(sets, enums);
+        return new RestModel(sets, enums, valueTypes);
+    }
+
+    private static RestValueTypeModel ReadValueType(JsonElement element, string pointer)
+    {
+        var properties = Object(element, pointer, "name", "properties");
+        return new RestValueTypeModel
+        {
+            Name = String(Required(properties, pointer, "name"), pointer + "/name"),
+            Properties = [.. Array(Required(properties, pointer, "properties"), pointer + "/properties", MaxMembers)
+                .Select((property, index) => ReadProperty(property, $"{pointer}/properties/{index}"))],
+        };
     }
 
     private static RestSetModel ReadSet(JsonElement element, string pointer)
@@ -336,8 +365,32 @@ internal static class RestModelJson
         writer.WriteNumber("maxSkip", pagination.MaxSkip);
         writer.WriteEndObject();
 
+        WriteProperties(writer, set.Properties);
+
+        writer.WriteStartArray("navigations");
+        foreach (var navigation in set.Navigations)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("name", navigation.Name);
+            writer.WriteString("target", navigation.Target);
+            WriteFlag(writer, "collection", navigation.IsCollection);
+            WriteFlag(writer, "nullable", navigation.IsNullable);
+            if (navigation.ForeignKey.Count > 0)
+            {
+                WriteStrings(writer, "foreignKey", navigation.ForeignKey);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+        writer.WriteEndObject();
+    }
+
+    private static void WriteProperties(Utf8JsonWriter writer, IReadOnlyList<RestPropertyModel> properties)
+    {
         writer.WriteStartArray("properties");
-        foreach (var property in set.Properties)
+        foreach (var property in properties)
         {
             writer.WriteStartObject();
             writer.WriteString("name", property.Name);
@@ -362,25 +415,6 @@ internal static class RestModelJson
         }
 
         writer.WriteEndArray();
-
-        writer.WriteStartArray("navigations");
-        foreach (var navigation in set.Navigations)
-        {
-            writer.WriteStartObject();
-            writer.WriteString("name", navigation.Name);
-            writer.WriteString("target", navigation.Target);
-            WriteFlag(writer, "collection", navigation.IsCollection);
-            WriteFlag(writer, "nullable", navigation.IsNullable);
-            if (navigation.ForeignKey.Count > 0)
-            {
-                WriteStrings(writer, "foreignKey", navigation.ForeignKey);
-            }
-
-            writer.WriteEndObject();
-        }
-
-        writer.WriteEndArray();
-        writer.WriteEndObject();
     }
 
     private static void WriteRules(Utf8JsonWriter writer, RestPropertyRules rules)
