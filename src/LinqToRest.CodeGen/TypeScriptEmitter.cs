@@ -97,6 +97,18 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
                 expression += " & Sortable";
             }
 
+            if (property.IsGroupable)
+            {
+                _imports.Add("Groupable");
+                expression += " & Groupable";
+            }
+
+            if (property.IsAggregatable)
+            {
+                _imports.Add("Aggregatable");
+                expression += " & Aggregatable";
+            }
+
             body.Append(CultureInfo.InvariantCulture, $"  readonly {property.Name}: {expression};\n");
         }
 
@@ -128,7 +140,7 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
             foreach (var property in set.Properties)
             {
                 body.Append(CultureInfo.InvariantCulture,
-                    $"        {{ name: {Quote(property.Name)}, kind: {Quote(Kind(property.Type))}, nullable: {Bool(property.IsNullable)}, collection: {Bool(property.IsCollection)}, filterable: {Bool(property.IsFilterable)}, sortable: {Bool(property.IsSortable)}, writable: {Bool(property.IsWritable)}{Rules(property.Rules)} }},\n");
+                    $"        {{ name: {Quote(property.Name)}, kind: {Quote(Kind(property.Type))}, nullable: {Bool(property.IsNullable)}, collection: {Bool(property.IsCollection)}, filterable: {Bool(property.IsFilterable)}, sortable: {Bool(property.IsSortable)}, writable: {Bool(property.IsWritable)}{(property.IsGroupable ? ", groupable: true" : "")}{(property.IsAggregatable ? ", aggregatable: true" : "")}{Rules(property.Rules)} }},\n");
             }
 
             body.Append("      ],\n");

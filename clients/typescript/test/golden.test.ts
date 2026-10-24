@@ -92,6 +92,23 @@ const cases: Record<string, (context: ReturnType<typeof shop>) => Promise<unknow
     http.respond({ items: [], totalCount: 4 });
     return shop.products.count((p) => p.price.gt(1));
   },
+  "query-group": ({ shop }) =>
+    shop.products
+      .where((p) => p.status.eq("Active"))
+      .groupBy((p) => ({ categoryId: p.categoryId, name: p.category.name }))
+      .select((g) => ({
+        categoryId: g.key.categoryId,
+        name: g.key.name,
+        count: g.count(),
+        expensive: g.count((p) => p.price.gt(20)),
+        from: g.min((p) => p.price),
+        total: g.sum((p) => p.price.mul(2)),
+      }))
+      .where((f) => f.count.gt(1))
+      .orderByDescending((f) => f.count)
+      .take(10)
+      .toList(),
+  "query-aggregate": ({ shop }) => shop.products.where((p) => p.categoryId.eq(2)).sum((p) => p.price.mul(2)),
   "batch-unit-of-work": async ({ shop, http }) => {
     http.respond({ items: [chess, dune] });
     const [first, second] = await shop.products.take(2).toList();

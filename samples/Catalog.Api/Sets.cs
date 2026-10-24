@@ -27,7 +27,7 @@ public sealed class BrandSet : IEntitySetConfiguration<Brand>
     {
         // Brands can be added and renamed, never deleted.
         builder.ToSet("brands").AllowWrites(WriteOperations.Insert | WriteOperations.Update);
-        builder.Property(b => b.Name).IsSortable().IsRequired().HasMaxLength(50);
+        builder.Property(b => b.Name).IsSortable().IsRequired().HasMaxLength(50).IsGroupable();
         builder.Computed("productCount", b => b.Products.Count(p => p.Status == ProductStatus.Active));
         builder.HasMany(b => b.Products);
     }
@@ -42,11 +42,12 @@ public sealed class ProductSet : IEntitySetConfiguration<Product>
         builder.Property(p => p.Sku).IsRequired().HasPattern("^[A-Z0-9-]{3,20}$");
         builder.Property(p => p.Name).IsSortable().IsRequired().HasMaxLength(100);
         builder.Property(p => p.Description).IsNotFilterable().HasMaxLength(2000);
-        builder.Property(p => p.Price).IsSortable().HasRange(0.01m, 100_000m);
-        builder.Property(p => p.Status);
-        builder.Property(p => p.Stock).IsSortable().HasMin(0);
-        builder.Property(p => p.CategoryId);
-        builder.Property(p => p.BrandId);
+        builder.Property(p => p.Price).IsSortable().HasRange(0.01m, 100_000m).IsAggregatable();
+        builder.Property(p => p.Status).IsGroupable();
+        builder.Property(p => p.Stock).IsSortable().HasMin(0).IsAggregatable();
+        // Facets group by these; the summary aggregates price and stock.
+        builder.Property(p => p.CategoryId).IsGroupable();
+        builder.Property(p => p.BrandId).IsGroupable();
         builder.Property(p => p.CreatedAt).IsReadOnly().IsSortable();
         builder.HasConcurrencyToken(p => p.Version);
         builder.Computed("inStock", p => p.Stock > 0);

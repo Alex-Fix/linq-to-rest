@@ -71,6 +71,12 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
   author-defined but run on untrusted strings: keep the match timeout and the portable-subset check. Validators query
   past the policies, so their codes must not reveal hidden rows; a validator bug (bad code or member) is a 500.
 
+### Grouping
+- Group keys must be `IsGroupable()` and members inside sum/min/max/avg `IsAggregatable()` (both per column, like
+  sorting); `{"group": {}}` only feeds direct aggregates (no nested collection lambdas); a grouped select can't read
+  bare members. Policy filters apply before `GroupBy`, so counts never include hidden rows. Bounded by
+  `MaxGroupKeys`, `MaxGroups` (without `take`) or the set's page limits, and the node limits.
+
 ### Cursors
 - Unsigned by design; validate version, sort-spec hash, value count and types. They must never grant access beyond
   what a filter on visible, sortable members could.

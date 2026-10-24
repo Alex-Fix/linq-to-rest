@@ -68,6 +68,17 @@ public static partial class QueryJson
             WriteNode(writer, query.Filter);
         }
 
+        if (query.GroupBy is { } groupBy)
+        {
+            writer.WriteStartArray("groupBy");
+            foreach (var path in groupBy)
+            {
+                writer.WriteStringValue(path.Path);
+            }
+
+            writer.WriteEndArray();
+        }
+
         if (query.OrderBy.Count > 0)
         {
             writer.WriteStartArray("orderBy");
@@ -90,6 +101,12 @@ public static partial class QueryJson
         {
             writer.WritePropertyName("select");
             WriteNode(writer, query.Select);
+        }
+
+        if (query.Having is not null)
+        {
+            writer.WritePropertyName("having");
+            WriteNode(writer, query.Having);
         }
 
         if (query.Include.Count > 0)
@@ -195,6 +212,17 @@ public static partial class QueryJson
                 writer.WriteEndObject();
                 writer.WriteEndObject();
                 break;
+            case KeyNode key:
+                writer.WriteStartObject();
+                writer.WriteNumber("key", key.Index);
+                writer.WriteEndObject();
+                break;
+            case GroupNode:
+                writer.WriteStartObject();
+                writer.WriteStartObject("group");
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                break;
             case NewNode shape:
                 writer.WriteStartObject();
                 writer.WriteStartObject("new");
@@ -233,9 +261,10 @@ public static partial class QueryJson
                 throw new ProtocolException(ErrorCodes.UnsupportedVersion, "/v");
             }
 
-            QueryNode? filter = null, select = null;
+            QueryNode? filter = null, select = null, having = null;
             IReadOnlyList<OrderByItem> orderBy = [];
             IReadOnlyList<MemberNode> include = [];
+            IReadOnlyList<MemberNode>? groupBy = null;
             PageRequest? page = null;
             var count = false;
             foreach (var property in root.EnumerateObject())
@@ -246,14 +275,26 @@ public static partial class QueryJson
                     case "filter": filter = ReadNode(property.Value, "/filter", 1, selectContext: false); break;
                     case "select": select = ReadNode(property.Value, "/select", 1, selectContext: true); break;
                     case "orderBy": orderBy = ReadOrderBy(property.Value); break;
-                    case "include": include = ReadInclude(property.Value); break;
+                    case "include": include = ReadPaths(property.Value, "/include"); break;
+                    case "groupBy": groupBy = ReadGroupBy(property.Value); break;
+                    case "having": having = ReadNode(property.Value, "/having", 1, selectContext: false); break;
                     case "page": page = ReadPage(property.Value); break;
                     case "count": count = property.Value.ValueKind == JsonValueKind.True || (property.Value.ValueKind == JsonValueKind.False ? false : throw new ProtocolException(ErrorCodes.InvalidQuery, "/count")); break;
                     default: throw new ProtocolException(ErrorCodes.UnknownNode, "");
                 }
             }
 
-            return new QueryRequest { Filter = filter, Select = select, OrderBy = orderBy, Include = include, Page = page, Count = count };
+            return new QueryRequest
+            {
+                Filter = filter,
+                Select = select,
+                OrderBy = orderBy,
+                Include = include,
+                Page = page,
+                Count = count,
+                GroupBy = groupBy,
+                Having = having,
+            };
         }
 
         private List<OrderByItem> ReadOrderBy(JsonElement element)
@@ -292,17 +333,27 @@ public static partial class QueryJson
             return items;
         }
 
-        private List<MemberNode> ReadInclude(JsonElement element)
+        private List<MemberNode> ReadGroupBy(JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Array && element.GetArrayLength() > limits.MaxGroupKeys)
+            {
+                throw new ProtocolException(ErrorCodes.LimitExceeded, "/groupBy", "groupKeys");
+            }
+
+            return ReadPaths(element, "/groupBy");
+        }
+
+        private List<MemberNode> ReadPaths(JsonElement element, string arrayLocation)
         {
             if (element.ValueKind != JsonValueKind.Array)
             {
-                throw new ProtocolException(ErrorCodes.InvalidQuery, "/include");
+                throw new ProtocolException(ErrorCodes.InvalidQuery, arrayLocation);
             }
 
             var paths = new List<MemberNode>();
             foreach (var item in element.EnumerateArray())
             {
-                var location = $"/include/{paths.Count}";
+                var location = $"{arrayLocation}/{paths.Count}";
                 CountNode(location);
                 paths.Add(ReadPath(item, location));
             }
@@ -397,6 +448,14 @@ public static partial class QueryJson
                         : throw new ProtocolException(ErrorCodes.UnknownMember, child);
                 case "new" when selectContext:
                     return ReadNew(value, child, location, depth);
+                case "key":
+                    return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var index) && index >= 0
+                        ? new KeyNode(index, location)
+                        : throw new ProtocolException(ErrorCodes.InvalidQuery, child);
+                case "group":
+                    return value.ValueKind == JsonValueKind.Object && !value.EnumerateObject().Any()
+                        ? new GroupNode(location)
+                        : throw new ProtocolException(ErrorCodes.InvalidQuery, child);
                 case QueryOperators.In:
                     return ReadIn(value, child, location, depth);
                 case QueryOperators.Map when !selectContext:

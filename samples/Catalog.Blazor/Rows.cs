@@ -13,4 +13,7 @@ public sealed record CategoryNode(int Id, string Name, int? ParentId, int Produc
 
 public sealed record BrandRow(int Id, string Name, int ProductCount);
 
+/// <summary>Products of one brand for the current filters: one row of a grouped query.</summary>
+public sealed record BrandFacet(int BrandId, int Count);
+
 public sealed record ProductCard(int Id, string Name, decimal Price, bool InStock, ProductStatus Status, List<string> Images);

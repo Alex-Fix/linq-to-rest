@@ -21,12 +21,15 @@ export {
   StringExpr,
   TimeOnlyExpr,
   cond,
+  GroupExpr,
+  type Aggregatable,
   type AnyNumberExpr,
   type EntityProxy,
+  type Groupable,
   type Operand,
   type Sortable,
 } from "./expressions.js";
-export { Query, type CursorPage, type Projected } from "./query.js";
+export { Query, type CursorPage, type Fields, type GroupedQuery, type GroupKey, type Projected } from "./query.js";
 export { createContext, type Context, type EntityEntry, type New, type RestSet, type WritableKeys } from "./context.js";
 export type { EntityState } from "./tracking.js";
 export type { CallOptions, ContextOptions } from "./transport.js";

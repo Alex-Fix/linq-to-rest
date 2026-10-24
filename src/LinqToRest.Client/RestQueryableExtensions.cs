@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using LinqToRest.Client.Translation;
@@ -53,6 +54,13 @@ public static class RestQueryableExtensions
     public static async Task<List<T>> ToListAsync<T>(this IQueryable<T> source, CancellationToken cancellationToken = default)
     {
         var (provider, query) = Translate(source);
+        if (query is { IsGrouped: true, Take: null })
+        {
+            // Every group, up to the server's MaxGroups (more is limit_exceeded).
+            var groups = new PageRequest { Mode = PageMode.Offset, Skip = query.Skip };
+            return (await provider.SendAsync<T>(query, query.ToRequest(groups), cancellationToken).ConfigureAwait(false)).Items;
+        }
+
         var take = query.Take ?? throw new NotSupportedException("Add Take(n) before ToListAsync, or use AsAsyncEnumerable() to read every row.");
         var response = await provider.SendAsync<T>(query, query.ToRequest(RestQueryProvider.Page(query, take)), cancellationToken).ConfigureAwait(false);
         return response.Items;
@@ -75,6 +83,11 @@ public static class RestQueryableExtensions
     public static async Task<CursorPage<T>> ToCursorPageAsync<T>(this IQueryable<T> source, bool includeTotalCount = false, CancellationToken cancellationToken = default)
     {
         var (provider, query) = Translate(source);
+        if (query.IsGrouped)
+        {
+            throw new NotSupportedException("Groups are paged with Skip and Take, not cursors.");
+        }
+
         var page = RestQueryProvider.Cursor(query, query.After, query.Take ?? query.Type.Pagination.DefaultPageSize);
         var response = await provider.SendAsync<T>(query, query.ToRequest(page, includeTotalCount), cancellationToken).ConfigureAwait(false);
         return new CursorPage<T>(response.Items, response.NextCursor, response.TotalCount);
@@ -88,6 +101,16 @@ public static class RestQueryableExtensions
     public static async IAsyncEnumerable<T> AsAsyncEnumerable<T>(this IQueryable<T> source, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var (provider, query) = Translate(source);
+        if (query.IsGrouped)
+        {
+            foreach (var group in await source.ToListAsync(cancellationToken).ConfigureAwait(false))
+            {
+                yield return group;
+            }
+
+            yield break;
+        }
+
         var remaining = query.Take ?? int.MaxValue;
         var after = query.After;
         while (remaining > 0)
@@ -228,7 +251,9 @@ public static class RestQueryableExtensions
 
         var skip = query.Skip ?? 0;
         query.Skip = null;
-        var response = await provider.SendAsync<object>(query, query.ToRequest(RestQueryProvider.Page(query, 0), count: true, select: Nothing), cancellationToken).ConfigureAwait(false);
+        // A grouped query keeps its select: having names its fields.
+        var select = query.IsGrouped ? null : Nothing;
+        var response = await provider.SendAsync<object>(query, query.ToRequest(RestQueryProvider.Page(query, 0), count: true, select: select), cancellationToken).ConfigureAwait(false);
         var count = Math.Max(0, response.TotalCount!.Value - skip);
         return query.Take is { } take ? Math.Min(count, take) : count;
     }
@@ -251,7 +276,7 @@ public static class RestQueryableExtensions
     {
         var (provider, query) = Translate(source);
         var page = RestQueryProvider.Page(query, query.Take is { } take ? Math.Min(take, 1) : 1);
-        var response = await provider.SendAsync<object>(query, query.ToRequest(page, select: Nothing), cancellationToken).ConfigureAwait(false);
+        var response = await provider.SendAsync<object>(query, query.ToRequest(page, select: query.IsGrouped ? null : Nothing), cancellationToken).ConfigureAwait(false);
         return response.Items.Count > 0;
     }
 
@@ -263,6 +288,133 @@ public static class RestQueryableExtensions
     /// <returns>Whether a row exists.</returns>
     public static Task<bool> AnyAsync<T>(this IQueryable<T> source, Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default) =>
         source.Where(predicate).AnyAsync(cancellationToken);
+
+    /// <summary>Sums the selected values of every matching row; 0 when no row matches.</summary>
+    /// <param name="source">The query: Where only (no Select, paging or sort).</param>
+    /// <param name="selector">The value, over aggregatable members.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <returns>The sum.</returns>
+    public static Task<int> SumAsync<T>(this IQueryable<T> source, Expression<Func<T, int>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, int>(source, QueryOperators.Sum, selector, cancellationToken);
+
+    /// <inheritdoc cref="SumAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<long> SumAsync<T>(this IQueryable<T> source, Expression<Func<T, long>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, long>(source, QueryOperators.Sum, selector, cancellationToken);
+
+    /// <inheritdoc cref="SumAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<decimal> SumAsync<T>(this IQueryable<T> source, Expression<Func<T, decimal>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, decimal>(source, QueryOperators.Sum, selector, cancellationToken);
+
+    /// <inheritdoc cref="SumAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<double> SumAsync<T>(this IQueryable<T> source, Expression<Func<T, double>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, double>(source, QueryOperators.Sum, selector, cancellationToken);
+
+    /// <inheritdoc cref="SumAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<float> SumAsync<T>(this IQueryable<T> source, Expression<Func<T, float>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, float>(source, QueryOperators.Sum, selector, cancellationToken);
+
+    /// <inheritdoc cref="SumAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<int?> SumAsync<T>(this IQueryable<T> source, Expression<Func<T, int?>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, int?>(source, QueryOperators.Sum, selector, cancellationToken);
+
+    /// <inheritdoc cref="SumAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<long?> SumAsync<T>(this IQueryable<T> source, Expression<Func<T, long?>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, long?>(source, QueryOperators.Sum, selector, cancellationToken);
+
+    /// <inheritdoc cref="SumAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<decimal?> SumAsync<T>(this IQueryable<T> source, Expression<Func<T, decimal?>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, decimal?>(source, QueryOperators.Sum, selector, cancellationToken);
+
+    /// <inheritdoc cref="SumAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<double?> SumAsync<T>(this IQueryable<T> source, Expression<Func<T, double?>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, double?>(source, QueryOperators.Sum, selector, cancellationToken);
+
+    /// <summary>Averages the selected values of every matching row; throws (or returns null for nullable values) when no row matches.</summary>
+    /// <param name="source">The query: Where only (no Select, paging or sort).</param>
+    /// <param name="selector">The value, over aggregatable members.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <returns>The average.</returns>
+    public static Task<double> AverageAsync<T>(this IQueryable<T> source, Expression<Func<T, int>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, double>(source, QueryOperators.Avg, selector, cancellationToken);
+
+    /// <inheritdoc cref="AverageAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<double> AverageAsync<T>(this IQueryable<T> source, Expression<Func<T, long>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, double>(source, QueryOperators.Avg, selector, cancellationToken);
+
+    /// <inheritdoc cref="AverageAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<decimal> AverageAsync<T>(this IQueryable<T> source, Expression<Func<T, decimal>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, decimal>(source, QueryOperators.Avg, selector, cancellationToken);
+
+    /// <inheritdoc cref="AverageAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<double> AverageAsync<T>(this IQueryable<T> source, Expression<Func<T, double>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, double>(source, QueryOperators.Avg, selector, cancellationToken);
+
+    /// <inheritdoc cref="AverageAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<double?> AverageAsync<T>(this IQueryable<T> source, Expression<Func<T, int?>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, double?>(source, QueryOperators.Avg, selector, cancellationToken);
+
+    /// <inheritdoc cref="AverageAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<decimal?> AverageAsync<T>(this IQueryable<T> source, Expression<Func<T, decimal?>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, decimal?>(source, QueryOperators.Avg, selector, cancellationToken);
+
+    /// <inheritdoc cref="AverageAsync{T}(IQueryable{T}, Expression{Func{T, int}}, CancellationToken)"/>
+    public static Task<double?> AverageAsync<T>(this IQueryable<T> source, Expression<Func<T, double?>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, double?>(source, QueryOperators.Avg, selector, cancellationToken);
+
+    /// <summary>Returns the smallest selected value; throws (or returns null for nullable values) when no row matches.</summary>
+    /// <param name="source">The query: Where only (no Select, paging or sort).</param>
+    /// <param name="selector">The value, over aggregatable members (numbers, dates, times).</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <typeparam name="TResult">The value type.</typeparam>
+    /// <returns>The smallest value.</returns>
+    public static Task<TResult> MinAsync<T, TResult>(this IQueryable<T> source, Expression<Func<T, TResult>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, TResult>(source, QueryOperators.Min, selector, cancellationToken);
+
+    /// <summary>Returns the largest selected value; throws (or returns null for nullable values) when no row matches.</summary>
+    /// <param name="source">The query: Where only (no Select, paging or sort).</param>
+    /// <param name="selector">The value, over aggregatable members (numbers, dates, times).</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <typeparam name="TResult">The value type.</typeparam>
+    /// <returns>The largest value.</returns>
+    public static Task<TResult> MaxAsync<T, TResult>(this IQueryable<T> source, Expression<Func<T, TResult>> selector, CancellationToken cancellationToken = default) =>
+        AggregateAsync<T, TResult>(source, QueryOperators.Max, selector, cancellationToken);
+
+    /// <summary>One aggregate over the one group of every matching row (<c>"groupBy": []</c>), read as a scalar.</summary>
+    private static async Task<TResult> AggregateAsync<T, TResult>(IQueryable<T> source, string op, LambdaExpression selector, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        var (provider, query) = Translate(source);
+        if (query.IsGrouped || query.HasSelect || query.OrderBy.Count > 0 || query.Skip is not null || query.Take is not null || query.After is not null)
+        {
+            throw new NotSupportedException($"{op} applies to the rows a query filters: Where only, without Select, sorting or paging.");
+        }
+
+        var aggregate = query.Translator.Aggregate(op, selector);
+        query.GroupBy = [];
+
+        // The projection reader reads one value of the result type.
+        (query.HasSelect, query.Selector) = (true, Expression.Lambda<Func<T, TResult>>(Expression.Default(typeof(TResult)), Expression.Parameter(typeof(T))));
+        var response = await provider.SendAsync<TResult>(query, query.ToRequest(new PageRequest { Mode = PageMode.Offset }, select: aggregate), cancellationToken).ConfigureAwait(false);
+        if (response.Items is [{ } value, ..])
+        {
+            return value;
+        }
+
+        // LINQ: the sum of nothing (or of nulls) is 0; min, max and average of nothing throw, or are null when nullable.
+        var underlying = Nullable.GetUnderlyingType(typeof(TResult));
+        if (op == QueryOperators.Sum)
+        {
+            return (TResult)Convert.ChangeType(0, underlying ?? typeof(TResult), CultureInfo.InvariantCulture);
+        }
+
+        return underlying is not null || !typeof(TResult).IsValueType
+            ? default!
+            : throw new InvalidOperationException("The query returned no rows.");
+    }
 
     private static async Task<List<T>> TakeAsync<T>(IQueryable<T> source, int limit, CancellationToken cancellationToken)
     {

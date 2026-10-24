@@ -24,6 +24,18 @@ export interface Sortable {
   readonly __sortable: true;
 }
 
+/** Marks members grouped queries may use as keys (generated from `IsGroupable()`). */
+export interface Groupable {
+  /** Type-only: generated proxy types add it to groupable members. */
+  readonly __groupable: true;
+}
+
+/** Marks members sum, min, max and average over groups may read (generated from `IsAggregatable()`). */
+export interface Aggregatable {
+  /** Type-only: generated proxy types add it to aggregatable members. */
+  readonly __aggregatable: true;
+}
+
 /** A numeric expression, nullable or not. */
 export type AnyNumberExpr = NumberExpr | NumberExpr<number | null>;
 
@@ -283,6 +295,16 @@ abstract class CollectionBase<P> implements Buildable {
     this[BUILD] = () => ({ member: source });
   }
 
+  /** The node the lambdas read: the collection member. */
+  protected sourceNode(): QueryNode {
+    return { member: this.source };
+  }
+
+  /** The member use of an aggregate's body (a group reads only aggregatable members there). */
+  protected bodyUse(t: Translator): Translator["use"] {
+    return t.use;
+  }
+
   any(predicate?: Selector<P, Operand<boolean>>): BoolExpr {
     return new BoolExpr((t) => this.lambda(t, "any", predicate, true));
   }
@@ -311,6 +333,26 @@ abstract class CollectionBase<P> implements Buildable {
     predicate: boolean,
     shape = false,
   ): QueryNode {
+    if (t.inGroupAggregate && !(this instanceof GroupExpr)) {
+      throw new Error("Aggregates over a group can't contain other collection lambdas.");
+    }
+
+    const outer = t.inGroupAggregate;
+    t.inGroupAggregate = this instanceof GroupExpr;
+    try {
+      return this.lambdaNode(t, op, body, predicate, shape);
+    } finally {
+      t.inGroupAggregate = outer;
+    }
+  }
+
+  private lambdaNode(
+    t: Translator,
+    op: string,
+    body: Selector<P, unknown> | undefined,
+    predicate: boolean,
+    shape: boolean,
+  ): QueryNode {
     const variable = t.allocate();
     const element = this.element(variable);
     const filters = this.filters.map((filter) => t.within("filter", () => node(t, filter(element))));
@@ -322,14 +364,14 @@ abstract class CollectionBase<P> implements Buildable {
         ? t.within("filter", () => node(t, body(element)))
         : shape
           ? selectNode(t, body(element))
-          : node(t, body(element));
+          : t.within(this.bodyUse(t), () => node(t, body(element)));
     }
 
     if ((op === "any" || op === "count") && built === undefined && where !== undefined) {
       [built, where] = [where, undefined];
     }
 
-    const lambda: Record<string, unknown> = { source: { member: this.source } };
+    const lambda: Record<string, unknown> = { source: this.sourceNode() };
     if (built !== undefined || where !== undefined) {
       lambda.var = variable;
     }
@@ -417,6 +459,84 @@ export class PrimitiveCollectionExpr<E extends Expr<unknown>> extends Collection
   }
 }
 
+/**
+ * The rows of one group, inside a group `select`: `count`, `sum`, `min`, `max` and `average` over them. Sum, min, max
+ * and average may only read aggregatable members (checked when the query is sent).
+ */
+export class GroupExpr<K, P> extends CollectionBase<P> {
+  /** @internal */
+  constructor(
+    /** The group's key: an expression, or an object of expressions for a composite key. */
+    readonly key: K,
+    element: (variable: string) => P,
+  ) {
+    super("", element, []);
+  }
+
+  sum(selector: Selector<P, AnyNumberExpr>): NumberExpr {
+    return new NumberExpr((t) => this.lambda(t, "sum", selector, false));
+  }
+
+  average(selector: Selector<P, AnyNumberExpr>): NumberExpr<number | null> {
+    return new NumberExpr((t) => this.lambda(t, "avg", selector, false));
+  }
+
+  min<E extends OrderedExpr<unknown>>(selector: Selector<P, E>): E {
+    return sameKind(selector(this.element("_")), (t) => this.lambda(t, "min", selector, false)) as E;
+  }
+
+  max<E extends OrderedExpr<unknown>>(selector: Selector<P, E>): E {
+    return sameKind(selector(this.element("_")), (t) => this.lambda(t, "max", selector, false)) as E;
+  }
+
+  /** Groups can only be aggregated, never tested with any/all or projected. */
+  override any(): never {
+    throw new Error("Over a group, use count, sum, min, max or average.");
+  }
+
+  override all(): never {
+    throw new Error("Over a group, use count, sum, min, max or average.");
+  }
+
+  override select(): never {
+    throw new Error("Over a group, use count, sum, min, max or average.");
+  }
+
+  protected override sourceNode(): QueryNode {
+    return { group: {} };
+  }
+
+  protected override bodyUse(): Translator["use"] {
+    return "aggregate";
+  }
+}
+
+/**
+ * The keys of a grouped query as `g.key` sees them: one expression (`{"key": 0}`) or an object of them, each of the
+ * same kind as the key it stands for.
+ */
+export function keyProxy(key: unknown): unknown {
+  if (isBuildable(key)) {
+    return sameKindAs(key, () => ({ key: 0 }));
+  }
+
+  return Object.fromEntries(
+    Object.entries(key as Record<string, unknown>).map(([name, value], index) => [
+      name,
+      sameKindAs(value, () => ({ key: index })),
+    ]),
+  );
+}
+
+/** The same kind of expression as `prototype`, building `build` (keys and fields of a grouped query). */
+export function sameKindAs(prototype: unknown, build: Build): Expr<unknown> {
+  return prototype instanceof BoolExpr
+    ? new BoolExpr(build)
+    : prototype instanceof Expr && !(prototype instanceof OrderedExpr)
+      ? new Expr(build)
+      : sameKind(prototype, build);
+}
+
 /** A projected collection (`select` over a collection). */
 export class MapExpr<S> implements Buildable {
   declare readonly __mapped: S;
@@ -482,6 +602,16 @@ function memberBuild(set: SetModel, member: MemberModel, path: string): Build {
   return (t) => {
     if (t.use === "filter" && !member.filterable) {
       throw new Error(`${set.name}.${member.name} can't be filtered (IsNotFilterable in the DTO model).`);
+    }
+
+    if (t.use === "group" && member.groupable !== true) {
+      throw new Error(`${set.name}.${member.name} isn't groupable: the API marks group keys with IsGroupable().`);
+    }
+
+    if (t.use === "aggregate" && member.aggregatable !== true) {
+      throw new Error(
+        `${set.name}.${member.name} isn't aggregatable: the API marks members for sum, min, max and average with IsAggregatable().`,
+      );
     }
 
     return { member: path };

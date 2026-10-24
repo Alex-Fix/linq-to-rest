@@ -47,10 +47,15 @@ const initialFilters: Filters = {
 };
 
 /**
- * The product grid's query: every filter is translated to the server, nothing is filtered here. It stops before
- * paging, because a cursor (`after`) has to come before `take`.
+ * The filtered products: every filter is translated to the server, nothing is filtered here. Brand facets leave out
+ * the brand filter, so each brand shows how many products it would add.
  */
-function productQuery(catalog: CatalogContext, filters: Filters, categories: readonly CategoryNode[]) {
+function filteredProducts(
+  catalog: CatalogContext,
+  filters: Filters,
+  categories: readonly CategoryNode[],
+  { withBrands = true } = {},
+) {
   let query = catalog.products.asNoTracking();
   if (filters.search.trim() !== "") {
     const search = filters.search.trim();
@@ -63,7 +68,7 @@ function productQuery(catalog: CatalogContext, filters: Filters, categories: rea
     query = query.where((p) => p.categoryId.in(ids));
   }
 
-  if (filters.brandIds.length > 0) {
+  if (withBrands && filters.brandIds.length > 0) {
     const brands = filters.brandIds;
     query = query.where((p) => p.brandId.in(brands));
   }
@@ -81,6 +86,12 @@ function productQuery(catalog: CatalogContext, filters: Filters, categories: rea
     query = query.where((p) => p.inStock.eq(true));
   }
 
+  return query;
+}
+
+/** The product grid's query. It stops before paging, because a cursor (`after`) has to come before `take`. */
+function productQuery(catalog: CatalogContext, filters: Filters, categories: readonly CategoryNode[]) {
+  const query = filteredProducts(catalog, filters, categories);
   const sorted =
     filters.sort === "price"
       ? query.orderBy((p) => p.price)
@@ -103,11 +114,26 @@ function productQuery(catalog: CatalogContext, filters: Filters, categories: rea
 
 type ProductCard = Awaited<ReturnType<ReturnType<typeof productQuery>["toList"]>>[number];
 
+/** Products per brand for the current filters (without the brand filter): one grouped query. */
+function brandFacets(catalog: CatalogContext, filters: Filters, categories: readonly CategoryNode[]) {
+  return filteredProducts(catalog, filters, categories, { withBrands: false })
+    .groupBy((p) => p.brandId)
+    .select((g) => ({ brandId: g.key, count: g.count() }));
+}
+
+interface Summary {
+  readonly from: number | null;
+  readonly to: number | null;
+  readonly stock: number;
+}
+
 export function Browse() {
   const { catalog, isEditor } = useSession();
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
-  const [brands, setBrands] = useState<{ id: number; name: string; productCount: number }[]>([]);
+  const [brands, setBrands] = useState<{ id: number; name: string }[]>([]);
+  const [facets, setFacets] = useState<ReadonlyMap<number, number>>(new Map());
+  const [summary, setSummary] = useState<Summary>();
   const [page, setPage] = useState<{ cards: ProductCard[]; next: string | undefined; total: number | undefined }>();
   const [error, setError] = useState<string>();
   const [loadingMore, setLoadingMore] = useState(false);
@@ -123,7 +149,7 @@ export function Browse() {
         .toList({ signal: abort.signal }),
       catalog.brands
         .orderBy((b) => b.name)
-        .select((b) => ({ id: b.id, name: b.name, productCount: b.productCount }))
+        .select((b) => ({ id: b.id, name: b.name }))
         .take(100)
         .toList({ signal: abort.signal }),
     ])
@@ -142,6 +168,32 @@ export function Browse() {
   }, [catalog]);
 
   const query = useMemo(() => productQuery(catalog, filters, categories), [catalog, filters, categories]);
+
+  // Facets and the summary follow the filters: one grouped query and three whole-query aggregates.
+  useEffect(() => {
+    const abort = new AbortController();
+    const signal = abort.signal;
+    const filtered = filteredProducts(catalog, filters, categories);
+    Promise.all([
+      brandFacets(catalog, filters, categories).toList({ signal }),
+      filtered.min((p) => p.price, { signal }),
+      filtered.max((p) => p.price, { signal }),
+      filtered.sum((p) => p.stock, { signal }),
+    ])
+      .then(([groups, from, to, stock]) => {
+        setFacets(new Map(groups.map((group) => [group.brandId, group.count])));
+        setSummary({ from, to, stock });
+      })
+      .catch((reason: unknown) => {
+        if (!signal.aborted) {
+          setError(String(reason));
+        }
+      });
+    return () => {
+      abort.abort();
+    };
+  }, [catalog, filters, categories]);
+
   useEffect(() => {
     const abort = new AbortController();
     query
@@ -209,7 +261,7 @@ export function Browse() {
               value: brand.id,
               label: (
                 <span>
-                  {brand.name} <Typography.Text type="secondary">{brand.productCount}</Typography.Text>
+                  {brand.name} <Typography.Text type="secondary">{facets.get(brand.id) ?? 0}</Typography.Text>
                 </span>
               ),
             }))}
@@ -277,6 +329,9 @@ export function Browse() {
           <>
             <Typography.Paragraph type="secondary">
               {page.total} products{isEditor ? " (including drafts and discontinued)" : ""}
+              {summary?.from != null && summary.to != null
+                ? ` · ${summary.from.toFixed(2)}–${summary.to.toFixed(2)} · ${String(summary.stock)} in stock`
+                : ""}
             </Typography.Paragraph>
             {page.cards.length === 0 ? (
               <Empty description="No products match these filters" />

@@ -31,6 +31,12 @@ internal sealed class RestQueryProvider(RestDataContext context) : IQueryProvide
     /// <summary>The page for a query: a cursor page after <c>After</c>, else offset when the set allows it.</summary>
     public static PageRequest Page(TranslatedQuery query, int take)
     {
+        // Groups are always paged by offset.
+        if (query.IsGrouped)
+        {
+            return new PageRequest { Mode = PageMode.Offset, Skip = query.Skip, Take = take };
+        }
+
         var modes = query.Type.Pagination.Modes;
         if (query.After is not null)
         {

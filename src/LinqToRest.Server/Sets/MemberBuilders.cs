@@ -44,6 +44,22 @@ public sealed class EntityPropertyBuilder
         return this;
     }
 
+    /// <summary>Allows grouped queries to use the property as a key. Index it.</summary>
+    /// <returns>The same builder.</returns>
+    public EntityPropertyBuilder IsGroupable()
+    {
+        _member.IsGroupable = true;
+        return this;
+    }
+
+    /// <summary>Allows sum, min, max and avg over groups to use the property (numbers, dates and times).</summary>
+    /// <returns>The same builder.</returns>
+    public EntityPropertyBuilder IsAggregatable()
+    {
+        _member.IsAggregatable = true;
+        return this;
+    }
+
     /// <summary>
     /// Requires a value on inserts and updates: not null, and for strings and collections not empty or blank (code
     /// <c>required</c>). Exported to clients, which check it before sending.
@@ -152,6 +168,22 @@ public sealed class ComputedPropertyBuilder
     public ComputedPropertyBuilder IsNotFilterable()
     {
         _member.IsNotFilterable = true;
+        return this;
+    }
+
+    /// <summary>Allows grouped queries to use the property as a key. Index it.</summary>
+    /// <returns>The same builder.</returns>
+    public ComputedPropertyBuilder IsGroupable()
+    {
+        _member.IsGroupable = true;
+        return this;
+    }
+
+    /// <summary>Allows sum, min, max and avg over groups to use the property (numbers, dates and times).</summary>
+    /// <returns>The same builder.</returns>
+    public ComputedPropertyBuilder IsAggregatable()
+    {
+        _member.IsAggregatable = true;
         return this;
     }
 }

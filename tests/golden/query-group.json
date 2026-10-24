@@ -1,0 +1,93 @@
+{
+  "v": 1,
+  "filter": {
+    "eq": [
+      {
+        "member": "status"
+      },
+      "Active"
+    ]
+  },
+  "groupBy": [
+    "categoryId",
+    "category/name"
+  ],
+  "orderBy": [
+    {
+      "member": "count",
+      "desc": true
+    }
+  ],
+  "select": {
+    "new": {
+      "categoryId": {
+        "key": 0
+      },
+      "name": {
+        "key": 1
+      },
+      "count": {
+        "count": {
+          "source": {
+            "group": {}
+          }
+        }
+      },
+      "expensive": {
+        "count": {
+          "source": {
+            "group": {}
+          },
+          "var": "v1",
+          "body": {
+            "gt": [
+              {
+                "member": "v1/price"
+              },
+              20
+            ]
+          }
+        }
+      },
+      "from": {
+        "min": {
+          "source": {
+            "group": {}
+          },
+          "var": "v2",
+          "body": {
+            "member": "v2/price"
+          }
+        }
+      },
+      "total": {
+        "sum": {
+          "source": {
+            "group": {}
+          },
+          "var": "v3",
+          "body": {
+            "mul": [
+              {
+                "member": "v3/price"
+              },
+              2
+            ]
+          }
+        }
+      }
+    }
+  },
+  "having": {
+    "gt": [
+      {
+        "member": "count"
+      },
+      1
+    ]
+  },
+  "page": {
+    "mode": "offset",
+    "take": 10
+  }
+}

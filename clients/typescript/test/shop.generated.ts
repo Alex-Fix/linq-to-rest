@@ -3,6 +3,7 @@
 // </auto-generated>
 import {
   createContext,
+  type Aggregatable,
   type CollectionExpr,
   type Context,
   type ContextOptions,
@@ -10,6 +11,7 @@ import {
   type DateTimeExpr,
   type EntityProxy,
   type Expr,
+  type Groupable,
   type Model,
   type NumberExpr,
   type OrderedExpr,
@@ -53,26 +55,26 @@ export interface ProductDto {
 
 export interface CategoryProxy extends EntityProxy<CategoryDto> {
   readonly id: NumberExpr & Sortable;
-  readonly name: StringExpr;
+  readonly name: StringExpr & Groupable;
 }
 
 export interface OrderLineProxy extends EntityProxy<OrderLineDto> {
   readonly id: NumberExpr & Sortable;
   readonly sku: StringExpr;
-  readonly quantity: NumberExpr;
-  readonly unitPrice: NumberExpr;
+  readonly quantity: NumberExpr & Aggregatable;
+  readonly unitPrice: NumberExpr & Aggregatable;
 }
 
 export interface ProductProxy extends EntityProxy<ProductDto> {
   readonly id: NumberExpr & Sortable;
   readonly name: StringExpr;
   readonly description: StringExpr<string | null>;
-  readonly price: NumberExpr & Sortable;
-  readonly status: OrderedExpr<ProductStatus>;
+  readonly price: NumberExpr & Sortable & Aggregatable;
+  readonly status: OrderedExpr<ProductStatus> & Groupable;
   readonly version: Expr<string>;
   readonly createdAt: DateTimeExpr;
   readonly releasedOn: DateOnlyExpr<string | null>;
-  readonly categoryId: NumberExpr<number | null>;
+  readonly categoryId: NumberExpr<number | null> & Groupable;
   readonly tags: PrimitiveCollectionExpr<StringExpr>;
   readonly categoryName: StringExpr<string | null>;
   readonly category: CategoryProxy;
@@ -88,7 +90,7 @@ export const shopModel = {
       writes: ["insert", "update", "delete"],
       members: [
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
-        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
+        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true, groupable: true },
       ],
       navigations: [],
       pagination: { modes: ["cursor"], defaultPageSize: 2, maxPageSize: 200 },
@@ -101,8 +103,8 @@ export const shopModel = {
       members: [
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
         { name: "sku", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
-        { name: "quantity", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
-        { name: "unitPrice", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
+        { name: "quantity", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: true, aggregatable: true },
+        { name: "unitPrice", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: true, aggregatable: true },
       ],
       navigations: [],
       pagination: { modes: ["offset"], defaultPageSize: 50, maxPageSize: 200 },
@@ -116,12 +118,12 @@ export const shopModel = {
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
         { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true, rules: { maxLength: 100 } },
         { name: "description", kind: "string", nullable: true, collection: false, filterable: true, sortable: false, writable: true },
-        { name: "price", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true, rules: { min: 0 } },
-        { name: "status", kind: "enum", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
+        { name: "price", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true, aggregatable: true, rules: { min: 0 } },
+        { name: "status", kind: "enum", nullable: false, collection: false, filterable: true, sortable: false, writable: true, groupable: true },
         { name: "version", kind: "guid", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
         { name: "createdAt", kind: "datetime", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
         { name: "releasedOn", kind: "dateonly", nullable: true, collection: false, filterable: true, sortable: false, writable: true },
-        { name: "categoryId", kind: "number", nullable: true, collection: false, filterable: true, sortable: false, writable: true },
+        { name: "categoryId", kind: "number", nullable: true, collection: false, filterable: true, sortable: false, writable: true, groupable: true },
         { name: "tags", kind: "string", nullable: false, collection: true, filterable: true, sortable: false, writable: false },
         { name: "categoryName", kind: "string", nullable: true, collection: false, filterable: true, sortable: false, writable: false },
       ],

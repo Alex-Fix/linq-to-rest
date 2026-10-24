@@ -66,6 +66,10 @@ internal sealed class MemberDefinition(PropertyInfo? property, string? computedN
 
     public bool IsNotFilterable { get; set; }
 
+    public bool IsGroupable { get; set; }
+
+    public bool IsAggregatable { get; set; }
+
     public bool IsRequired { get; set; }
 
     /// <summary>Gets the built-in validation rules (<see cref="EntityPropertyBuilder"/>).</summary>

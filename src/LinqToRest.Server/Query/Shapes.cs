@@ -17,12 +17,16 @@ internal abstract class Shape
 
 internal sealed class ValueShape(int index) : Shape
 {
+    public int Index => index;
+
     public override void Write(Utf8JsonWriter writer, object?[] row) => JsonValues.Write(writer, row[index]);
 }
 
 // Presence is the index of a boolean saying whether the object exists (optional navigations).
 internal sealed class ObjectShape(IReadOnlyList<KeyValuePair<string, Shape>> fields, int? presence) : Shape
 {
+    public IReadOnlyList<KeyValuePair<string, Shape>> Fields => fields;
+
     public override void Write(Utf8JsonWriter writer, object?[] row)
     {
         if (presence is { } index && row[index] is not true)
@@ -69,6 +73,9 @@ internal sealed class Row(ParameterExpression parameter)
     private readonly List<Expression> _values = [];
 
     public ParameterExpression Parameter { get; } = parameter;
+
+    /// <summary>Gets the value at an index, as added.</summary>
+    public Expression this[int index] => _values[index];
 
     public int Add(Expression value)
     {

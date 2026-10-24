@@ -16,6 +16,7 @@ var scenarios = new (string Name, Func<Task> Run)[]
     ("count and any", CountAndAny),
     ("tracking and save", TrackingAndSave),
     ("validation", Validation),
+    ("grouping", Grouping),
 };
 
 var failed = 0;
@@ -171,6 +172,28 @@ static async Task Validation()
     http.Problem("""{"type":"urn:linqtorest:error:validation_failed","title":"Invalid values.","status":422,"code":"validation_failed","pointer":"/operations","errors":[{"operation":"o0","pointer":"/operations/0/values/name","member":"name","code":"duplicate"}]}""");
     var remote = await Catches<RestValidationException>(() => shop.SaveChangesAsync());
     Check(!remote.IsLocal && remote.ErrorsFor(product)["Name"].SequenceEqual(["duplicate"]), "server errors");
+}
+
+// Anonymous group keys and selects are built with Expression.New(…, members), like projections (IL2026).
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Grouping expression trees; verified by running this app.")]
+static async Task Grouping()
+{
+    var (shop, http) = Create();
+    http.Respond("""{"items":[{"categoryId":2,"name":"Games","count":3,"from":20},{"categoryId":null,"name":null,"count":1,"from":3}]}""")
+        .Respond("""{"items":[85.5]}""")
+        .Respond("""{"items":[]}""");
+
+    var facets = await shop.Products
+        .GroupBy(p => new { p.CategoryId, p.Category!.Name })
+        .Select(g => new { g.Key.CategoryId, g.Key.Name, Count = g.Count(), From = g.Min(p => p.Price) })
+        .OrderByDescending(f => f.Count)
+        .ToListAsync();
+    var total = await shop.Products.SumAsync(p => p.Price);
+    var none = await shop.Products.Where(p => p.Price < 0).MaxAsync(p => (decimal?)p.Price);
+
+    Check(facets.Select(f => (f.CategoryId, (string?)f.Name, f.Count, f.From)).SequenceEqual([((int?)2, "Games", 3, 20m), (null, null, 1, 3m)]), "grouped results");
+    Check(total == 85.5m && none is null, "whole-query aggregates");
+    Check(http.LastBody.Contains("\"groupBy\":[]", StringComparison.Ordinal), "aggregate request");
 }
 
 static async Task<T> Catches<T>(Func<Task> action)

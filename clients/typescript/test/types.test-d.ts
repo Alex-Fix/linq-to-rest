@@ -35,6 +35,28 @@ describe("types", () => {
     expectTypeOf(s.products.take(1).toList()).resolves.toEqualTypeOf<ProductDto[]>();
   });
 
+  it("types grouped queries", () => {
+    const groups = s.products
+      .groupBy((p) => ({ status: p.status, category: p.categoryId }))
+      .select((g) => ({ status: g.key.status, count: g.count(), from: g.min((p) => p.price) }))
+      .where((f) => f.count.gt(1))
+      .orderByDescending((f) => f.from);
+
+    expectTypeOf(groups.toList()).resolves.toEqualTypeOf<
+      { status: "Draft" | "Active"; count: number; from: number }[]
+    >();
+    expectTypeOf(s.products.sum((p) => p.price)).resolves.toEqualTypeOf<number>();
+    expectTypeOf(s.products.max((p) => p.price)).resolves.toEqualTypeOf<number | null>();
+
+    // @ts-expect-error — name isn't groupable.
+    s.products.groupBy((p) => p.name);
+    const counted = s.products.groupBy((p) => p.status).select((g) => ({ count: g.count() }));
+    /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return -- the expected type error. */
+    // @ts-expect-error — groups only have the selected fields.
+    counted.where((f) => f.status.eq("Active"));
+    /* eslint-enable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
+  });
+
   it("rejects misuse at compile time", () => {
     // @ts-expect-error — comparing a number with a string.
     s.products.where((p) => p.price.gt("10"));

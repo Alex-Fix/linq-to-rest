@@ -12,7 +12,7 @@
             {
                 <div>
                     <Checkbox Checked="@_brandIds.Contains(brand.Id)" CheckedChanged="selected => ToggleBrandAsync(brand.Id, selected)">
-                        @brand.Name <Text Type="TextElementType.Secondary">@brand.ProductCount</Text>
+                        @brand.Name <Text Type="TextElementType.Secondary">@_facets.GetValueOrDefault(brand.Id)</Text>
                     </Checkbox>
                 </div>
             }
@@ -47,7 +47,9 @@
         }
         else
         {
-            <Paragraph Type="TextElementType.Secondary">@_total products@(Session.IsEditor ? " (including drafts and discontinued)" : "")</Paragraph>
+            <Paragraph Type="TextElementType.Secondary">
+                @_total products@(Session.IsEditor ? " (including drafts and discontinued)" : "")@(_from is { } from && _to is { } to ? $" · {from:F2}–{to:F2} · {_stock} in stock" : "")
+            </Paragraph>
             @if (_cards.Count == 0)
             {
                 <Empty Description="@("No products match these filters")" />
@@ -114,6 +116,10 @@
     private string? _error;
     private bool _loadingMore;
     private CancellationTokenSource? _loading;
+    private Dictionary<int, int> _facets = [];
+    private decimal? _from;
+    private decimal? _to;
+    private int _stock;
 
     private string _search = "";
     private int? _categoryId;
@@ -172,10 +178,10 @@
     private const int PageSize = 24;
 
     /// <summary>
-    /// The product grid's query: every filter is translated to the server, nothing is filtered here. It stops before
-    /// paging, because a cursor (<c>After</c>) has to come before <c>Take</c>.
+    /// The filtered products: every filter is translated to the server, nothing is filtered here. Brand facets leave
+    /// out the brand filter, so each brand shows how many products it would add.
     /// </summary>
-    private IQueryable<ProductCard> Query()
+    private IQueryable<Product> Filtered(bool withBrands = true)
     {
         IQueryable<Product> query = Session.NewCatalog().Products.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(_search))
@@ -191,7 +197,7 @@
             query = query.Where(p => ids.Contains(p.CategoryId));
         }
 
-        if (_brandIds.Count > 0)
+        if (withBrands && _brandIds.Count > 0)
         {
             var brands = _brandIds.ToList();
             query = query.Where(p => brands.Contains(p.BrandId));
@@ -212,12 +218,18 @@
             query = query.Where(p => p.InStock);
         }
 
-        query = _sort switch
+        return query;
+    }
+
+    /// <summary>The product grid's query. It stops before paging, because a cursor (<c>After</c>) has to come before <c>Take</c>.</summary>
+    private IQueryable<ProductCard> Query()
+    {
+        var query = _sort switch
         {
-            "price" => query.OrderBy(p => p.Price),
-            "priceDesc" => query.OrderByDescending(p => p.Price),
-            "newest" => query.OrderByDescending(p => p.CreatedAt),
-            _ => query.OrderBy(p => p.Name),
+            "price" => Filtered().OrderBy(p => p.Price),
+            "priceDesc" => Filtered().OrderByDescending(p => p.Price),
+            "newest" => Filtered().OrderByDescending(p => p.CreatedAt),
+            _ => Filtered().OrderBy(p => p.Name),
         };
 
         // Cards only need a few members and the first image, so that's all the server sends.
@@ -239,6 +251,13 @@
         {
             var page = await Query().Take(PageSize).ToCursorPageAsync(includeTotalCount: true, cancellationToken: token);
             (_cards, _next, _total, _error) = (page.Items.ToList(), page.NextCursor, page.TotalCount, null);
+
+            // Facets and the summary follow the filters: one grouped query and three whole-query aggregates.
+            var facets = await Filtered(withBrands: false).GroupBy(p => p.BrandId).Select(g => new BrandFacet(g.Key, g.Count())).ToListAsync(token);
+            _facets = facets.ToDictionary(facet => facet.BrandId, facet => facet.Count);
+            _from = await Filtered().MinAsync(p => (decimal?)p.Price, token);
+            _to = await Filtered().MaxAsync(p => (decimal?)p.Price, token);
+            _stock = await Filtered().SumAsync(p => p.Stock, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {

@@ -60,6 +60,54 @@ public sealed class QueryJsonTests
         Assert.True(JsonElement.DeepEquals(expected.RootElement, actual.RootElement));
     }
 
+    private const string GroupedExample = """
+        {"v":1,
+         "filter":{"eq":[{"member":"status"},"Active"]},
+         "groupBy":["brandId","brand/name"],
+         "orderBy":[{"member":"count","desc":true}],
+         "select":{"new":{
+           "brandId":{"key":0},
+           "name":{"key":1},
+           "count":{"count":{"source":{"group":{}},"var":"v0","body":true}},
+           "inStock":{"count":{"source":{"group":{}},"var":"v1","where":{"gt":[{"member":"v1/stock"},0]},"body":true}}}},
+         "having":{"gt":[{"member":"count"},1]},
+         "page":{"mode":"offset","take":20}}
+        """;
+
+    [Fact]
+    public void Reads_and_writes_grouped_queries()
+    {
+        var query = Read(GroupedExample);
+        var written = QueryJson.Write(query);
+
+        Assert.Equal(["brandId", "brand/name"], query.GroupBy!.Select(key => key.Path));
+        Assert.Equal("/having", query.Having!.Location);
+        var fields = ((NewNode)query.Select!).Fields;
+        Assert.Equal((1, "/select/new/name"), (((KeyNode)fields[1].Value).Index, fields[1].Value.Location));
+        Assert.IsType<GroupNode>(((LambdaNode)fields[2].Value).Source);
+        using var expected = JsonDocument.Parse(GroupedExample);
+        using var actual = JsonDocument.Parse(written);
+        Assert.True(JsonElement.DeepEquals(expected.RootElement, actual.RootElement));
+        Assert.Equal(Encoding.UTF8.GetString(written), Encoding.UTF8.GetString(QueryJson.Write(QueryJson.Read(written, new QueryLimits()))));
+    }
+
+    [Fact]
+    public void An_empty_group_by_is_one_group_and_a_missing_one_is_no_grouping()
+    {
+        Assert.Empty(Read("""{"v":1,"groupBy":[],"select":{"new":{"n":{"count":{"source":{"group":{}},"var":"v0","body":true}}}}}""").GroupBy!);
+        Assert.Null(Read("""{"v":1}""").GroupBy);
+        Assert.DoesNotContain("groupBy", Encoding.UTF8.GetString(QueryJson.Write(new QueryRequest())), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Group_key_limit_is_enforced_at_the_boundary()
+    {
+        var limits = new QueryLimits { MaxGroupKeys = 2 };
+
+        Read("""{"v":1,"groupBy":["a","b"]}""", limits);
+        AssertLimit("""{"v":1,"groupBy":["a","b","c"]}""", limits, "groupKeys");
+    }
+
     [Fact]
     public void Writes_literals_from_clr_values()
     {
@@ -105,6 +153,11 @@ public sealed class QueryJsonTests
     [InlineData("""{"v":1,"page":{"mode":"offset","take":-1}}""", ErrorCodes.InvalidQuery, "/page/take")]
     [InlineData("""{"v":1,"page":{"mode":"pages"}}""", ErrorCodes.InvalidQuery, "/page/mode")]
     [InlineData("""{"v":1,"count":"yes"}""", ErrorCodes.InvalidQuery, "/count")]
+    [InlineData("""{"v":1,"groupBy":"a"}""", ErrorCodes.InvalidQuery, "/groupBy")]
+    [InlineData("""{"v":1,"groupBy":[{"member":"a"}]}""", ErrorCodes.UnknownMember, "/groupBy/0")]
+    [InlineData("""{"v":1,"select":{"key":-1}}""", ErrorCodes.InvalidQuery, "/select/key")]
+    [InlineData("""{"v":1,"select":{"key":"a"}}""", ErrorCodes.InvalidQuery, "/select/key")]
+    [InlineData("""{"v":1,"select":{"count":{"source":{"group":{"a":1}},"var":"v","body":true}}}""", ErrorCodes.InvalidQuery, "/select/count/source/group")]
     public void Rejects_invalid_queries(string json, string code, string location)
     {
         var error = Assert.Throws<ProtocolException>(() => Read(json));

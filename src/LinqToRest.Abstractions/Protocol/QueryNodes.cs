@@ -132,6 +132,30 @@ public sealed class LambdaNode : QueryNode
     public QueryNode? Where { get; }
 }
 
+/// <summary>The n-th group key of a grouped query: <c>{"key": 0}</c>.</summary>
+public sealed class KeyNode : QueryNode
+{
+    /// <summary>Creates the node.</summary>
+    /// <param name="index">The key's position in <see cref="QueryRequest.GroupBy"/>.</param>
+    /// <param name="location">The JSON pointer.</param>
+    public KeyNode(int index, string location = "")
+        : base(location) => Index = index;
+
+    /// <summary>Gets the key's position in <see cref="QueryRequest.GroupBy"/>.</summary>
+    public int Index { get; }
+}
+
+/// <summary>The rows of the current group, as the source of an aggregate: <c>{"group": {}}</c>.</summary>
+public sealed class GroupNode : QueryNode
+{
+    /// <summary>Creates the node.</summary>
+    /// <param name="location">The JSON pointer.</param>
+    public GroupNode(string location = "")
+        : base(location)
+    {
+    }
+}
+
 /// <summary>A projected object shape in a select: <c>{"new": {"id": …, "total": …}}</c>.</summary>
 public sealed class NewNode : QueryNode
 {

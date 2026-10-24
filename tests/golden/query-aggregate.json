@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "filter": {
+    "eq": [
+      {
+        "member": "categoryId"
+      },
+      2
+    ]
+  },
+  "groupBy": [],
+  "select": {
+    "sum": {
+      "source": {
+        "group": {}
+      },
+      "var": "v0",
+      "body": {
+        "mul": [
+          {
+            "member": "v0/price"
+          },
+          2
+        ]
+      }
+    }
+  },
+  "page": {
+    "mode": "offset"
+  }
+}

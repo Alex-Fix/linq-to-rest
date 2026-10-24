@@ -120,6 +120,11 @@ internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQ
             query = query.Where(filter);
         }
 
+        if (plan.Group is { } group)
+        {
+            return await ExecuteGroupedAsync(query, plan, group, cancellationToken).ConfigureAwait(false);
+        }
+
         long? total = plan.Count ? await query.LongCountAsync(cancellationToken).ConfigureAwait(false) : null;
         if (plan.Keyset is Expression<Func<TEntity, bool>> keyset)
         {
@@ -168,6 +173,54 @@ internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQ
 
         return new QueryResult(rows, next, total);
     }
+
+    /// <summary>GroupBy, having, order, page and the per-group projection, composed as one query over the filtered rows.</summary>
+    private static async Task<QueryResult> ExecuteGroupedAsync(IQueryable<TEntity> rows, QueryPlan plan, GroupPlan group, CancellationToken cancellationToken)
+    {
+        var groupType = plan.Projection.Parameters[0].Type;
+        Expression groups = Expression.Call(typeof(Queryable), nameof(Queryable.GroupBy), [typeof(TEntity), group.Key.ReturnType], rows.Expression, Expression.Quote(group.Key));
+        if (group.Having is { } having)
+        {
+            groups = Expression.Call(typeof(Queryable), nameof(Queryable.Where), [groupType], groups, Expression.Quote(having));
+        }
+
+        long? total = null;
+        if (plan.Count)
+        {
+            var counted = Expression.Call(typeof(Queryable), nameof(Queryable.Select), [groupType, typeof(int)], groups, Expression.Quote(Expression.Lambda(Expression.Constant(1), plan.Projection.Parameters[0])));
+            total = await rows.Provider.CreateQuery<int>(counted).LongCountAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        for (var index = 0; index < group.Sorts.Count; index++)
+        {
+            var sort = group.Sorts[index];
+            var method = (index == 0, sort.Descending) switch
+            {
+                (true, false) => nameof(Queryable.OrderBy),
+                (true, true) => nameof(Queryable.OrderByDescending),
+                (false, false) => nameof(Queryable.ThenBy),
+                (false, true) => nameof(Queryable.ThenByDescending),
+            };
+            groups = Expression.Call(typeof(Queryable), method, [groupType, sort.Key.ReturnType], groups, Expression.Quote(sort.Key));
+        }
+
+        if (plan.Skip > 0)
+        {
+            groups = Expression.Call(typeof(Queryable), nameof(Queryable.Skip), [groupType], groups, Expression.Constant(plan.Skip));
+        }
+
+        if (plan.Take == 0)
+        {
+            return new QueryResult([], null, total);
+        }
+
+        groups = Expression.Call(typeof(Queryable), nameof(Queryable.Take), [groupType], groups, Expression.Constant(plan.Take));
+        var projected = Expression.Call(typeof(Queryable), nameof(Queryable.Select), [groupType, typeof(object?[])], groups, Expression.Quote(plan.Projection));
+        var result = await rows.Provider.CreateQuery<object?[]>(projected).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return group.MaxGroups is { } max && result.Count > max
+            ? throw RequestException.LimitExceeded("/groupBy", "groups")
+            : new QueryResult(result, null, total);
+    }
 }
 
 /// <summary>An exposed scalar or primitive-collection member.</summary>
@@ -197,6 +250,10 @@ internal sealed class SetProperty
     public bool IsSortable { get; init; }
 
     public bool IsFilterable { get; init; }
+
+    public bool IsGroupable { get; init; }
+
+    public bool IsAggregatable { get; init; }
 
     /// <summary>Gets the built-in validation rules, or <see langword="null"/>.</summary>
     public RestPropertyRules? Rules { get; init; }
