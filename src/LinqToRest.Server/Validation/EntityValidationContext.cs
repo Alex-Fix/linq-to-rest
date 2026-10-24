@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using LinqToRest.Server.Internal;
 using LinqToRest.Server.Mapping;
 using LinqToRest.Server.Policies;
@@ -28,33 +29,47 @@ public sealed class EntityValidationContext<TEntity>
     /// <summary>Gets the request (user, services).</summary>
     public PolicyContext Request => _scope.Request;
 
-    /// <summary>Returns whether the batch sets the member: always on inserts, and on updates when it sends a value.</summary>
-    /// <param name="member">An exposed property: <c>e =&gt; e.Sku</c>.</param>
+    /// <summary>
+    /// Returns whether the batch sets the member: always on inserts, and on updates when it sends a value. A member of
+    /// a value is set whenever its value is (values are written whole).
+    /// </summary>
+    /// <param name="member">An exposed property, <c>e =&gt; e.Sku</c>, or a member of a value, <c>e =&gt; e.Address.City</c>.</param>
     /// <typeparam name="TMember">The member type.</typeparam>
     /// <returns>Whether the member is set by this operation.</returns>
     public bool IsModified<TMember>(Expression<Func<TEntity, TMember>> member) =>
-        Operation == SetOperation.Insert || _scope.IsSent(Find(member));
+        Operation == SetOperation.Insert || _scope.IsSent(Find(member).Property);
 
     /// <summary>Reports an error on a member; the client sees it next to that member.</summary>
-    /// <param name="member">An exposed property: <c>e =&gt; e.Sku</c>.</param>
+    /// <param name="member">An exposed property, <c>e =&gt; e.Sku</c>, or a member of a value, <c>e =&gt; e.Address.City</c>.</param>
     /// <param name="code">The error code: <c>snake_case</c>, at most 64 characters, not a built-in code.</param>
     /// <typeparam name="TMember">The member type.</typeparam>
     /// <exception cref="InvalidOperationException">The member isn't exposed or the code isn't valid (a server bug).</exception>
-    public void AddError<TMember>(Expression<Func<TEntity, TMember>> member, string code) => _scope.Add(Find(member), Checked(code));
+    public void AddError<TMember>(Expression<Func<TEntity, TMember>> member, string code) => _scope.Add(Find(member).Path, Checked(code));
 
     /// <summary>Reports an error on the whole row.</summary>
     /// <param name="code">The error code: <c>snake_case</c>, at most 64 characters, not a built-in code.</param>
     /// <exception cref="InvalidOperationException">The code isn't valid (a server bug).</exception>
-    public void AddError(string code) => _scope.Add(null, Checked(code));
+    public void AddError(string code) => _scope.Add((string?)null, Checked(code));
 
     private static string Checked(string code) =>
         ValidationCodes.IsValid(code) ? code : throw new InvalidOperationException("A validator reported an invalid error code. Codes are snake_case, at most 64 characters, and not built-in codes.");
 
-    private SetProperty Find<TMember>(Expression<Func<TEntity, TMember>> member)
+    // The set's property and the wire path to the member (size/weight/unit inside a value).
+    private (SetProperty Property, string Path) Find<TMember>(Expression<Func<TEntity, TMember>> member)
     {
         ArgumentNullException.ThrowIfNull(member);
-        var property = MemberAccess.GetProperty(member, nameof(member));
-        return _scope.Mapping.Properties.FirstOrDefault(exposed => exposed.EntityProperty == property)
-            ?? throw new InvalidOperationException($"A validator of the set '{_scope.Mapping.Name}' named '{property.Name}', which the set doesn't expose.");
+        var chain = MemberAccess.GetPropertyPath(member, nameof(member));
+        var property = _scope.Mapping.Properties.FirstOrDefault(exposed => exposed.EntityProperty == chain[0]) ?? throw NotExposed(chain[0]);
+        var (current, path) = (property, property.Name);
+        foreach (var info in chain.Skip(1))
+        {
+            current = current.ValueType?.Properties.FirstOrDefault(exposed => exposed.EntityProperty == info) ?? throw NotExposed(info);
+            path += "/" + current.Name;
+        }
+
+        return (property, path);
     }
+
+    private InvalidOperationException NotExposed(PropertyInfo property) =>
+        new($"A validator of the set '{_scope.Mapping.Name}' named '{property.Name}', which the set doesn't expose.");
 }

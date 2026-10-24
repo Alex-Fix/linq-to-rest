@@ -270,6 +270,13 @@ Where the implementation differs from the sections above, this list wins.
    members by name (ignoring case) and type; the other members need a public `set` or `init`. The golden models gain
    value types in steps 4 (integration shop) and 7 (golden client model), when something reads them.
 
+3. **Batch writes (step 5).** An insert that doesn't send a non-nullable value keeps the entity's default, like
+   scalars do; it's 422 `required` only when the entity leaves the value null (the design said always `required`,
+   which would break every existing insert of a set that gains a value). When a value type's constructor or setter
+   throws an `ArgumentException` (its own guards), the client gets 400 `type_mismatch` at the value's pointer. Nested
+   validation errors carry the slash path as `member` (`size/weight/unit`), the same form as query paths and
+   pointers; `EntityValidationContext.IsModified` / `AddError` accept `e => e.Size.Weight.Unit`.
+
 ## Open questions
 
 - Collections of value objects, whole-value equality and partial updates: later, on demand.

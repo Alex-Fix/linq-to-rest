@@ -62,8 +62,11 @@ public sealed record Dimensions
     public required Weight Weight { get; init; }
 }
 
-/// <summary>A positional record nested in <see cref="Dimensions"/>.</summary>
-public sealed record Weight(double Amount, string Unit);
+/// <summary>A positional record nested in <see cref="Dimensions"/>, guarding its own values.</summary>
+public sealed record Weight(double Amount, string Unit)
+{
+    public double Amount { get; init; } = Amount >= 0 ? Amount : throw new ArgumentOutOfRangeException(nameof(Amount));
+}
 
 /// <summary>An optional complex type on products, and an owned JSON type on order lines.</summary>
 public sealed record Place(string Country, string? City);
