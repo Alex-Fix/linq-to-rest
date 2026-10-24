@@ -233,6 +233,30 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Groups_and_whole_query_aggregates_come_from_the_server()
+    {
+        var shop = Host.Client();
+
+        var facets = await shop.Products
+            .Where(p => p.Status != ProductStatus.Retired)
+            .GroupBy(p => new { p.CategoryId, p.Category!.Name })
+            .Select(g => new { g.Key.CategoryId, g.Key.Name, Count = g.Count(), Cheapest = g.Min(p => p.Price), Rating = g.Average(p => p.Rating) })
+            .Where(f => f.Count > 0)
+            .OrderByDescending(f => f.Count)
+            .ToListAsync(Token);
+        var total = await shop.Products.SumAsync(p => p.Price, Token);
+        var best = await shop.Products.MaxAsync(p => p.Rating, Token);
+        var none = await Assert.ThrowsAsync<InvalidOperationException>(() => shop.Products.Where(p => p.Price < 0).AverageAsync(p => p.Rating, Token));
+
+        // Tenant 1 only: the policy filter applies before grouping.
+        Assert.Equal(
+            [((int?)2, "Games", 3, 20m, 4.2), (1, "Books", 1, 12.5m, 4.8)],
+            facets.Select(f => (f.CategoryId, f.Name, f.Count, f.Cheapest, Math.Round(f.Rating, 2))));
+        Assert.Equal((85.5m, 4.8), (total, best));
+        Assert.Contains("no rows", none.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Rules_fail_before_sending_and_on_the_server_with_the_same_errors()
     {
         var client = Host.Client();
