@@ -1,5 +1,5 @@
 # Grouping and aggregates — design
-Status: approved · Date: 2026-10-23
+Status: approved, implemented (see Implementation notes) · Date: 2026-10-23
 
 Backlog item of [`2026-10-20-roadmap.md`](2026-10-20-roadmap.md): "`GroupBy` and aggregates" (a v1 non-goal).
 
@@ -209,10 +209,35 @@ clients to the same bodies.
   and total stock.
 - README: "Grouping and aggregates" section, nodes, codes, limits. Roadmap: item done.
 
+## Implementation notes
+
+Where the implementation differs from the sections above, this list wins.
+
+1. **Having and order name select fields** (decided during step 2): `having` and `orderBy` in a grouped query use
+   member paths naming the `select`'s fields (`{"member": "count"}`); there are no expression sort items, so
+   `OrderByItem` is unchanged and clients map `f.Count` straight to `"count"`. `groupBy` paths are written like
+   `include` (strings).
+2. **Spike result:** EF Core translates keys in our own `GroupKey<…>` classes (`MemberInit`), conditional counts,
+   arithmetic sums (also over SQLite's double-converted decimals), min/max of dates and averages on SQLite and
+   PostgreSQL. Providers order a null key differently, so tests don't fix its position.
+3. **Whole-query aggregates** are an empty `groupBy`, grouped by a constant: a query matching no rows returns no
+   item, and the clients apply LINQ's empty-set rules (sum 0; .NET min/max/average throw or return null for nullable
+   results; TypeScript returns null). Steps 4 and 5 landed together.
+4. **Grouped select checks:** `key`/`group` nodes outside a grouped select, `any`/`all`/`map` over a group, bare
+   members and nested collection lambdas in aggregate bodies are `invalid_query`; unknown fields in `having`/`orderBy`
+   are `unknown_member`. Grouped queries always page by offset, whatever the set's pagination modes.
+5. **Clients:** .NET adds `SumAsync`/`AverageAsync` overloads per numeric type and generic `MinAsync`/`MaxAsync`;
+   aggregates refuse queries with `Select`, sorting or paging. TypeScript checks aggregatable members when the query is
+   sent (types only reject non-groupable keys), and `min`/`max`/`average` return null on empty sets. A grouped `Where`
+   before the group `Select` (`g.Count() > 1`) isn't supported; write it after the `Select`.
+6. **Anonymous keys and selects** raise IL2026 in trimmed apps like other anonymous projections (README); the Blazor
+   sample projects facets into a record.
+7. **Benchmarks** for the grouped shapes weren't added or run in this change.
+
 ## Open questions
 
-- Does EF Core translate grouping by a `MemberInit` of our own key class on both providers? (Step 1 decides; fallback
-  above.)
+- ~~Does EF Core translate grouping by a `MemberInit` of our own key class on both providers?~~ Yes (Implementation
+  notes 2).
 - Distinct counts: later, if needed (provider differences).
 
 ## Implementation steps

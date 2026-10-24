@@ -169,6 +169,37 @@ const games = await shop.products
 Same protocol, same rules, same unit of work: both clients write identical request bodies, checked against the shared
 golden files in `tests/golden/`. Details in [clients/typescript/README.md](clients/typescript/README.md).
 
+## Grouping and aggregates
+
+```csharp
+b.Property(p => p.BrandId).IsGroupable();        // keys: opt-in per column, like sorting
+b.Property(p => p.Price).IsAggregatable();       // sum, min, max and average read only these
+// brands: b.Property(x => x.Name).IsGroupable(); → products can group by p.Brand.Name
+
+var facets = await shop.Products
+    .Where(p => p.Status == ProductStatus.Active)                 // rows first: policies, then filters
+    .GroupBy(p => new { p.BrandId, p.Brand!.Name })
+    .Select(g => new { g.Key.BrandId, g.Key.Name, Count = g.Count(), InStock = g.Count(p => p.Stock > 0),
+                       From = g.Min(p => p.Price), Value = g.Sum(p => p.Price * p.Stock) })
+    .Where(f => f.Count > 1)                                      // HAVING, over the selected fields
+    .OrderByDescending(f => f.Count)
+    .ToListAsync();                                               // no Take: every group, up to MaxGroups
+
+decimal total = await shop.Products.Where(p => p.CategoryId == 4).SumAsync(p => p.Price * p.Stock);
+```
+
+- One SQL statement with `GROUP BY`. Keys are one to four groupable members (through references and computed
+  values too); aggregates are `Count` (optionally with a condition), `Sum`, `Min`, `Max` and `Average` over expressions
+  of aggregatable members, without nested collections. `Where` and `OrderBy` after the group `Select` use its fields;
+  keys end the order.
+- Groups page with `Skip`/`Take` (the set's page limits); without `Take` you get every group up to `MaxGroups` (1000),
+  more is `limit_exceeded` (`groups`). `CountAsync` counts groups. No cursors, includes or grouped rows.
+- `SumAsync`, `MinAsync`, `MaxAsync` and `AverageAsync` aggregate every row a query filters, with LINQ's empty-set
+  results (sum 0; min, max and average throw, or are null for nullable values).
+- Providers order a `null` key differently (SQLite first, PostgreSQL last).
+- TypeScript: `groupBy(p => ...)`, `.select(g => ({ key: g.key, count: g.count(), ... }))`, then `where`/`orderBy` over
+  the fields; `sum`/`min`/`max`/`average` on a query. Non-groupable keys don't compile.
+
 ## Validation
 
 Rules run on every insert and update of a batch, after all its values are applied and before anything is written;
@@ -249,6 +280,8 @@ whose row doesn't exist.
 Nodes: `member`, `var`, literals, `new` (shapes), `and` `or` `not` `eq` `ne` `gt` `ge` `lt` `le` `in` `add` `sub` `mul`
 `div` `mod` `neg` `contains` `startsWith` `endsWith` `toLower` `toUpper` `length` `trim` `concat` `year` `month` `day`
 `hour` `minute` `date` `if` `coalesce`, and the collection lambdas `any` `all` `count` `sum` `min` `max` `avg` `map`.
+Grouped queries add `"groupBy": ["brandId", "brand/name"]`, `having`, and inside `select` the nodes `{"key": n}` and
+`{"group": {}}` (the source of `count`/`sum`/`min`/`max`/`avg`); `having` and `orderBy` name the select's fields.
 The list is closed: anything else is rejected.
 
 `POST /api/$batch`:
@@ -268,7 +301,7 @@ Errors are `application/problem+json` with a stable `code`, a JSON `pointer` int
 
 | Status | Codes |
 |---|---|
-| 400 | `invalid_json` `unknown_node` `bad_arity` `unknown_member` `not_filterable` `not_sortable` `not_writable` `type_mismatch` `invalid_cursor` `cursor_nullable_sort` `limit_exceeded` `unsupported_version` `invalid_query` `invalid_batch` |
+| 400 | `invalid_json` `unknown_node` `bad_arity` `unknown_member` `not_filterable` `not_sortable` `not_groupable` `not_aggregatable` `not_writable` `type_mismatch` `invalid_cursor` `cursor_nullable_sort` `limit_exceeded` `unsupported_version` `invalid_query` `invalid_batch` |
 | 403 / 404 | `forbidden`, `operation_not_allowed` / `not_found` |
 | 409 / 412 | `conflict` (constraint violation) / `concurrency_conflict` |
 | 422 | `validation_failed`, with `errors` (`required` `too_short` `too_long` `out_of_range` `invalid_format`, custom codes, and a final `too_many_errors` past the limit) |
@@ -285,6 +318,7 @@ Errors are `application/problem+json` with a stable `code`, a JSON `pointer` int
 | Page size | per set: default 50, max 200 |
 | Skip (offset mode) | per set: 10 000 |
 | Batch operations | 100 |
+| Group keys / groups without `Take` | 4 / 1000 |
 | Validation errors per response | 100 |
 
 Every query is paged and every sort ends with the key. Cursor pagination only sorts by non-nullable members, because
