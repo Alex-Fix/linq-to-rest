@@ -15,6 +15,7 @@
           "type": "string",
           "writable": true,
           "sortable": true,
+          "groupable": true,
           "rules": {"required": true, "maxLength": 50}
         },
         {"name": "productCount", "type": "int32"}
@@ -89,11 +90,25 @@
           "filterable": false,
           "rules": {"maxLength": 2000}
         },
-        {"name": "price", "type": "decimal", "writable": true, "sortable": true, "rules": {"min": 0.01, "max": 100000}},
-        {"name": "status", "type": "ProductStatus", "writable": true},
-        {"name": "stock", "type": "int32", "writable": true, "sortable": true, "rules": {"min": 0}},
-        {"name": "categoryId", "type": "int32", "writable": true},
-        {"name": "brandId", "type": "int32", "writable": true},
+        {
+          "name": "price",
+          "type": "decimal",
+          "writable": true,
+          "sortable": true,
+          "aggregatable": true,
+          "rules": {"min": 0.01, "max": 100000}
+        },
+        {"name": "status", "type": "ProductStatus", "writable": true, "groupable": true},
+        {
+          "name": "stock",
+          "type": "int32",
+          "writable": true,
+          "sortable": true,
+          "aggregatable": true,
+          "rules": {"min": 0}
+        },
+        {"name": "categoryId", "type": "int32", "writable": true, "groupable": true},
+        {"name": "brandId", "type": "int32", "writable": true, "groupable": true},
         {"name": "createdAt", "type": "dateTime", "sortable": true},
         {"name": "version", "type": "guid"},
         {"name": "inStock", "type": "bool"},
