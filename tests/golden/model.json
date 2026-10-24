@@ -1,6 +1,22 @@
 {
   "v": 1,
   "enums": {"ProductStatus": ["Draft", "Active"]},
+  "valueTypes": [
+    {
+      "name": "DimensionsDto",
+      "properties": [
+        {"name": "width", "type": "float64", "sortable": true, "rules": {"min": 0}},
+        {"name": "weight", "type": "WeightDto"}
+      ]
+    },
+    {
+      "name": "WeightDto",
+      "properties": [
+        {"name": "amount", "type": "decimal", "aggregatable": true},
+        {"name": "unit", "type": "string", "rules": {"maxLength": 5}}
+      ]
+    }
+  ],
   "sets": [
     {
       "name": "categories",
@@ -52,6 +68,7 @@
         {"name": "createdAt", "type": "dateTime"},
         {"name": "releasedOn", "type": "dateOnly", "nullable": true, "writable": true},
         {"name": "categoryId", "type": "int32", "nullable": true, "writable": true, "groupable": true},
+        {"name": "size", "type": "DimensionsDto", "nullable": true, "writable": true},
         {"name": "tags", "type": "string", "collection": true},
         {"name": "categoryName", "type": "string", "nullable": true}
       ],

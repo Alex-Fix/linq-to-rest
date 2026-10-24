@@ -18,7 +18,8 @@
         "description": null,
         "price": 9.5,
         "status": "Active",
-        "releasedOn": null
+        "releasedOn": null,
+        "size": null
       },
       "refs": {
         "categoryId": "o0"

@@ -286,6 +286,14 @@ Where the implementation differs from the sections above, this list wins.
    that's compared with anything but null, sorted or grouped throws `NotSupportedException` before sending. The
    golden request bodies come with the golden model in step 7, once the generator emits value types.
 
+5. **C# generator (step 7).** Value types become `sealed partial record`s with `required init` members for
+   non-nullable ones. A set property holding a non-nullable value starts as `null!` (a record has no empty value);
+   local validation reports `required` if it's still null when saving, so code creating such rows must set it. Value
+   bindings are fields of a nested `ValueBindings` class, emitted leaves first (static fields initialize in order),
+   and name members with literals: a field named like its type would shadow the type inside `nameof`. The golden
+   model's products gained an optional `size` (`DimensionsDto` with a nested `WeightDto`); inserts now send
+   `"size": null`, so `batch-unit-of-work.json` changed, and `query-value-filter.json` and `batch-value.json` are new.
+
 ## Open questions
 
 - Collections of value objects, whole-value equality and partial updates: later, on demand.

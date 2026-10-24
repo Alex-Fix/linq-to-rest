@@ -17,6 +17,7 @@ var scenarios = new (string Name, Func<Task> Run)[]
     ("tracking and save", TrackingAndSave),
     ("validation", Validation),
     ("grouping", Grouping),
+    ("value types", ValueTypes),
 };
 
 var failed = 0;
@@ -194,6 +195,24 @@ static async Task Grouping()
     Check(facets.Select(f => (f.CategoryId, (string?)f.Name, f.Count, f.From)).SequenceEqual([((int?)2, "Games", 3, 20m), (null, null, 1, 3m)]), "grouped results");
     Check(total == 85.5m && none is null, "whole-query aggregates");
     Check(http.LastBody.Contains("\"groupBy\":[]", StringComparison.Ordinal), "aggregate request");
+}
+
+static async Task ValueTypes()
+{
+    var (shop, http) = Create();
+    const string size = """{"width":40,"weight":{"amount":1.2,"unit":"kg"}}""";
+    http.Respond($$"""{"items":[{{Rows.Chess[..^1]}},"size":{{size}}}]}""")
+        .Respond($$"""{"items":[{{size}},null]}""")
+        .Respond("""{"results":[]}""");
+
+    var chess = Single(await shop.Products.Where(p => p.Size != null && p.Size.Weight.Amount > 1).Take(10).ToListAsync());
+    var sizes = await shop.Products.Select(p => p.Size).Take(2).ToListAsync();
+    Check(chess.Size == new DimensionsDto { Width = 40, Weight = new WeightDto { Amount = 1.2m, Unit = "kg" } }, "values in rows");
+    Check(sizes.SequenceEqual([chess.Size, null]), "values in projections");
+
+    chess.Size = chess.Size! with { Width = 41 };
+    await shop.SaveChangesAsync();
+    Check(http.LastBody.Contains("""{"size":{"width":41,"weight":{"amount":1.2,"unit":"kg"}}}""", StringComparison.Ordinal), "replaced value sent whole");
 }
 
 static async Task<T> Catches<T>(Func<Task> action)

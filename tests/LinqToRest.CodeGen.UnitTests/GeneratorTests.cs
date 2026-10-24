@@ -93,6 +93,28 @@ public sealed class GeneratorTests
     }
 
     [Fact]
+    public void CSharp_writes_value_types_as_records_bound_nested_first()
+    {
+        var text = new CSharpEmitter(RestModel.Parse(ValuesJson), "Places.Client", "PlacesContext", "test.json").Emit();
+
+        Assert.Contains("public sealed partial record Address\n{\n    public required string Street { get; init; }\n    public Geo? Geo { get; init; }\n}\n", text, StringComparison.Ordinal);
+        Assert.Contains("    public Address Home { get; set; } = null!;\n    public Address? Work { get; set; }\n", text, StringComparison.Ordinal);
+        Assert.Contains(".Value(\"home\", nameof(Person.Home), ValueBindings.Address, static e => e.Home, static (e, v) => e.Home = v!)", text, StringComparison.Ordinal);
+        Assert.Contains("new ValueBinding<Address>(\"Address\", static v => new Address { Street = (string)v[0]!, Geo = (Geo?)v[1] })", text, StringComparison.Ordinal);
+        Assert.True(text.IndexOf("ValueBinding<Geo> Geo =", StringComparison.Ordinal) < text.IndexOf("ValueBinding<Address> Address =", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CSharp_rejects_a_value_member_named_like_its_record()
+    {
+        var model = RestModel.Parse(ValuesJson.Replace("\"name\": \"street\"", "\"name\": \"address\"", StringComparison.Ordinal));
+
+        var error = Assert.Throws<GeneratorException>(() => new CSharpEmitter(model, "Places.Client", "PlacesContext", "test.json").Emit());
+
+        Assert.Contains("'Address.address' would be named like its class Address", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Check_passes_for_an_up_to_date_file_and_fails_for_a_stale_one()
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ts");
@@ -225,6 +247,17 @@ public sealed class GeneratorTests
         var code = Cli.Run(args, output, errors);
         return (code, output.ToString(), errors.ToString());
     }
+
+    private const string ValuesJson = """
+        {"v": 1,
+         "valueTypes": [
+           {"name": "Address", "properties": [{"name": "street", "type": "string"}, {"name": "geo", "type": "Geo", "nullable": true}]},
+           {"name": "Geo", "properties": [{"name": "lat", "type": "float64"}]}],
+         "sets": [{"name": "people", "type": "Person", "key": ["id"], "writes": ["update"],
+           "pagination": {"modes": ["offset"], "defaultPageSize": 1, "maxPageSize": 1, "maxSkip": 0},
+           "properties": [{"name": "id", "type": "int32", "sortable": true}, {"name": "home", "type": "Address", "writable": true},
+                          {"name": "work", "type": "Address", "nullable": true, "writable": true}]}]}
+        """;
 
     private static RestModel KindsModel() => RestModel.Parse(KindsJson);
 

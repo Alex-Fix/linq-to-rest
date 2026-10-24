@@ -77,7 +77,10 @@ public sealed class ValueTypeConfigurationTests
             o.UseDbContext<ShopContext>().AddSetsFromAssembly(typeof(PlaceType).Assembly);
         });
 
-        Assert.Equal(["Contact", "Dimensions", "Place", "Weight"], builder!.ValueTypes.Select(configure => configure().ClrType.Name));
+        // Ordered by configuration class: the golden shop's (LinqToRest.Server.UnitTests.Golden) come first.
+        Assert.Equal(
+            [typeof(Golden.Dimensions), typeof(Golden.Weight), typeof(Contact), typeof(Dimensions), typeof(Place), typeof(Weight)],
+            builder!.ValueTypes.Select(configure => configure().ClrType));
     }
 
     [Theory]
