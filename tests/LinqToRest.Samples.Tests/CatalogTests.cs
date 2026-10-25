@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using LinqToRest.Server.Hosting;
 using Microsoft.Extensions.Hosting;
 
@@ -94,6 +95,33 @@ public sealed class CatalogTests(CatalogApi api) : IClassFixture<CatalogApi>
 
         Assert.Equal((12, 30), (light.Total(), unpacked.Total()));
         Assert.Equal("""[{"website":"https://acme.example","country":"DE"},null]""", contacts.GetProperty("items").GetRawText());
+    }
+
+    [Fact]
+    public async Task Cursor_pages_sort_by_package_weight_with_unpacked_products_last_when_descending()
+    {
+        var anonymous = await api.ClientAsync();
+        var rows = new List<(string Sku, double? Weight)>();
+        string? cursor = null;
+        do
+        {
+            var after = cursor is null ? "" : $",\"after\":\"{cursor}\"";
+            var page = await anonymous.QueryOkAsync("products", """
+                {"v":1,"orderBy":[{"member":"dimensions/weightKg","desc":true}],
+                 "select":{"new":{"sku":{"member":"sku"},"weight":{"member":"dimensions/weightKg"}}},
+                 "page":{"mode":"cursor","take":96
+                """ + after + "}}");
+            rows.AddRange(page.GetProperty("items").EnumerateArray().Select(item =>
+                (item.GetProperty("sku").GetString()!, item.GetProperty("weight").ValueKind == JsonValueKind.Null ? (double?)null : item.GetProperty("weight").GetDouble())));
+            cursor = page.TryGetProperty("nextCursor", out var next) ? next.GetString() : null;
+        }
+        while (cursor is not null);
+
+        var weights = rows.Select(row => row.Weight).ToList();
+        Assert.Equal(170, rows.Select(row => row.Sku).Distinct().Count());
+        Assert.Equal(170, rows.Count);
+        Assert.All(weights[^30..], weight => Assert.Null(weight));
+        Assert.Equal(weights[..^30].OrderDescending(), weights[..^30]);
     }
 
     [Fact]
