@@ -59,7 +59,8 @@ public sealed class ProductSet : IEntitySetConfiguration<Product>
         builder.Computed("imageCount", p => p.Images.Count);
         builder.HasOne(p => p.Category).WithForeignKey(p => p.CategoryId);
         builder.HasOne(p => p.Brand).WithForeignKey(p => p.BrandId);
-        builder.HasMany(p => p.Images);
+        // Editors add and remove images through the product (link / unlink); unlinking deletes the image.
+        builder.HasMany(p => p.Images).AllowLinks();
         builder.HasPagination(p => p.DefaultPageSize(24).MaxPageSize(96).MaxSkip(1000));
 
         // Server-only rules: a price in whole cents, and a SKU no other product has (instead of a 409 from the index).
@@ -77,7 +78,7 @@ public sealed class ProductImageSet : IEntitySetConfiguration<ProductImage>
         builder.Property(i => i.Url).IsRequired().HasMaxLength(500).HasPattern("^https://");
         builder.Property(i => i.SortOrder).IsSortable();
 
-        // The navigation is what lets a batch point a new image at a product inserted in the same batch (refs).
+        // Queries and the product page read images by product; editors change them through the product's links.
         builder.HasOne(i => i.Product).WithForeignKey(i => i.ProductId);
     }
 }

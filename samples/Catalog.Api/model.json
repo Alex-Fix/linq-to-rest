@@ -144,7 +144,7 @@
       "navigations": [
         {"name": "category", "target": "categories", "foreignKey": ["categoryId"]},
         {"name": "brand", "target": "brands", "foreignKey": ["brandId"]},
-        {"name": "images", "target": "productImages", "collection": true}
+        {"name": "images", "target": "productImages", "collection": true, "links": "oneToMany", "onUnlink": "delete"}
       ]
     }
   ]

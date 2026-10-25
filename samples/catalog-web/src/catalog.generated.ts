@@ -239,7 +239,7 @@ export const catalogModel = {
       navigations: [
         { name: "category", target: "categories", collection: false, foreignKey: ["categoryId"], links: null, onUnlink: null },
         { name: "brand", target: "brands", collection: false, foreignKey: ["brandId"], links: null, onUnlink: null },
-        { name: "images", target: "productImages", collection: true, foreignKey: [], links: null, onUnlink: null },
+        { name: "images", target: "productImages", collection: true, foreignKey: [], links: "oneToMany", onUnlink: "delete" },
       ],
       pagination: { modes: ["offset", "cursor"], defaultPageSize: 24, maxPageSize: 96 },
     },

@@ -150,13 +150,15 @@ async function save(catalog: CatalogContext, form: Form, loaded: Loaded | undefi
       brandId: form.brandId,
     });
   } else {
-    product = { ...loaded.product, category: null, brand: null, images: [] };
-    catalog.products.attach(product);
-    for (const image of loaded.images) {
+    // The images go into the product's collection before it's attached, so removing one later is an unlink.
+    const images = loaded.images.map((image) => {
       const tracked = { ...image, product: null };
       catalog.productImages.attach(tracked);
       existing.set(image.id, tracked);
-    }
+      return tracked;
+    });
+    product = { ...loaded.product, category: null, brand: null, images };
+    catalog.products.attach(product);
   }
 
   product.sku = form.sku;
@@ -173,8 +175,10 @@ async function save(catalog: CatalogContext, form: Form, loaded: Loaded | undefi
   form.images.forEach((row, sortOrder) => {
     const image = row.id === undefined ? undefined : existing.get(row.id);
     if (image === undefined) {
-      // A new image points at the product; for a new product that becomes a ref in the batch.
-      rows.set(catalog.productImages.add({ url: row.url, sortOrder, product }), row.key);
+      // A new image is linked to the product's images; for a new product the link names its insert.
+      const added = catalog.productImages.add({ url: row.url, sortOrder });
+      product.images.push(added);
+      rows.set(added, row.key);
       return;
     }
 
@@ -183,9 +187,9 @@ async function save(catalog: CatalogContext, form: Form, loaded: Loaded | undefi
     rows.set(image, row.key);
     existing.delete(image.id);
   });
-  for (const removed of existing.values()) {
-    catalog.productImages.remove(removed);
-  }
+  // Unlinking an image deletes it: an image can't exist without its product.
+  const removed = new Set<ProductImage>(existing.values());
+  product.images = product.images.filter((image) => !removed.has(image));
 
   try {
     await catalog.saveChanges();

@@ -113,6 +113,31 @@ describe("TypeScript client against samples/Catalog.Api", () => {
     expect(seen.length).toBe(total);
   });
 
+  it("adds and removes images through the product's links", async () => {
+    const catalog = client({ editor: true });
+    // The seed gives SKU-0027 three images.
+    const product = await catalog.products
+      .include((p) => p.images)
+      .where((p) => p.sku.eq("SKU-0027"))
+      .first();
+    const [removed] = product.images.splice(0, 1);
+    const added = catalog.productImages.add({ url: "https://example.test/linked.png", sortOrder: 9 });
+    product.images.push(added);
+
+    expect(await catalog.saveChanges()).toBe(3);
+
+    expect(added.productId).toBe(product.id);
+    const urls = (
+      await client()
+        .productImages.where((i) => i.productId.eq(product.id))
+        .take(50)
+        .toList()
+    ).map((image) => image.url);
+    expect(urls).toContain("https://example.test/linked.png");
+    expect(urls).not.toContain(removed?.url);
+    expect(urls).toHaveLength(3);
+  });
+
   it("hides drafts from everyone but editors", async () => {
     const visitors = await client().products.count();
     const editors = await client({ editor: true }).products.count();

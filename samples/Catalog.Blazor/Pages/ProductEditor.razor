@@ -182,15 +182,18 @@ else
             }
             else
             {
+                // The images go into the product's collection before it's attached, so removing one later is an unlink.
                 product = Copy(baseline.Product);
-                catalog.Products.Attach(product);
-                saved = product;
                 foreach (var image in baseline.Images)
                 {
                     var tracked = new ProductImage { Id = image.Id, ProductId = image.ProductId, Url = image.Url, SortOrder = image.SortOrder };
                     catalog.ProductImages.Attach(tracked);
+                    product.Images.Add(tracked);
                     existing.Add(image.Id, tracked);
                 }
+
+                catalog.Products.Attach(product);
+                saved = product;
             }
 
             _form!.ApplyTo(product);
@@ -204,16 +207,18 @@ else
                 }
                 else
                 {
-                    // A new image points at the product; for a new product that becomes a ref in the batch.
-                    var added = new ProductImage { Url = row.Url, SortOrder = sortOrder, Product = product };
+                    // A new image is linked to the product's images; for a new product the link names its insert.
+                    var added = new ProductImage { Url = row.Url, SortOrder = sortOrder };
                     catalog.ProductImages.Add(added);
+                    product.Images.Add(added);
                     rows.Add(added, row);
                 }
             }
 
+            // Unlinking an image deletes it: an image can't exist without its product.
             foreach (var removed in existing.Values)
             {
-                catalog.ProductImages.Remove(removed);
+                product.Images.Remove(removed);
             }
 
             await catalog.SaveChangesAsync();
