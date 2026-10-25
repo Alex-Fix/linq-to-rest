@@ -21,6 +21,13 @@ public static class ShopData
             Product(5, "Notebook", 3m, ProductStatus.Retired, null, new DateTime(2026, 4, 1, 10, 0, 0, DateTimeKind.Utc), null, 3.9, featured: false, ["sale"], [], description: "  A5 dotted "),
             Product(6, "Puzzle", 20m, ProductStatus.Active, games, new DateTime(2026, 5, 1, 16, 45, 0, DateTimeKind.Utc), new DateOnly(2026, 4, 15), 4.1, featured: true, [], []));
         db.Products.Local.Single(product => product.Id == 1).Bin = a1;
+        var gift = new Label { Id = 1, Name = "Gift" };
+        var fresh = new Label { Id = 2, Name = "New" };
+        var eco = new Label { Id = 3, Name = "Eco" };
+        db.Labels.AddRange(gift, fresh, eco);
+        db.Products.Local.Single(product => product.Id == 1).Labels.Add(gift);
+        db.Products.Local.Single(product => product.Id == 3).Labels.AddRange(gift, fresh);
+        db.Products.Local.Single(product => product.Id == 6).Labels.Add(eco);
         db.SaveChanges();
         db.ResetSequences();
     }

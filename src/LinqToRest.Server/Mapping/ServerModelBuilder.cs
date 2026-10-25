@@ -444,9 +444,18 @@ internal static class ServerModelBuilder
         foreach (var definition in set.Definition.Navigations)
         {
             var efNavigation = set.Entity.FindNavigation(definition.Property);
-            if (efNavigation is null || efNavigation.IsCollection != definition.IsCollection)
+            var efSkip = definition.IsCollection && efNavigation is null ? set.Entity.FindSkipNavigation(definition.Property) : null;
+            if ((efNavigation is null && efSkip is null) || (efNavigation is not null && efNavigation.IsCollection != definition.IsCollection))
             {
                 throw Invalid(set.Name, entityType, $"exposes '{definition.Property.Name}' with {(definition.IsCollection ? "HasMany" : "HasOne")}, but it isn't a {(definition.IsCollection ? "collection" : "reference")} navigation in the EF Core model");
+            }
+
+            // Many-to-many only over a pure join table: a join entity with columns of its own is a set of its own.
+            if (efSkip is not null
+                && (efSkip.JoinEntityType.GetProperties().Any(property => !property.IsForeignKey())
+                    || sets.Exists(candidate => candidate.Entity == efSkip.JoinEntityType)))
+            {
+                throw Invalid(set.Name, entityType, $"exposes the many-to-many '{definition.Property.Name}', but its join entity has columns of its own or a set; expose the join entity as a set with two HasOne navigations instead");
             }
 
             var targets = sets.Where(candidate => candidate.Definition.EntityType == definition.TargetEntity).ToList();
@@ -466,7 +475,7 @@ internal static class ServerModelBuilder
 
             // Every member of the EF foreign key, in its order (which follows the target's key).
             if (foreignKey.Count > 0
-                && (!efNavigation.IsOnDependent || !efNavigation.ForeignKey.Properties.Select(property => property.PropertyInfo).SequenceEqual(definition.ForeignKey)))
+                && (efNavigation is null || !efNavigation.IsOnDependent || !efNavigation.ForeignKey.Properties.Select(property => property.PropertyInfo).SequenceEqual(definition.ForeignKey)))
             {
                 throw Invalid(set.Name, entityType, $"uses {string.Join(", ", definition.ForeignKey.Select(property => $"'{property.Name}'"))} as the foreign key of '{definition.Property.Name}', but that isn't the navigation's foreign key in the EF Core model, in order");
             }
@@ -475,7 +484,7 @@ internal static class ServerModelBuilder
             {
                 Name = definition.WireName ?? JsonNamingPolicy.CamelCase.ConvertName(definition.Property.Name),
                 Target = targets[0],
-                IsNullable = !definition.IsCollection && (!efNavigation.IsOnDependent || !efNavigation.ForeignKey.IsRequired),
+                IsNullable = !definition.IsCollection && (!efNavigation!.IsOnDependent || !efNavigation.ForeignKey.IsRequired),
                 ForeignKey = foreignKey,
             });
         }

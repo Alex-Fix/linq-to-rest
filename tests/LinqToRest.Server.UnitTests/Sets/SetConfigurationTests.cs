@@ -97,6 +97,26 @@ public sealed class SetConfigurationTests
     }
 
     [Fact]
+    public void Many_to_many_over_a_pure_join_table_is_a_collection()
+    {
+        var model = Build(o => o
+            .AddSet<Tag>(b => b.ToSet("tags").HasMany(t => t.Products))
+            .AddSet<Product>(b => b.ToSet("products"))).Model;
+
+        Assert.True(model.FindSet("tags")!.FindNavigation("products") is { Target: "products", IsCollection: true, Links: null });
+    }
+
+    [Fact]
+    public void Many_to_many_over_a_join_table_with_columns_is_rejected()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Build(o => o
+            .AddSet<Award>(b => b.ToSet("awards").HasMany(a => a.Products))
+            .AddSet<Product>(b => b.ToSet("products"))));
+
+        Assert.Contains("exposes the many-to-many 'Products', but its join entity has columns of its own", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Composite_foreign_keys_are_exported_in_key_order()
     {
         var model = Build(o => o

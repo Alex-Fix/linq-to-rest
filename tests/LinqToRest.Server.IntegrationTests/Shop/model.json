@@ -60,6 +60,18 @@
       "navigations": [{"name": "products", "target": "products", "collection": true}]
     },
     {
+      "name": "labels",
+      "type": "Label",
+      "key": ["id"],
+      "writes": ["insert"],
+      "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "id", "type": "int32", "sortable": true},
+        {"name": "name", "type": "string", "writable": true, "sortable": true, "groupable": true}
+      ],
+      "navigations": []
+    },
+    {
       "name": "orderLines",
       "type": "OrderLine",
       "key": ["id"],
@@ -111,7 +123,8 @@
       "navigations": [
         {"name": "category", "target": "categories", "nullable": true, "foreignKey": ["categoryId"]},
         {"name": "bin", "target": "bins", "nullable": true, "foreignKey": ["binZone", "binSlot"]},
-        {"name": "lines", "target": "orderLines", "collection": true}
+        {"name": "lines", "target": "orderLines", "collection": true},
+        {"name": "labels", "target": "labels", "collection": true}
       ]
     }
   ]

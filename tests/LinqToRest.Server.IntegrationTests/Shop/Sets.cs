@@ -28,6 +28,7 @@ public sealed class ProductSet : IEntitySetConfiguration<Product>
         builder.Property(p => p.BinSlot);
         builder.HasOne(p => p.Bin).WithForeignKey(p => new { p.BinZone, p.BinSlot });
         builder.HasMany(p => p.Lines);
+        builder.HasMany(p => p.Labels);
         builder.HasPagination(p => p.DefaultPageSize(10).MaxPageSize(20).MaxSkip(100));
     }
 }
@@ -41,6 +42,15 @@ public sealed class CategorySet : IEntitySetConfiguration<Category>
         builder.Value(c => c.Contact);
         builder.HasMany(c => c.Products);
         builder.HasPagination(p => p.Modes(PaginationModes.Cursor));
+    }
+}
+
+public sealed class LabelSet : IEntitySetConfiguration<Label>
+{
+    public void Configure(EntitySetBuilder<Label> builder)
+    {
+        builder.ToSet("labels").AllowWrites(WriteOperations.Insert);
+        builder.Property(l => l.Name).IsSortable().IsGroupable();
     }
 }
 

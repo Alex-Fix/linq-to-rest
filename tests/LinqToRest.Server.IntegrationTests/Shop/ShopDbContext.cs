@@ -9,6 +9,7 @@ public sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbC
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Bin> Bins => Set<Bin>();
+    public DbSet<Label> Labels => Set<Label>();
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
@@ -56,6 +57,7 @@ public sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbC
             product.ComplexProperty(p => p.Size, size => size.ComplexProperty(d => d.Weight));
             product.ComplexProperty(p => p.Origin);
             product.HasOne(p => p.Bin).WithMany().HasForeignKey(p => new { p.BinZone, p.BinSlot });
+            product.HasMany(p => p.Labels).WithMany().UsingEntity("ProductLabel");
         });
         modelBuilder.Entity<Bin>(bin =>
         {

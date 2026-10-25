@@ -49,6 +49,20 @@ public sealed class Supplier
     public Contact? Contact { get; set; }
 }
 
+/// <summary>Joined to products over a pure join table (many-to-many).</summary>
+public sealed class Tag
+{
+    public int Id { get; set; }
+    public List<Product> Products { get; set; } = [];
+}
+
+/// <summary>Joined to products over a join table with a column of its own (a rank).</summary>
+public sealed class Award
+{
+    public int Id { get; set; }
+    public List<Product> Products { get; set; } = [];
+}
+
 public sealed class Line
 {
     public int Id { get; set; }
@@ -116,6 +130,8 @@ public sealed class ShopContext(DbContextOptions<ShopContext> options) : DbConte
         modelBuilder.Entity<Category>().OwnsOne(c => c.Address, address => address.Property(a => a.City).IsRequired());
         modelBuilder.Entity<Line>().OwnsOne(l => l.Shipping, shipping => shipping.ToJson());
         modelBuilder.Entity<Shelf>().HasKey(s => new { s.Aisle, s.Number });
+        modelBuilder.Entity<Tag>().HasMany(t => t.Products).WithMany().UsingEntity("TagProduct");
+        modelBuilder.Entity<Award>().HasMany(a => a.Products).WithMany().UsingEntity("AwardProduct", join => join.Property<int>("Rank"));
         modelBuilder.Entity<Line>().HasOne(l => l.Shelf).WithMany().HasForeignKey(l => new { l.ShelfAisle, l.ShelfNumber });
     }
 }
