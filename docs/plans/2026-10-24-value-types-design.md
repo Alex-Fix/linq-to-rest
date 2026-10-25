@@ -294,6 +294,13 @@ Where the implementation differs from the sections above, this list wins.
    model's products gained an optional `size` (`DimensionsDto` with a nested `WeightDto`); inserts now send
    `"size": null`, so `batch-unit-of-work.json` changed, and `query-value-filter.json` and `batch-value.json` are new.
 
+6. **TypeScript (step 8).** The generated model embeds each value type as a `const` (`ValueTypeModel`, leaves first)
+   that members of kind `"value"` reference, so tracking and validation need no model lookups. Value proxies extend
+   `ValueProxy<V>` (members, plus `eq(null)` / `ne(null)`; not `Sortable` or `Groupable`), so a whole value in
+   `orderBy` is a compile error; at run time a whole value outside a select or null test throws before sending. A
+   value member named `eq` or `ne` is a generator error. Saves write values in model member order whatever order the
+   object was built in, so request bodies equal the .NET client's.
+
 ## Open questions
 
 - Collections of value objects, whole-value equality and partial updates: later, on demand.

@@ -1,5 +1,12 @@
 import { readProblem, RestConcurrencyError, RestHttpError, RestSaveError, RestValidationError } from "./errors.js";
-import { findSet, requireWrite, type Model, type NavigationModel, type SetModel } from "./model.js";
+import {
+  findSet,
+  requireWrite,
+  type Model,
+  type NavigationModel,
+  type SetModel,
+  type ValueTypeModel,
+} from "./model.js";
 import type { Transport } from "./transport.js";
 import { checkEntity } from "./validation.js";
 
@@ -35,13 +42,50 @@ export class Entry {
 }
 
 // A loop rather than new Map(members.map(...)): no [name, value] pair per member and DTO.
-function snapshotOf(entity: Dto, members: readonly { readonly name: string }[]): Map<string, unknown> {
+function snapshotOf(
+  entity: Dto,
+  members: readonly { readonly name: string; readonly value?: ValueTypeModel }[],
+): Map<string, unknown> {
   const snapshot = new Map<string, unknown>();
   for (const member of members) {
-    snapshot.set(member.name, copy(entity[member.name]));
+    const value = entity[member.name];
+    snapshot.set(member.name, member.value === undefined ? copy(value) : valueSnapshot(member.value, value));
   }
 
   return snapshot;
+}
+
+/** A value's members (nested values too) in model order, so a value changed in place is seen as well as a replaced one. */
+function valueSnapshot(valueType: ValueTypeModel, value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  const object = value as Dto;
+  return valueType.members.map((member) =>
+    member.value === undefined ? object[member.name] : valueSnapshot(member.value, object[member.name]),
+  );
+}
+
+function sameSnapshot(current: unknown, snapshot: unknown): boolean {
+  return Array.isArray(current) && Array.isArray(snapshot)
+    ? current.length === snapshot.length && current.every((item, index) => sameSnapshot(item, snapshot[index]))
+    : current === snapshot;
+}
+
+/** A value as batches send it: every member, in model order (both clients write the same JSON). */
+function valueBody(valueType: ValueTypeModel, value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const object = value as Dto;
+  return Object.fromEntries(
+    valueType.members.map((member) => [
+      member.name,
+      member.value === undefined ? (object[member.name] ?? null) : valueBody(member.value, object[member.name]),
+    ]),
+  );
 }
 
 function copy(value: unknown): unknown {
@@ -206,7 +250,10 @@ export class ChangeTracker {
     for (const member of entry.set.members) {
       if (
         member.writable &&
-        (entry.forced.has(member.name) || !same(entry.entity[member.name], entry.snapshot.get(member.name)))
+        (entry.forced.has(member.name) ||
+          !(member.value === undefined
+            ? same(entry.entity[member.name], entry.snapshot.get(member.name))
+            : sameSnapshot(valueSnapshot(member.value, entry.entity[member.name]), entry.snapshot.get(member.name))))
       ) {
         entry.modified.add(member.name);
       }
@@ -319,7 +366,9 @@ export async function saveChanges(
     if (problem.issues !== undefined) {
       const errors = problem.issues.flatMap((issue) => {
         const entry = issue.operation === undefined ? undefined : byId.get(issue.operation);
-        return entry === undefined ? [] : [{ entity: entry.entity, member: issue.member, code: issue.code }];
+        // Members inside values come as slash paths (address/city); errorsFor uses dots, like form libraries.
+        const member = issue.member?.replaceAll("/", ".");
+        return entry === undefined ? [] : [{ entity: entry.entity, member, code: issue.code }];
       });
       throw new RestValidationError(
         response.status,
@@ -362,11 +411,25 @@ export async function saveChanges(
   return ordered.length;
 }
 
-/** The member a pointer such as `/operations/2/values/price` names, if it names one of that operation's set. */
+/**
+ * The member a pointer such as `/operations/2/values/price` names, if it names one of that operation's set (a dotted
+ * path such as `address.city` inside a value).
+ */
 function memberOf(pointer: string | undefined, ordered: readonly Entry[]): string | undefined {
-  const match = /^\/operations\/(\d+)\/values\/([A-Za-z0-9]+)$/.exec(pointer ?? "");
+  const match = /^\/operations\/(\d+)\/values\/([A-Za-z0-9]+(?:\/[A-Za-z0-9]+)*)$/.exec(pointer ?? "");
   const entry = match === null ? undefined : ordered[Number(match[1])];
-  return entry?.set.members.some((member) => member.name === match?.[2]) === true ? match?.[2] : undefined;
+  const path = match?.[2]?.split("/") ?? [];
+  let members = entry?.set.members;
+  for (const segment of path) {
+    const member = members?.find((candidate) => candidate.name === segment);
+    if (member === undefined) {
+      return undefined;
+    }
+
+    members = member.value?.members;
+  }
+
+  return path.length === 0 ? undefined : path.join(".");
 }
 
 /** Inserts first (each after the inserts it references), then updates, then deletes. */
@@ -422,7 +485,10 @@ function operation(entry: Entry, ids: Map<Entry, string>): Operation {
     result.values = Object.fromEntries(
       written
         .filter((member) => !entry.references.has(member.name))
-        .map((member) => [member.name, entry.entity[member.name]]),
+        .map((member) => [
+          member.name,
+          member.value === undefined ? entry.entity[member.name] : valueBody(member.value, entry.entity[member.name]),
+        ]),
     );
   }
 

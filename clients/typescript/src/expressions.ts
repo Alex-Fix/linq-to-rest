@@ -276,6 +276,16 @@ export function cond(test: Operand<boolean>, whenTrue: unknown, whenFalse: unkno
   return typeof whenTrue === "boolean" || whenTrue instanceof BoolExpr ? new BoolExpr(build) : new NumberExpr(build);
 }
 
+/**
+ * A value (such as an address) as seen by a lambda: its members are expressions, and the whole value can only be
+ * selected or compared with null. Generated proxy interfaces extend it; it isn't `Sortable` or `Groupable`.
+ */
+export interface ValueProxy<V> extends Buildable {
+  readonly __valueType?: V;
+  eq(value: null): BoolExpr;
+  ne(value: null): BoolExpr;
+}
+
 /** A DTO as seen by a lambda. Generated proxy interfaces extend it. */
 export interface EntityProxy<D> extends Buildable {
   readonly __dto?: D;
@@ -594,28 +604,81 @@ function scalar(member: MemberModel, build: Build): Expr<unknown> {
       return new OrderedExpr(build);
     case "guid":
     case "binary":
+    case "value":
       return new Expr(build);
   }
 }
 
-function memberBuild(set: SetModel, member: MemberModel, path: string): Build {
+function memberBuild(owner: string, member: MemberModel, path: string): Build {
   return (t) => {
     if (t.use === "filter" && !member.filterable) {
-      throw new Error(`${set.name}.${member.name} can't be filtered (IsNotFilterable in the DTO model).`);
+      throw new Error(`${owner}.${member.name} can't be filtered (IsNotFilterable in the DTO model).`);
     }
 
     if (t.use === "group" && member.groupable !== true) {
-      throw new Error(`${set.name}.${member.name} isn't groupable: the API marks group keys with IsGroupable().`);
+      throw new Error(`${owner}.${member.name} isn't groupable: the API marks group keys with IsGroupable().`);
     }
 
     if (t.use === "aggregate" && member.aggregatable !== true) {
       throw new Error(
-        `${set.name}.${member.name} isn't aggregatable: the API marks members for sum, min, max and average with IsAggregatable().`,
+        `${owner}.${member.name} isn't aggregatable: the API marks members for sum, min, max and average with IsAggregatable().`,
       );
     }
 
     return { member: path };
   };
+}
+
+/**
+ * The proxy of a value-type member at `path`. Its members are paths below it (not filterable when the value isn't);
+ * the whole value builds only where a value may stand: a select, or `eq(null)` / `ne(null)`.
+ */
+function valueProxy(owner: string, member: MemberModel, path: string): ValueProxy<unknown> {
+  const valueType = member.value;
+  if (valueType === undefined) {
+    throw new Error(`${owner}.${member.name} has no value type in the model.`);
+  }
+
+  const proxy = {} as Record<PropertyKey, unknown>;
+  const build: Build = (t) => {
+    if (t.use === "filter" && !member.filterable) {
+      throw new Error(`${owner}.${member.name} can't be filtered (IsNotFilterable in the DTO model).`);
+    }
+
+    if (t.use !== "filter" && t.use !== "select") {
+      throw new Error(
+        `${owner}.${member.name} is a value such as an address: filter, sort and group by its members, such as p => p.${member.name}.${valueType.members[0]?.name ?? "x"}.`,
+      );
+    }
+
+    return { member: path };
+  };
+  const nullTest =
+    (op: "eq" | "ne") =>
+    // Typed `null` on ValueProxy; checked here for callers outside TypeScript.
+    (value: unknown): BoolExpr => {
+      if (value !== null) {
+        throw new Error(`${owner}.${member.name} is a value such as an address: it can only be compared with null.`);
+      }
+
+      return new BoolExpr((t) => ({ [op]: [build(t), literal(null)] }));
+    };
+  Object.defineProperty(proxy, BUILD, { value: build });
+  Object.defineProperty(proxy, "eq", { value: nullTest("eq") });
+  Object.defineProperty(proxy, "ne", { value: nullTest("ne") });
+  for (const inner of valueType.members) {
+    const nested = { ...inner, filterable: inner.filterable && member.filterable };
+    const innerPath = `${path}/${inner.name}`;
+    Object.defineProperty(proxy, inner.name, {
+      enumerable: true,
+      get: () =>
+        inner.kind === "value"
+          ? valueProxy(valueType.name, nested, innerPath)
+          : scalar(nested, memberBuild(valueType.name, nested, innerPath)),
+    });
+  }
+
+  return proxy as unknown as ValueProxy<unknown>;
 }
 
 /** Creates the proxy a lambda receives for one DTO, rooted at `base` (a navigation path or lambda variable). */
@@ -629,11 +692,13 @@ export function entityProxy(model: Model, set: SetModel, base: string | null): E
     Object.defineProperty(proxy, member.name, {
       enumerable: true,
       get: () =>
-        member.collection
-          ? new PrimitiveCollectionExpr(path(member.name), (variable) =>
-              scalar({ ...member, collection: false }, () => ({ var: variable })),
-            )
-          : scalar(member, memberBuild(set, member, path(member.name))),
+        member.kind === "value"
+          ? valueProxy(set.name, member, path(member.name))
+          : member.collection
+            ? new PrimitiveCollectionExpr(path(member.name), (variable) =>
+                scalar({ ...member, collection: false }, () => ({ var: variable })),
+              )
+            : scalar(member, memberBuild(set.name, member, path(member.name))),
     });
   }
 

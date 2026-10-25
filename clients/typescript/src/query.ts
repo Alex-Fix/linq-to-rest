@@ -19,7 +19,7 @@ import {
   selectNode,
   type Sortable,
 } from "./expressions.js";
-import { findSet, type Model, type SetModel } from "./model.js";
+import { findSet, type Model, type NavigationModel, type SetModel } from "./model.js";
 import type { QueryNode } from "./nodes.js";
 import type { ChangeTracker } from "./tracking.js";
 import { Translator } from "./translator.js";
@@ -557,19 +557,35 @@ export class Query<T, P, D> {
     return path;
   }
 
+  /** The member a path ends with, through reference navigations and values (`category/contact/email`). */
   private resolve(path: string): SetModel["members"][number] | undefined {
-    const segments = path.split("/");
-    let set = this.set;
-    for (const segment of segments.slice(0, -1)) {
-      const navigation = set.navigations.find((candidate) => candidate.name === segment && !candidate.collection);
-      if (navigation === undefined) {
+    let set: SetModel | undefined = this.set;
+    let member: SetModel["members"][number] | undefined;
+    for (const segment of path.split("/")) {
+      if (member !== undefined) {
+        member = member.value?.members.find((candidate) => candidate.name === segment);
+        if (member === undefined) {
+          return undefined;
+        }
+
+        continue;
+      }
+
+      if (set === undefined) {
         return undefined;
       }
 
-      set = findSet(this.host.model, navigation.target);
+      member = set.members.find((candidate) => candidate.name === segment);
+      const navigation: NavigationModel | undefined = set.navigations.find(
+        (candidate) => candidate.name === segment && !candidate.collection,
+      );
+      set = navigation === undefined ? undefined : findSet(this.host.model, navigation.target);
+      if (member === undefined && navigation === undefined) {
+        return undefined;
+      }
     }
 
-    return set.members.find((member) => member.name === segments.at(-1));
+    return member;
   }
 
   private request(page: Page, count: boolean, select: QueryNode | undefined): Record<string, unknown> {

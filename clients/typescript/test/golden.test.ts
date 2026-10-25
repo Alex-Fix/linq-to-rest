@@ -109,6 +109,33 @@ const cases: Record<string, (context: ReturnType<typeof shop>) => Promise<unknow
       .take(10)
       .toList(),
   "query-aggregate": ({ shop }) => shop.products.where((p) => p.categoryId.eq(2)).sum((p) => p.price.mul(2)),
+  "query-value-filter": ({ shop }) =>
+    shop.products
+      .where((p) => p.size.ne(null).and(p.size.weight.amount.gt(1)).and(p.size.weight.unit.eq("kg")))
+      .orderBy((p) => p.size.width)
+      .select((p) => ({ id: p.id, size: p.size, unit: p.size.weight.unit }))
+      .take(10)
+      .toList(),
+  "batch-value": async ({ shop, http }) => {
+    http.respond({ items: [chess] });
+    const [first] = await shop.products.take(1).toList();
+    if (first === undefined) {
+      throw new Error("The stub returns a product.");
+    }
+
+    first.size = { width: 30, weight: { amount: 1.5, unit: "kg" } };
+    shop.products.add({
+      name: "Cube",
+      description: null,
+      price: 9.5,
+      status: "Active",
+      releasedOn: null,
+      categoryId: null,
+      size: { width: 5.7, weight: { amount: 0.1, unit: "kg" } },
+    });
+    http.respond({ results: [] });
+    return shop.saveChanges();
+  },
   "batch-unit-of-work": async ({ shop, http }) => {
     http.respond({ items: [chess, dune] });
     const [first, second] = await shop.products.take(2).toList();
@@ -124,6 +151,7 @@ const cases: Record<string, (context: ReturnType<typeof shop>) => Promise<unknow
       price: 9.5,
       status: "Active",
       releasedOn: null,
+      size: null,
       category: puzzles,
     });
     shop.products.remove(second);

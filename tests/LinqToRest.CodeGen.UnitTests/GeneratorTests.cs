@@ -105,6 +105,28 @@ public sealed class GeneratorTests
     }
 
     [Fact]
+    public void TypeScript_writes_value_types_as_readonly_rows_proxies_and_models_nested_first()
+    {
+        var text = new TypeScriptEmitter(RestModel.Parse(ValuesJson), "Places", "linqtorest", "test.json").Emit();
+
+        Assert.Contains("export interface Address {\n  readonly street: string;\n  readonly geo: Geo | null;\n}\n", text, StringComparison.Ordinal);
+        Assert.Contains("  home: Address;\n  work: Address | null;\n", text, StringComparison.Ordinal);
+        Assert.Contains("export interface AddressProxy extends ValueProxy<Address> {\n  readonly street: StringExpr;\n  readonly geo: GeoProxy;\n}\n", text, StringComparison.Ordinal);
+        Assert.Contains("{ name: \"home\", kind: \"value\", nullable: false, collection: false, filterable: true, sortable: false, writable: true, value: addressValue }", text, StringComparison.Ordinal);
+        Assert.True(text.IndexOf("const geoValue =", StringComparison.Ordinal) < text.IndexOf("const addressValue =", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TypeScript_rejects_a_value_member_that_hides_a_null_test()
+    {
+        var model = RestModel.Parse(ValuesJson.Replace("\"name\": \"lat\"", "\"name\": \"eq\"", StringComparison.Ordinal));
+
+        var error = Assert.Throws<GeneratorException>(() => new TypeScriptEmitter(model, "Places", "linqtorest", "test.json").Emit());
+
+        Assert.Contains("'Geo.eq' would hide the null test eq(null)", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CSharp_rejects_a_value_member_named_like_its_record()
     {
         var model = RestModel.Parse(ValuesJson.Replace("\"name\": \"street\"", "\"name\": \"address\"", StringComparison.Ordinal));

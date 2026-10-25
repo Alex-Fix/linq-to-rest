@@ -2,6 +2,7 @@ export type {
   Model,
   SetModel,
   MemberModel,
+  ValueTypeModel,
   MemberRules,
   NavigationModel,
   MemberKind,
@@ -28,6 +29,7 @@ export {
   type Groupable,
   type Operand,
   type Sortable,
+  type ValueProxy,
 } from "./expressions.js";
 export { Query, type CursorPage, type Fields, type GroupedQuery, type GroupKey, type Projected } from "./query.js";
 export { createContext, type Context, type EntityEntry, type New, type RestSet, type WritableKeys } from "./context.js";

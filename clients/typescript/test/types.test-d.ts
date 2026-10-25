@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { cond, type RestSet } from "../src/index.js";
-import type { CategoryDto, CategoryProxy, ProductDto } from "./shop.generated.js";
+import type { CategoryDto, CategoryProxy, DimensionsDto, ProductDto } from "./shop.generated.js";
 import { shop } from "./stub.js";
 
 const { shop: s } = shop();
@@ -74,6 +74,13 @@ describe("types", () => {
     product.categoryName = "x";
     // @ts-expect-error — null only for nullable members.
     s.products.where((p) => p.name.eq(null));
+    // @ts-expect-error — a whole value isn't sortable; sort by one of its members.
+    s.products.orderBy((p) => p.size);
+    // @ts-expect-error — a whole value is only compared with null.
+    s.products.where((p) => p.size.eq({ width: 1, weight: { amount: 1, unit: "kg" } }));
+    const dimensions = {} as DimensionsDto;
+    // @ts-expect-error — value members are readonly: replace the value ({ ...size, width }).
+    dimensions.width = 2;
   });
 
   it("offers only the writes a set allows", () => {
