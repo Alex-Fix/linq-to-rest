@@ -340,9 +340,9 @@ else
 
         public RestPropertyRules? Description { get; } = catalog.Products.Rules(p => p.Description);
 
-        public RestPropertyRules? Price { get; } = catalog.Products.Rules(p => p.Price);
+        private RestPropertyRules? Price { get; } = catalog.Products.Rules(p => p.Price);
 
-        public RestPropertyRules? Stock { get; } = catalog.Products.Rules(p => p.Stock);
+        private RestPropertyRules? Stock { get; } = catalog.Products.Rules(p => p.Stock);
 
         public RestPropertyRules? Url { get; } = catalog.ProductImages.Rules(i => i.Url);
 
