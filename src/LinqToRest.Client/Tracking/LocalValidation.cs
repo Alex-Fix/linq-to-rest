@@ -1,3 +1,5 @@
+using LinqToRest.Protocol;
+
 namespace LinqToRest.Client.Tracking;
 
 /// <summary>
@@ -19,9 +21,58 @@ internal static class LocalValidation
         return errors;
     }
 
-    public static IEnumerable<RestValidationError> Check(object entity, IEnumerable<ClientProperty> properties) =>
-        properties
-            .Select(property => (property, Code: property.Rules?.Check(property.Get(entity))))
-            .Where(result => result.Code is not null)
-            .Select(result => new RestValidationError(entity, result.property.Name, result.Code!));
+    /// <summary>
+    /// Checks members in model order. A value (an address) is required when it's non-nullable; its members' rules are
+    /// reported by dotted CLR path, such as <c>Address.City</c>.
+    /// </summary>
+    public static IEnumerable<RestValidationError> Check(object entity, IEnumerable<ClientProperty> properties)
+    {
+        foreach (var property in properties)
+        {
+            var value = property.Get(entity);
+            if (property.ValueType is not { } valueType)
+            {
+                if (property.Rules?.Check(value) is { } code)
+                {
+                    yield return new RestValidationError(entity, property.Name, code);
+                }
+            }
+            else if (value is null)
+            {
+                if (!property.IsNullable)
+                {
+                    yield return new RestValidationError(entity, property.Name, ErrorCodes.Required);
+                }
+            }
+            else
+            {
+                foreach (var error in CheckValue(entity, property.Name, valueType, value))
+                {
+                    yield return error;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<RestValidationError> CheckValue(object entity, string path, ClientValueType valueType, object value)
+    {
+        foreach (var member in valueType.Properties)
+        {
+            var memberValue = member.Get(value);
+            if (member.ValueType is { } nested)
+            {
+                if (memberValue is not null)
+                {
+                    foreach (var error in CheckValue(entity, $"{path}.{member.Name}", nested, memberValue))
+                    {
+                        yield return error;
+                    }
+                }
+            }
+            else if (member.Rules?.Check(memberValue) is { } code)
+            {
+                yield return new RestValidationError(entity, $"{path}.{member.Name}", code);
+            }
+        }
+    }
 }

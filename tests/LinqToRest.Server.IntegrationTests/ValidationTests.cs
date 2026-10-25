@@ -21,7 +21,7 @@ public abstract class ValidationTests(ShopDatabase database) : IAsyncLifetime
             ? await ShopServer.StartAsync(database, options => options.Limits(limits => limits.MaxValidationErrors = 4), sets: options => options
                 .AddSet<Product>(ConfigureProducts)
                 .AddSet(new CategorySet())
-                .AddSet(new OrderLineSet()))
+                .AddSet(new OrderLineSet()).AddShopValueTypes())
             : null;
 
     public async ValueTask DisposeAsync()

@@ -32,7 +32,11 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             category.HasMany(c => c.Products).WithOne(p => p.Category).OnDelete(DeleteBehavior.Restrict);
             category.HasIndex(c => c.Name);
         });
-        modelBuilder.Entity<Brand>().HasIndex(b => b.Name);
+        modelBuilder.Entity<Brand>(brand =>
+        {
+            brand.HasIndex(b => b.Name);
+            brand.OwnsOne(b => b.Contact);
+        });
         modelBuilder.Entity<Product>(product =>
         {
             product.Property(p => p.Version).IsConcurrencyToken();
@@ -41,6 +45,7 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             product.HasIndex(p => p.Price);
             product.HasIndex(p => p.Stock);
             product.HasIndex(p => p.CreatedAt);
+            product.ComplexProperty(p => p.Dimensions);
             product.HasMany(p => p.Tags).WithOne().HasForeignKey(t => t.ProductId);
             product.HasMany(p => p.Images).WithOne(i => i.Product).HasForeignKey(i => i.ProductId);
         });

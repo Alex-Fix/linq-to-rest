@@ -28,6 +28,7 @@ public sealed class BrandSet : IEntitySetConfiguration<Brand>
         // Brands can be added and renamed, never deleted.
         builder.ToSet("brands").AllowWrites(WriteOperations.Insert | WriteOperations.Update);
         builder.Property(b => b.Name).IsSortable().IsRequired().HasMaxLength(50).IsGroupable();
+        builder.Value(b => b.Contact);
         builder.Computed("productCount", b => b.Products.Count(p => p.Status == ProductStatus.Active));
         builder.HasMany(b => b.Products);
     }
@@ -45,6 +46,9 @@ public sealed class ProductSet : IEntitySetConfiguration<Product>
         builder.Property(p => p.Price).IsSortable().HasRange(0.01m, 100_000m).IsAggregatable();
         builder.Property(p => p.Status).IsGroupable();
         builder.Property(p => p.Stock).IsSortable().HasMin(0).IsAggregatable();
+
+        // A value type: written whole, filtered and sorted through its members (dimensions/weightKg).
+        builder.Value(p => p.Dimensions);
         // Facets group by these; the summary aggregates price and stock.
         builder.Property(p => p.CategoryId).IsGroupable();
         builder.Property(p => p.BrandId).IsGroupable();
@@ -75,5 +79,26 @@ public sealed class ProductImageSet : IEntitySetConfiguration<ProductImage>
 
         // The navigation is what lets a batch point a new image at a product inserted in the same batch (refs).
         builder.HasOne(i => i.Product).WithForeignKey(i => i.ProductId);
+    }
+}
+
+public sealed class DimensionsType : IValueTypeConfiguration<Dimensions>
+{
+    public void Configure(ValueTypeBuilder<Dimensions> builder)
+    {
+        builder.Property(d => d.WidthCm).HasRange(0.1d, 500d);
+        builder.Property(d => d.HeightCm).HasRange(0.1d, 500d);
+        builder.Property(d => d.DepthCm).HasRange(0.1d, 500d);
+        builder.Property(d => d.WeightKg).IsSortable().IsAggregatable().HasRange(0.01d, 1000d);
+    }
+}
+
+public sealed class BrandContactType : IValueTypeConfiguration<BrandContact>
+{
+    public void Configure(ValueTypeBuilder<BrandContact> builder)
+    {
+        builder.HasTypeName("Contact");
+        builder.Property(c => c.Website).IsRequired().HasMaxLength(200).HasPattern("^https://");
+        builder.Property(c => c.Country).IsRequired().HasPattern("^[A-Z]{2}$").IsGroupable();
     }
 }

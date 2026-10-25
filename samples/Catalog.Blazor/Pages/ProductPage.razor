@@ -58,7 +58,13 @@ else
                 <SpaceItem>
                     <Descriptions Bordered Column="1" Size="DescriptionsSize.Small">
                         <DescriptionsItem Title="SKU">@_product.Sku</DescriptionsItem>
-                        <DescriptionsItem Title="Brand">@_product.Brand?.Name</DescriptionsItem>
+                        <DescriptionsItem Title="Brand">
+                            @_product.Brand?.Name
+                            @if (_product.Brand?.Contact is { } contact)
+                            {
+                                <text> · </text><a href="@contact.Website" target="_blank" rel="noreferrer">@contact.Website</a><text> (@contact.Country)</text>
+                            }
+                        </DescriptionsItem>
                         <DescriptionsItem Title="Category">@_product.Category?.Name</DescriptionsItem>
                         <DescriptionsItem Title="Availability">
                             @if (_product.InStock)
@@ -70,6 +76,10 @@ else
                                 <Tag>Out of stock</Tag>
                             }
                         </DescriptionsItem>
+                        @if (_product.Dimensions is { } size)
+                        {
+                            <DescriptionsItem Title="Package">@size.WidthCm × @size.HeightCm × @size.DepthCm cm, @size.WeightKg kg</DescriptionsItem>
+                        }
                         @if (_product.Tags.Count > 0)
                         {
                             <DescriptionsItem Title="Tags">

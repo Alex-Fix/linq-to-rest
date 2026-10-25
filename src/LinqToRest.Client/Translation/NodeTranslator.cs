@@ -117,9 +117,9 @@ internal sealed class NodeTranslator(ClientSet root)
     {
         _parameters[lambda.Parameters[0]] = (null, root);
         var body = StripConvert(lambda.Body);
-        if (!TryPath(body, out var path, out var target) || (navigation ? target.Navigation is null : target.Property is not { IsCollection: false }))
+        if (!TryPath(body, out var path, out var target) || (navigation ? target.Navigation is null : target.Property is not { IsCollection: false, ValueType: null }))
         {
-            throw NotSupported(lambda.Body, navigation ? "Include needs a navigation, such as d => d.Category." : "Sort by a scalar entity member, such as d => d.Price.");
+            throw NotSupported(lambda.Body, navigation ? "Include needs a navigation, such as d => d.Category." : "Sort by a scalar entity member, such as d => d.Price, or a member of a value, such as d => d.Address.City.");
         }
 
         return path;
@@ -192,7 +192,12 @@ internal sealed class NodeTranslator(ClientSet root)
 
         if (TryPath(member, out var path, out var target))
         {
-            return target.Property is { IsCollection: false } ? path : throw NotSupported(member, "Use a scalar member here; collections need Any, Count, Sum…");
+            return target.Property switch
+            {
+                { ValueType: not null } => throw WholeValue(member),
+                { IsCollection: false } => path,
+                _ => throw NotSupported(member, "Use a scalar member here; collections need Any, Count, Sum…"),
+            };
         }
 
         var inner = member.Expression!;
@@ -247,6 +252,12 @@ internal sealed class NodeTranslator(ClientSet root)
             {
                 var (left, right) = compare.Object is null ? (compare.Arguments[0], compare.Arguments[1]) : (compare.Object, compare.Arguments[0]);
                 return new CallNode(comparison, [Translate(left), Translate(right)]);
+            }
+
+            // A whole value (an address) is only compared with null; its members carry the rest.
+            if (comparison is QueryOperators.Eq or QueryOperators.Ne && (WholeValueNullTest(binary.Left, binary.Right) ?? WholeValueNullTest(binary.Right, binary.Left)) is { } value)
+            {
+                return new CallNode(comparison, [value, LiteralNode.From(null)]);
             }
 
             var (a, b) = FixEnums(binary.Left, binary.Right);
@@ -477,8 +488,25 @@ internal sealed class NodeTranslator(ClientSet root)
         }
 
         var type = info.Type;
+        ClientValueType? valueType = null;
         foreach (var member in members)
         {
+            // Inside a value (an address): its members, then perhaps a nested value.
+            if (valueType is not null)
+            {
+                var valueMember = Array.Find(valueType.Properties, candidate => candidate.Name == member.Name)
+                    ?? throw NotSupported(expression, $"{valueType.ClrType.Name}.{member.Name} isn't a member of the model.");
+                if (_aggregating && valueMember is { ValueType: null, IsAggregatable: false })
+                {
+                    throw NotSupported(expression, $"{valueMember.Name} isn't aggregatable: the API marks members for Sum, Min, Max and Average with IsAggregatable().");
+                }
+
+                segments.Add(valueMember.WireName);
+                target = (valueMember, null);
+                valueType = valueMember.ValueType;
+                continue;
+            }
+
             if (type is null)
             {
                 return false;
@@ -486,13 +514,14 @@ internal sealed class NodeTranslator(ClientSet root)
 
             if (type.Properties.FirstOrDefault(candidate => candidate.Name == member.Name) is { } property)
             {
-                if (_aggregating && !property.IsAggregatable)
+                if (_aggregating && property is { ValueType: null, IsAggregatable: false })
                 {
                     throw NotSupported(expression, $"{property.Name} isn't aggregatable: the API marks members for Sum, Min, Max and Average with IsAggregatable().");
                 }
 
                 segments.Add(property.WireName);
                 target = (property, null);
+                valueType = property.ValueType;
                 type = null;
             }
             else if (type.Navigations.FirstOrDefault(candidate => candidate.Name == member.Name) is { } navigation)
@@ -515,6 +544,14 @@ internal sealed class NodeTranslator(ClientSet root)
         path = new MemberNode(string.Join('/', segments));
         return true;
     }
+
+    private MemberNode? WholeValueNullTest(Expression value, Expression other) =>
+        TryPath(StripConvert(value), out var path, out var target) && target.Property is { ValueType: not null }
+            ? StripConvert(other) is ConstantExpression { Value: null } ? path : throw WholeValue(value)
+            : null;
+
+    private static NotSupportedException WholeValue(Expression expression) =>
+        NotSupported(expression, "A value such as an address can only be selected or compared with null; filter, sort and group by its members, such as d => d.Address.City.");
 
     private string NextVariable()
     {

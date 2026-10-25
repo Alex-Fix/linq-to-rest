@@ -23,9 +23,21 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
             body.Append(CultureInfo.InvariantCulture, $"export type {enumModel.Name} = {string.Join(" | ", enumModel.Members.Select(Quote))};\n\n");
         }
 
+        var valueTypes = model.ValueTypes.OrderBy(valueType => valueType.Name, StringComparer.Ordinal).ToList();
+        CheckProxyNames(sets, valueTypes);
+        foreach (var valueType in valueTypes)
+        {
+            WriteRow(body, valueType.Name, valueType.Properties, readOnly: true);
+        }
+
         foreach (var set in sets)
         {
             WriteRow(body, set);
+        }
+
+        foreach (var valueType in valueTypes)
+        {
+            WriteValueProxy(body, valueType);
         }
 
         foreach (var set in sets)
@@ -52,24 +64,51 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
 
     private void WriteRow(StringBuilder body, RestSetModel set)
     {
-        body.Append(CultureInfo.InvariantCulture, $"export interface {set.TypeName} {{\n");
-        foreach (var property in set.Properties)
+        WriteRow(body, set.TypeName, set.Properties, readOnly: false, open: true);
+        foreach (var navigation in set.Navigations)
+        {
+            var target = Target(navigation).TypeName;
+            body.Append(CultureInfo.InvariantCulture, $"  {navigation.Name}: {(navigation.IsCollection ? $"{target}[]" : $"{target} | null")};\n");
+        }
+
+        body.Append("}\n\n");
+    }
+
+    // A value type's members are always readonly: values are replaced whole ({ ...p.address, city: "…" }).
+    private void WriteRow(StringBuilder body, string typeName, IReadOnlyList<RestPropertyModel> properties, bool readOnly, bool open = false)
+    {
+        body.Append(CultureInfo.InvariantCulture, $"export interface {typeName} {{\n");
+        foreach (var property in properties)
         {
             if (property.Type is "decimal" or "int64")
             {
                 var note = property.Type == "decimal" ? "decimal: JavaScript numbers keep about 15 significant digits." : "long: JavaScript numbers are exact only up to 2^53.";
                 body.Append(CultureInfo.InvariantCulture, $"  /** {note} */\n");
-                _warnings.Add($"{set.TypeName}.{property.Name} is {(property.Type == "decimal" ? "decimal" : "long")}: {note[(note.IndexOf(':', StringComparison.Ordinal) + 2)..]}");
+                _warnings.Add($"{typeName}.{property.Name} is {(property.Type == "decimal" ? "decimal" : "long")}: {note[(note.IndexOf(':', StringComparison.Ordinal) + 2)..]}");
             }
 
             var value = ValueType(property.Type) + (property.IsCollection ? "[]" : property.IsNullable ? " | null" : "");
-            body.Append(CultureInfo.InvariantCulture, $"  {(property.IsWritable ? "" : "readonly ")}{property.Name}: {value};\n");
+            body.Append(CultureInfo.InvariantCulture, $"  {(property.IsWritable && !readOnly ? "" : "readonly ")}{property.Name}: {value};\n");
         }
 
-        foreach (var navigation in set.Navigations)
+        if (!open)
         {
-            var target = Target(navigation).TypeName;
-            body.Append(CultureInfo.InvariantCulture, $"  {navigation.Name}: {(navigation.IsCollection ? $"{target}[]" : $"{target} | null")};\n");
+            body.Append("}\n\n");
+        }
+    }
+
+    private void WriteValueProxy(StringBuilder body, RestValueTypeModel valueType)
+    {
+        _imports.Add("ValueProxy");
+        body.Append(CultureInfo.InvariantCulture, $"export interface {ProxyName(valueType.Name)} extends ValueProxy<{valueType.Name}> {{\n");
+        foreach (var property in valueType.Properties)
+        {
+            if (property.Name is "eq" or "ne")
+            {
+                throw new GeneratorException($"The member '{valueType.Name}.{property.Name}' would hide the null test {property.Name}(null) of its value proxy. Rename it.");
+            }
+
+            body.Append(CultureInfo.InvariantCulture, $"  readonly {property.Name}: {ProxyMember(property)};\n");
         }
 
         body.Append("}\n\n");
@@ -80,36 +119,7 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
         body.Append(CultureInfo.InvariantCulture, $"export interface {ProxyName(set)} extends EntityProxy<{set.TypeName}> {{\n");
         foreach (var property in set.Properties)
         {
-            string expression;
-            if (property.IsCollection)
-            {
-                _imports.Add("PrimitiveCollectionExpr");
-                expression = $"PrimitiveCollectionExpr<{ExpressionType(property.Type, nullable: false)}>";
-            }
-            else
-            {
-                expression = ExpressionType(property.Type, property.IsNullable);
-            }
-
-            if (property.IsSortable)
-            {
-                _imports.Add("Sortable");
-                expression += " & Sortable";
-            }
-
-            if (property.IsGroupable)
-            {
-                _imports.Add("Groupable");
-                expression += " & Groupable";
-            }
-
-            if (property.IsAggregatable)
-            {
-                _imports.Add("Aggregatable");
-                expression += " & Aggregatable";
-            }
-
-            body.Append(CultureInfo.InvariantCulture, $"  readonly {property.Name}: {expression};\n");
+            body.Append(CultureInfo.InvariantCulture, $"  readonly {property.Name}: {ProxyMember(property)};\n");
         }
 
         foreach (var navigation in set.Navigations)
@@ -126,8 +136,94 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
         body.Append("}\n\n");
     }
 
+    private string ProxyMember(RestPropertyModel property)
+    {
+        if (model.FindValueType(property.Type) is { } valueType)
+        {
+            return ProxyName(valueType.Name);
+        }
+
+        string expression;
+        if (property.IsCollection)
+        {
+            _imports.Add("PrimitiveCollectionExpr");
+            expression = $"PrimitiveCollectionExpr<{ExpressionType(property.Type, nullable: false)}>";
+        }
+        else
+        {
+            expression = ExpressionType(property.Type, property.IsNullable);
+        }
+
+        if (property.IsSortable)
+        {
+            _imports.Add("Sortable");
+            expression += " & Sortable";
+        }
+
+        if (property.IsGroupable)
+        {
+            _imports.Add("Groupable");
+            expression += " & Groupable";
+        }
+
+        if (property.IsAggregatable)
+        {
+            _imports.Add("Aggregatable");
+            expression += " & Aggregatable";
+        }
+
+        return expression;
+    }
+
+    private static void CheckProxyNames(List<RestSetModel> sets, List<RestValueTypeModel> valueTypes)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var typeName in sets.Select(set => set.TypeName).Concat(valueTypes.Select(valueType => valueType.Name)))
+        {
+            if (!names.Add(ProxyName(typeName)))
+            {
+                throw new GeneratorException($"Two types would get the proxy name {ProxyName(typeName)}. Rename one of them.");
+            }
+        }
+    }
+
+    // Value type models are constants the members using them refer to, nested types first.
+    private void WriteValueTypeModels(StringBuilder body)
+    {
+        if (model.ValueTypes.Count == 0)
+        {
+            return;
+        }
+
+        _imports.Add("ValueTypeModel");
+        foreach (var valueType in model.ValueTypes.OrderBy(Height).ThenBy(valueType => valueType.Name, StringComparer.Ordinal))
+        {
+            body.Append(CultureInfo.InvariantCulture, $"const {ValueModelName(valueType.Name)} = {{\n  name: {Quote(valueType.Name)},\n  members: [\n");
+            foreach (var property in valueType.Properties)
+            {
+                body.Append(CultureInfo.InvariantCulture, $"    {MemberModel(property)},\n");
+            }
+
+            body.Append("  ],\n} as const satisfies ValueTypeModel;\n\n");
+        }
+    }
+
+    private int Height(RestValueTypeModel valueType) =>
+        1 + valueType.Properties.Select(property => model.FindValueType(property.Type) is { } nested ? Height(nested) : 0).DefaultIfEmpty(0).Max();
+
+    private string MemberModel(RestPropertyModel property)
+    {
+        var valueType = model.FindValueType(property.Type);
+        var kind = valueType is null ? Kind(property.Type) : "value";
+        var value = valueType is null ? "" : $", value: {ValueModelName(valueType.Name)}";
+        return $"{{ name: {Quote(property.Name)}, kind: {Quote(kind)}, nullable: {Bool(property.IsNullable)}, collection: {Bool(property.IsCollection)}, filterable: {Bool(property.IsFilterable)}, sortable: {Bool(property.IsSortable)}, writable: {Bool(property.IsWritable)}{(property.IsGroupable ? ", groupable: true" : "")}{(property.IsAggregatable ? ", aggregatable: true" : "")}{Rules(property.Rules)}{value} }}";
+    }
+
+    private static string ValueModelName(string typeName) => JsonNamingPolicy.CamelCase.ConvertName(typeName) + "Value";
+
     private void WriteModel(StringBuilder body)
     {
+        WriteValueTypeModels(body);
         body.Append(CultureInfo.InvariantCulture, $"export const {ModelName} = {{\n  sets: {{\n");
         foreach (var set in model.Sets.OrderBy(set => set.Name, StringComparer.Ordinal))
         {
@@ -139,8 +235,7 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
             body.Append("      members: [\n");
             foreach (var property in set.Properties)
             {
-                body.Append(CultureInfo.InvariantCulture,
-                    $"        {{ name: {Quote(property.Name)}, kind: {Quote(Kind(property.Type))}, nullable: {Bool(property.IsNullable)}, collection: {Bool(property.IsCollection)}, filterable: {Bool(property.IsFilterable)}, sortable: {Bool(property.IsSortable)}, writable: {Bool(property.IsWritable)}{(property.IsGroupable ? ", groupable: true" : "")}{(property.IsAggregatable ? ", aggregatable: true" : "")}{Rules(property.Rules)} }},\n");
+                body.Append(CultureInfo.InvariantCulture, $"        {MemberModel(property)},\n");
             }
 
             body.Append("      ],\n");
@@ -217,16 +312,20 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
         }
     }
 
-    private static string ProxyName(RestSetModel set) =>
-        (set.TypeName.EndsWith("Dto", StringComparison.Ordinal) ? set.TypeName[..^3] : set.TypeName) + "Proxy";
+    private static string ProxyName(RestSetModel set) => ProxyName(set.TypeName);
 
-    private static string ValueType(string type) => Kind(type) switch
-    {
-        "boolean" => "boolean",
-        "number" => "number",
-        "enum" => type,
-        _ => "string",
-    };
+    private static string ProxyName(string typeName) =>
+        (typeName.EndsWith("Dto", StringComparison.Ordinal) ? typeName[..^3] : typeName) + "Proxy";
+
+    private string ValueType(string type) => model.FindValueType(type) is not null
+        ? type
+        : Kind(type) switch
+        {
+            "boolean" => "boolean",
+            "number" => "number",
+            "enum" => type,
+            _ => "string",
+        };
 
     private string ExpressionType(string type, bool nullable)
     {

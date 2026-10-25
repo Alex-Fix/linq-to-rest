@@ -52,7 +52,21 @@ public sealed class PostgresDatabase(PostgresContainer container) : ShopDatabase
     {
         SkipIfUnavailable();
         var connectionString = await container.CreateDatabaseAsync();
-        return new DatabaseLease(options => options.UseNpgsql(connectionString), null);
+        return new DatabaseLease(options => options.UseNpgsql(connectionString), new PoolRelease(connectionString));
+    }
+
+    /// <summary>
+    /// Closes the database's pooled connections once its server is done. Every test database has its own pool, so
+    /// keeping them open would exhaust PostgreSQL's connection limit over a test run.
+    /// </summary>
+    private sealed class PoolRelease(string connectionString) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync()
+        {
+            using var connection = new NpgsqlConnection(connectionString);
+            NpgsqlConnection.ClearPool(connection);
+            return ValueTask.CompletedTask;
+        }
     }
 }
 

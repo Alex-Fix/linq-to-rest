@@ -19,9 +19,22 @@ import {
   type RestSet,
   type Sortable,
   type StringExpr,
+  type ValueProxy,
+  type ValueTypeModel,
 } from "../src/index.js";
 
 export type ProductStatus = "Draft" | "Active";
+
+export interface DimensionsDto {
+  readonly width: number;
+  readonly weight: WeightDto;
+}
+
+export interface WeightDto {
+  /** decimal: JavaScript numbers keep about 15 significant digits. */
+  readonly amount: number;
+  readonly unit: string;
+}
 
 export interface CategoryDto {
   readonly id: number;
@@ -47,10 +60,21 @@ export interface ProductDto {
   readonly createdAt: string;
   releasedOn: string | null;
   categoryId: number | null;
+  size: DimensionsDto | null;
   readonly tags: string[];
   readonly categoryName: string | null;
   category: CategoryDto | null;
   lines: OrderLineDto[];
+}
+
+export interface DimensionsProxy extends ValueProxy<DimensionsDto> {
+  readonly width: NumberExpr & Sortable;
+  readonly weight: WeightProxy;
+}
+
+export interface WeightProxy extends ValueProxy<WeightDto> {
+  readonly amount: NumberExpr & Aggregatable;
+  readonly unit: StringExpr;
 }
 
 export interface CategoryProxy extends EntityProxy<CategoryDto> {
@@ -75,11 +99,28 @@ export interface ProductProxy extends EntityProxy<ProductDto> {
   readonly createdAt: DateTimeExpr;
   readonly releasedOn: DateOnlyExpr<string | null>;
   readonly categoryId: NumberExpr<number | null> & Groupable;
+  readonly size: DimensionsProxy;
   readonly tags: PrimitiveCollectionExpr<StringExpr>;
   readonly categoryName: StringExpr<string | null>;
   readonly category: CategoryProxy;
   readonly lines: CollectionExpr<OrderLineProxy>;
 }
+
+const weightDtoValue = {
+  name: "WeightDto",
+  members: [
+    { name: "amount", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false, aggregatable: true },
+    { name: "unit", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: false, rules: { maxLength: 5 } },
+  ],
+} as const satisfies ValueTypeModel;
+
+const dimensionsDtoValue = {
+  name: "DimensionsDto",
+  members: [
+    { name: "width", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false, rules: { min: 0 } },
+    { name: "weight", kind: "value", nullable: false, collection: false, filterable: true, sortable: false, writable: false, value: weightDtoValue },
+  ],
+} as const satisfies ValueTypeModel;
 
 export const shopModel = {
   sets: {
@@ -124,6 +165,7 @@ export const shopModel = {
         { name: "createdAt", kind: "datetime", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
         { name: "releasedOn", kind: "dateonly", nullable: true, collection: false, filterable: true, sortable: false, writable: true },
         { name: "categoryId", kind: "number", nullable: true, collection: false, filterable: true, sortable: false, writable: true, groupable: true },
+        { name: "size", kind: "value", nullable: true, collection: false, filterable: true, sortable: false, writable: true, value: dimensionsDtoValue },
         { name: "tags", kind: "string", nullable: false, collection: true, filterable: true, sortable: false, writable: false },
         { name: "categoryName", kind: "string", nullable: true, collection: false, filterable: true, sortable: false, writable: false },
       ],

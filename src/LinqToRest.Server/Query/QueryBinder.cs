@@ -54,6 +54,18 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
         for (; index < segments.Count; index++)
         {
             var last = index == segments.Count - 1;
+            if (current is ValueObjectBound valueObject)
+            {
+                var member = valueObject.ValueType.FindProperty(segments[index]) ?? throw UnknownMember(node);
+                if (member.ValueType is not null)
+                {
+                    current = NestedValue(valueObject, member);
+                    continue;
+                }
+
+                return last ? ValueMember(valueObject, member, use, node) : throw UnknownMember(node);
+            }
+
             if (current is not EntityBound entity)
             {
                 throw UnknownMember(node);
@@ -62,6 +74,12 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
             var set = entity.Mapping;
             if (set.FindProperty(segments[index]) is { } property)
             {
+                if (property.ValueType is not null)
+                {
+                    current = Value(entity, property);
+                    continue;
+                }
+
                 if (!last)
                 {
                     throw UnknownMember(node);
@@ -100,7 +118,75 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
             current = Reference(entity, navigation);
         }
 
+        if (current is ValueObjectBound whole)
+        {
+            CheckWholeValueUse(whole, use, node);
+        }
+
         return current;
+    }
+
+    /// <summary>A set's value-type member, read from its row.</summary>
+    public static ValueObjectBound Value(EntityBound entity, SetProperty property) =>
+        new(ExpressionHelpers.Inline(property.Binding, entity.Expression), property.ValueType!, entity, property.IsNullable, property.IsFilterable);
+
+    public static ValueObjectBound NestedValue(ValueObjectBound value, SetProperty member) =>
+        new(ExpressionHelpers.Inline(member.Binding, value.Expression), member.ValueType!, value.Owner, value.IsNullable || member.IsNullable, value.IsFilterable && member.IsFilterable);
+
+    /// <summary>
+    /// A scalar member of a value. It's a column of the owner's row, so it's null when the value (or the owner) is
+    /// missing, and is lifted to nullable like members read through optional navigations.
+    /// </summary>
+    public static ValueBound ValueMember(ValueObjectBound value, SetProperty member, MemberUse use, QueryNode? node)
+    {
+        if (node is not null)
+        {
+            if (use == MemberUse.Filter && !value.IsFilterable)
+            {
+                throw RequestException.Invalid(ErrorCodes.NotFilterable, node.Location);
+            }
+
+            CheckUse(member, use, node);
+        }
+
+        var expression = ExpressionHelpers.Inline(member.Binding, value.Expression);
+        if (!value.NeedsLifting)
+        {
+            return new ValueBound(expression, member.IsNullable);
+        }
+
+        expression = ExpressionHelpers.MakeNullable(expression);
+        if (value.Owner.Guard is { } guard)
+        {
+            expression = Expression.Condition(guard, expression, Expression.Constant(null, expression.Type));
+        }
+
+        return new ValueBound(expression, isNullable: true);
+    }
+
+    /// <summary>Whether a value is there: not null, and its owner present (through optional or filtered navigations).</summary>
+    public static Expression ValuePresence(ValueObjectBound value)
+    {
+        var present = NotNull(value.Expression);
+        return value.Owner.Guard is { } guard ? Expression.AndAlso(guard, present) : present;
+    }
+
+    // A whole value is only selected or compared with null; sorting, grouping and aggregating need one of its members.
+    private static void CheckWholeValueUse(ValueObjectBound value, MemberUse use, QueryNode node)
+    {
+        var code = use switch
+        {
+            MemberUse.Filter when !value.IsFilterable => ErrorCodes.NotFilterable,
+            MemberUse.Sort => ErrorCodes.NotSortable,
+            MemberUse.Group => ErrorCodes.NotGroupable,
+            MemberUse.Aggregate => ErrorCodes.NotAggregatable,
+            _ => null,
+        };
+
+        if (code is not null)
+        {
+            throw RequestException.Invalid(code, node.Location);
+        }
     }
 
     public Expression Value(QueryNode node, Scope scope, Type? expected, MemberUse use) => node switch
@@ -381,6 +467,11 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
 
     private Expression Compare(CallNode node, Scope scope, MemberUse use)
     {
+        if (node.Op is QueryOperators.Eq or QueryOperators.Ne && WholeValueNullTest(node, scope, use) is { } test)
+        {
+            return test;
+        }
+
         var (left, right) = Operands(node.Arguments[0], node.Arguments[1], scope, use);
         (left, right) = Unify(left, right, node, arithmetic: false);
         (left, right) = (EnumToUnderlying(left), EnumToUnderlying(right));
@@ -395,6 +486,27 @@ internal sealed partial class QueryBinder(ServerModel server, RequestPolicies po
         };
 
         return Comparison(kind, left, right) ?? throw TypeMismatch(node);
+    }
+
+    /// <summary>
+    /// <c>{"eq": [value, null]}</c> (either order) on a whole value of a value type: the only comparison a whole value
+    /// takes, and only when it's nullable. Returns <see langword="null"/> when the member isn't a whole value.
+    /// </summary>
+    private Expression? WholeValueNullTest(CallNode node, Scope scope, MemberUse use)
+    {
+        var (member, other) = node.Arguments[0] is MemberNode first ? (first, node.Arguments[1]) : (node.Arguments[1] as MemberNode, node.Arguments[0]);
+        if (member is null || Member(member, scope, use) is not ValueObjectBound value)
+        {
+            return null;
+        }
+
+        if (other is not LiteralNode { Value.ValueKind: JsonValueKind.Null } || !value.IsNullable)
+        {
+            throw TypeMismatch(node);
+        }
+
+        var present = ValuePresence(value);
+        return node.Op == QueryOperators.Ne ? present : Expression.Not(present);
     }
 
     /// <summary>Builds a comparison EF Core translates, or <see langword="null"/> when the type can't be compared that way.</summary>

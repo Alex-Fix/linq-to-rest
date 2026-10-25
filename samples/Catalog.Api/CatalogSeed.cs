@@ -6,6 +6,7 @@ namespace Catalog.Api;
 public static class CatalogSeed
 {
     private static readonly string[] TagValues = ["bestseller", "classic", "eco", "family", "gift", "new", "sale", "travel"];
+    private static readonly string[] Countries = ["DE", "US", "JP", "UA"];
     private static readonly string[] BrandNames = ["Acme", "Northwind", "Contoso", "Fabrikam", "Tailspin", "Litware", "Adatum", "Proseware"];
 
     public static async Task SeedAsync(CatalogDbContext db, CancellationToken cancellationToken = default)
@@ -46,7 +47,16 @@ public static class CatalogSeed
         Node("Laptops", computers, leaf: true);
         Node("Accessories", computers, leaf: true);
 
-        Brand[] brands = [.. BrandNames.Select(name => new Brand { Name = name })];
+        // Every other brand publishes a contact; most products have package dimensions (derived from the index, so the
+        // random sequence of the other values stays the same).
+        Brand[] brands =
+        [
+            .. BrandNames.Select((name, index) => new Brand
+            {
+                Name = name,
+                Contact = index % 2 == 0 ? new BrandContact { Website = $"https://{name.ToLowerInvariant()}.example", Country = Countries[index % Countries.Length] } : null,
+            }),
+        ];
         db.Brands.AddRange(brands);
 
         var random = new Random(20261020);
@@ -65,6 +75,7 @@ public static class CatalogSeed
                 CostPrice = Math.Round(price * 0.6m, 2),
                 Status = (index % 20) switch { 0 => ProductStatus.Discontinued, 1 or 2 => ProductStatus.Draft, _ => ProductStatus.Active },
                 Stock = index % 7 == 0 ? 0 : random.Next(1, 60),
+                Dimensions = index % 5 == 0 ? null : new Dimensions(10 + (index % 30), 5 + (index % 20), 2 + (index % 10), Math.Round(0.1 + (index % 25 * 0.2), 1)),
                 CreatedAt = created.AddHours(index * 9),
                 Version = Guid.NewGuid(),
                 Category = category,

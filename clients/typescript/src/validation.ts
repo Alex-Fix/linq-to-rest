@@ -1,6 +1,9 @@
-import type { MemberKind, MemberModel, MemberRules, SetModel } from "./model.js";
+import type { MemberKind, MemberModel, MemberRules, SetModel, ValueTypeModel } from "./model.js";
 
-/** One broken rule: the entity, the member's name (undefined for the whole row) and the code. */
+/**
+ * One broken rule: the entity, the member's name (a dotted path such as `address.city` inside a value; undefined for
+ * the whole row) and the code.
+ */
 export interface RestValidationIssue {
   readonly entity: object;
   readonly member: string | undefined;
@@ -63,17 +66,55 @@ export function checkEntity(
 ): RestValidationIssue[] {
   const issues: RestValidationIssue[] = [];
   for (const member of set.members) {
-    if (member.rules === undefined || !member.writable || (members !== undefined && !members(member))) {
+    if (!member.writable || (members !== undefined && !members(member))) {
       continue;
     }
 
-    const code = checkRules(member.rules, member.kind, (entity as Record<string, unknown>)[member.name]);
+    const value = (entity as Record<string, unknown>)[member.name];
+    if (member.value !== undefined) {
+      // A value is required unless nullable; its members' rules apply whenever it's written.
+      if (value === null || value === undefined) {
+        if (!member.nullable) {
+          issues.push({ entity, member: member.name, code: "required" });
+        }
+      } else {
+        checkValue(entity, member.name, member.value, value as Record<string, unknown>, issues);
+      }
+
+      continue;
+    }
+
+    const code = member.rules === undefined ? undefined : checkRules(member.rules, member.kind, value);
     if (code !== undefined) {
       issues.push({ entity, member: member.name, code });
     }
   }
 
   return issues;
+}
+
+function checkValue(
+  entity: object,
+  path: string,
+  valueType: ValueTypeModel,
+  value: Record<string, unknown>,
+  issues: RestValidationIssue[],
+): void {
+  for (const member of valueType.members) {
+    const memberValue = value[member.name];
+    if (member.value !== undefined) {
+      if (memberValue !== null && memberValue !== undefined) {
+        checkValue(entity, `${path}.${member.name}`, member.value, memberValue as Record<string, unknown>, issues);
+      }
+
+      continue;
+    }
+
+    const code = member.rules === undefined ? undefined : checkRules(member.rules, member.kind, memberValue);
+    if (code !== undefined) {
+      issues.push({ entity, member: `${path}.${member.name}`, code });
+    }
+  }
 }
 
 // Bounds are wire values of the member's kind: numbers, or date and time strings.

@@ -22,6 +22,26 @@ internal static class MemberAccess
         return [GetProperty(lambda, argumentName)];
     }
 
+    /// <summary>Returns the properties of <c>e =&gt; e.A.B.C</c>, outermost first.</summary>
+    public static IReadOnlyList<PropertyInfo> GetPropertyPath(LambdaExpression lambda, string argumentName)
+    {
+        var path = new List<PropertyInfo>();
+        var body = StripConvert(lambda.Body);
+        while (body is MemberExpression { Member: PropertyInfo property, Expression: { } owner })
+        {
+            path.Add(property);
+            if (owner == lambda.Parameters[0])
+            {
+                path.Reverse();
+                return path;
+            }
+
+            body = StripConvert(owner);
+        }
+
+        throw new ArgumentException("The expression must be a property access, such as 'e => e.Id' or 'e => e.Address.City'.", argumentName);
+    }
+
     /// <summary>Returns whether <paramref name="body"/> is <c>parameter.Property</c> (ignoring conversions).</summary>
     public static bool TryGetProperty(Expression body, ParameterExpression parameter, out PropertyInfo property)
     {

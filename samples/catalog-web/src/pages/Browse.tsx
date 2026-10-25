@@ -32,6 +32,7 @@ interface Filters {
   readonly brandIds: readonly number[];
   readonly minPrice: number | undefined;
   readonly maxPrice: number | undefined;
+  readonly maxWeightKg: number | undefined;
   readonly inStockOnly: boolean;
   readonly sort: Sort;
 }
@@ -42,6 +43,7 @@ const initialFilters: Filters = {
   brandIds: [],
   minPrice: undefined,
   maxPrice: undefined,
+  maxWeightKg: undefined,
   inStockOnly: false,
   sort: "name",
 };
@@ -80,6 +82,12 @@ function filteredProducts(
 
   if (maxPrice !== undefined) {
     query = query.where((p) => p.price.le(maxPrice));
+  }
+
+  // A member of a value: products without package dimensions don't match.
+  const { maxWeightKg } = filters;
+  if (maxWeightKg !== undefined) {
+    query = query.where((p) => p.dimensions.ne(null).and(p.dimensions.weightKg.le(maxWeightKg)));
   }
 
   if (filters.inStockOnly) {
@@ -298,6 +306,16 @@ export function Browse() {
                 }}
               />
             </Space.Compact>
+            <InputNumber
+              min={0}
+              step={0.5}
+              placeholder="Max weight (kg)"
+              style={{ width: 150 }}
+              value={filters.maxWeightKg ?? null}
+              onChange={(value) => {
+                update({ maxWeightKg: value ?? undefined });
+              }}
+            />
             <Space>
               <Switch
                 checked={filters.inStockOnly}

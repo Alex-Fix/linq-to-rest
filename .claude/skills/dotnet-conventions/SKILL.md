@@ -24,8 +24,10 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
 - `Abstractions`: `RestModel` (the CLR-free model document: parse, write, limits), AST node types, wire contracts
   (query, response, batch, cursor), error codes. No HTTP, no EF, no LINQ translation, no CLR binding.
 - `Client`: `ClientModel` (binds a `RestModel` to generated classes), LINQ → AST, HTTP transport (QUERY, `$batch`),
-  materialization, change tracking. Never references Server.
-- `Server`: entity set configuration (`IEntitySetConfiguration<T>`), model production and export, type checking,
+  materialization, change tracking. Generated code binds sets with `SetBinding<T>` and value types with
+  `ValueBinding<T>` (a factory of member values, so records stay immutable and AOT-safe). Never references Server.
+- `Server`: entity set and value type configuration (`IEntitySetConfiguration<T>`, `IValueTypeConfiguration<T>`),
+  model production and export, type checking,
   AST → `Expression`, batch executor, policies, endpoints. Never references Client.
 - `CodeGen` (`linqtorest-gen`, a dotnet tool): reads a model document, writes C# or TypeScript clients. References
   Abstractions only.

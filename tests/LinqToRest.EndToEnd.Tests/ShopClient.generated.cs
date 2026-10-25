@@ -19,10 +19,36 @@ public enum ProductStatus
     Retired,
 }
 
+public sealed partial record Contact
+{
+    public required string Email { get; init; }
+    public string? Phone { get; init; }
+}
+
+public sealed partial record Dimensions
+{
+    public required double Width { get; init; }
+    public required double Height { get; init; }
+    public required Weight Weight { get; init; }
+}
+
+public sealed partial record Place
+{
+    public required string Country { get; init; }
+    public string? City { get; init; }
+}
+
+public sealed partial record Weight
+{
+    public required double Amount { get; init; }
+    public required string Unit { get; init; }
+}
+
 public sealed partial class Category
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public Contact? Contact { get; set; }
     public List<Product> Products { get; set; } = [];
 }
 
@@ -33,6 +59,7 @@ public sealed partial class OrderLine
     public string Sku { get; set; } = "";
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
+    public Place? Shipping { get; set; }
 }
 
 public sealed partial class Product
@@ -48,6 +75,8 @@ public sealed partial class Product
     public double Rating { get; set; }
     public bool IsFeatured { get; set; }
     public int? CategoryId { get; set; }
+    public Dimensions Size { get; set; } = null!;
+    public Place? Origin { get; set; }
     public List<string> Tags { get; set; } = [];
     public string? CategoryName { get; set; }
     public Category? Category { get; set; }
@@ -58,17 +87,19 @@ public sealed partial class ShopClient(RestDataContextOptions<ShopClient> option
 {
     /// <summary>Gets the model document bound to the generated classes.</summary>
     public static ClientModel Model { get; } = ClientModel.Bind(
-        RestModel.Parse("""{"v":1,"enums":{"ProductStatus":["Draft","Active","Retired"]},"sets":[{"name":"categories","type":"Category","key":["id"],"writes":["insert","update"],"pagination":{"modes":["cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"sortable":true,"groupable":true}],"navigations":[{"name":"products","target":"products","collection":true}]},{"name":"orderLines","type":"OrderLine","key":["id"],"writes":[],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"productId","type":"int32"},{"name":"sku","type":"string"},{"name":"quantity","type":"int32"},{"name":"unitPrice","type":"decimal"}],"navigations":[]},{"name":"products","type":"Product","key":["id"],"concurrencyToken":"version","writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":10,"maxPageSize":20,"maxSkip":100},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"rules":{"maxLength":100}},{"name":"description","type":"string","nullable":true,"writable":true},{"name":"price","type":"decimal","writable":true,"sortable":true,"aggregatable":true,"rules":{"min":0}},{"name":"status","type":"ProductStatus","writable":true,"sortable":true,"groupable":true},{"name":"version","type":"guid"},{"name":"createdAt","type":"dateTime","writable":true,"sortable":true},{"name":"releasedOn","type":"dateOnly","nullable":true,"writable":true,"sortable":true},{"name":"rating","type":"float64","writable":true,"filterable":false,"aggregatable":true},{"name":"isFeatured","type":"bool","writable":true},{"name":"categoryId","type":"int32","nullable":true,"writable":true,"groupable":true},{"name":"tags","type":"string","collection":true},{"name":"categoryName","type":"string","nullable":true}],"navigations":[{"name":"category","target":"categories","nullable":true,"foreignKey":["categoryId"]},{"name":"lines","target":"orderLines","collection":true}]}]}"""),
+        RestModel.Parse("""{"v":1,"enums":{"ProductStatus":["Draft","Active","Retired"]},"valueTypes":[{"name":"Contact","properties":[{"name":"email","type":"string","rules":{"required":true,"maxLength":100}},{"name":"phone","type":"string","nullable":true,"filterable":false}]},{"name":"Dimensions","properties":[{"name":"width","type":"float64","sortable":true,"rules":{"min":0}},{"name":"height","type":"float64","rules":{"min":0}},{"name":"weight","type":"Weight"}]},{"name":"Place","properties":[{"name":"country","type":"string","sortable":true,"groupable":true,"rules":{"pattern":"^[A-Z]{2}$"}},{"name":"city","type":"string","nullable":true}]},{"name":"Weight","properties":[{"name":"amount","type":"float64","sortable":true,"aggregatable":true,"rules":{"min":0}},{"name":"unit","type":"string","groupable":true,"rules":{"maxLength":5}}]}],"sets":[{"name":"categories","type":"Category","key":["id"],"writes":["insert","update"],"pagination":{"modes":["cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"sortable":true,"groupable":true},{"name":"contact","type":"Contact","nullable":true,"writable":true}],"navigations":[{"name":"products","target":"products","collection":true}]},{"name":"orderLines","type":"OrderLine","key":["id"],"writes":[],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"productId","type":"int32"},{"name":"sku","type":"string"},{"name":"quantity","type":"int32"},{"name":"unitPrice","type":"decimal"},{"name":"shipping","type":"Place","nullable":true,"filterable":false}],"navigations":[]},{"name":"products","type":"Product","key":["id"],"concurrencyToken":"version","writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":10,"maxPageSize":20,"maxSkip":100},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"rules":{"maxLength":100}},{"name":"description","type":"string","nullable":true,"writable":true},{"name":"price","type":"decimal","writable":true,"sortable":true,"aggregatable":true,"rules":{"min":0}},{"name":"status","type":"ProductStatus","writable":true,"sortable":true,"groupable":true},{"name":"version","type":"guid"},{"name":"createdAt","type":"dateTime","writable":true,"sortable":true},{"name":"releasedOn","type":"dateOnly","nullable":true,"writable":true,"sortable":true},{"name":"rating","type":"float64","writable":true,"filterable":false,"aggregatable":true},{"name":"isFeatured","type":"bool","writable":true},{"name":"categoryId","type":"int32","nullable":true,"writable":true,"groupable":true},{"name":"size","type":"Dimensions","writable":true},{"name":"origin","type":"Place","nullable":true,"writable":true},{"name":"tags","type":"string","collection":true},{"name":"categoryName","type":"string","nullable":true}],"navigations":[{"name":"category","target":"categories","nullable":true,"foreignKey":["categoryId"]},{"name":"lines","target":"orderLines","collection":true}]}]}"""),
         new SetBinding<Category>("categories", static () => new Category())
             .Property("id", nameof(Category.Id), static e => e.Id, static (e, v) => e.Id = v)
             .Property("name", nameof(Category.Name), static e => e.Name, static (e, v) => e.Name = v)
+            .Value("contact", nameof(Category.Contact), ValueBindings.Contact, static e => e.Contact, static (e, v) => e.Contact = v)
             .Collection("products", nameof(Category.Products), static e => e.Products, static (e, v) => e.Products = v),
         new SetBinding<OrderLine>("orderLines", static () => new OrderLine())
             .Property("id", nameof(OrderLine.Id), static e => e.Id, static (e, v) => e.Id = v)
             .Property("productId", nameof(OrderLine.ProductId), static e => e.ProductId, static (e, v) => e.ProductId = v)
             .Property("sku", nameof(OrderLine.Sku), static e => e.Sku, static (e, v) => e.Sku = v)
             .Property("quantity", nameof(OrderLine.Quantity), static e => e.Quantity, static (e, v) => e.Quantity = v)
-            .Property("unitPrice", nameof(OrderLine.UnitPrice), static e => e.UnitPrice, static (e, v) => e.UnitPrice = v),
+            .Property("unitPrice", nameof(OrderLine.UnitPrice), static e => e.UnitPrice, static (e, v) => e.UnitPrice = v)
+            .Value("shipping", nameof(OrderLine.Shipping), ValueBindings.Place, static e => e.Shipping, static (e, v) => e.Shipping = v),
         new SetBinding<Product>("products", static () => new Product())
             .Property("id", nameof(Product.Id), static e => e.Id, static (e, v) => e.Id = v)
             .Property("name", nameof(Product.Name), static e => e.Name, static (e, v) => e.Name = v)
@@ -81,10 +112,32 @@ public sealed partial class ShopClient(RestDataContextOptions<ShopClient> option
             .Property("rating", nameof(Product.Rating), static e => e.Rating, static (e, v) => e.Rating = v)
             .Property("isFeatured", nameof(Product.IsFeatured), static e => e.IsFeatured, static (e, v) => e.IsFeatured = v)
             .Property("categoryId", nameof(Product.CategoryId), static e => e.CategoryId, static (e, v) => e.CategoryId = v)
+            .Value("size", nameof(Product.Size), ValueBindings.Dimensions, static e => e.Size, static (e, v) => e.Size = v!)
+            .Value("origin", nameof(Product.Origin), ValueBindings.Place, static e => e.Origin, static (e, v) => e.Origin = v)
             .Values("tags", nameof(Product.Tags), static e => e.Tags, static (e, v) => e.Tags = v)
             .Property("categoryName", nameof(Product.CategoryName), static e => e.CategoryName, static (e, v) => e.CategoryName = v)
             .Reference("category", nameof(Product.Category), static e => e.Category, static (e, v) => e.Category = v)
             .Collection("lines", nameof(Product.Lines), static e => e.Lines, static (e, v) => e.Lines = v));
+
+    private static class ValueBindings
+    {
+        public static readonly ValueBinding<Contact> Contact = new ValueBinding<Contact>("Contact", static v => new Contact { Email = (string)v[0]!, Phone = (string?)v[1] })
+            .Property("email", "Email", static e => e.Email)
+            .Property("phone", "Phone", static e => e.Phone);
+
+        public static readonly ValueBinding<Place> Place = new ValueBinding<Place>("Place", static v => new Place { Country = (string)v[0]!, City = (string?)v[1] })
+            .Property("country", "Country", static e => e.Country)
+            .Property("city", "City", static e => e.City);
+
+        public static readonly ValueBinding<Weight> Weight = new ValueBinding<Weight>("Weight", static v => new Weight { Amount = (double)v[0]!, Unit = (string)v[1]! })
+            .Property("amount", "Amount", static e => e.Amount)
+            .Property("unit", "Unit", static e => e.Unit);
+
+        public static readonly ValueBinding<Dimensions> Dimensions = new ValueBinding<Dimensions>("Dimensions", static v => new Dimensions { Width = (double)v[0]!, Height = (double)v[1]!, Weight = (Weight)v[2]! })
+            .Property("width", "Width", static e => e.Width)
+            .Property("height", "Height", static e => e.Height)
+            .Value("weight", "Weight", Weight, static e => e.Weight);
+    }
 
     public RestSet<Category> Categories => Set<Category>();
 

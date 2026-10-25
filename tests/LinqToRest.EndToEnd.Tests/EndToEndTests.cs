@@ -134,7 +134,7 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     {
         var shop = Host.Client();
         var category = new Category { Name = "Puzzles" };
-        var cube = new Product { Name = "Cube", Price = 9.5m, Status = ProductStatus.Active, Category = category };
+        var cube = new Product { Name = "Cube", Price = 9.5m, Status = ProductStatus.Active, Category = category, Size = Box() };
         shop.Categories.Add(category);
         shop.Products.Add(cube);
 
@@ -190,7 +190,7 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     public async Task Rows_of_another_tenant_are_not_found()
     {
         var otherTenant = Host.Client(tenant: 2);
-        otherTenant.Products.Update(new Product { Id = 1, Name = "Mine now", Version = new Guid("00000001-0000-0000-0000-000000000000") });
+        otherTenant.Products.Update(new Product { Id = 1, Name = "Mine now", Version = new Guid("00000001-0000-0000-0000-000000000000"), Size = Box() });
 
         var error = await Assert.ThrowsAsync<RestSaveException>(() => otherTenant.SaveChangesAsync(Token));
 
@@ -202,7 +202,7 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     public async Task Denied_writes_are_forbidden()
     {
         var readOnly = Host.Client(readOnly: true);
-        readOnly.Products.Add(new Product { Name = "Nope" });
+        readOnly.Products.Add(new Product { Name = "Nope", Size = Box() });
 
         var error = await Assert.ThrowsAsync<RestSaveException>(() => readOnly.SaveChangesAsync(Token));
 
@@ -260,7 +260,7 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     public async Task Rules_fail_before_sending_and_on_the_server_with_the_same_errors()
     {
         var client = Host.Client();
-        var local = new Product { Name = new string('x', 101), Price = -1 };
+        var local = new Product { Name = new string('x', 101), Price = -1, Size = Box() };
         client.Products.Add(local);
 
         var before = await Assert.ThrowsAsync<RestValidationException>(() => client.SaveChangesAsync(Token));
@@ -271,7 +271,7 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
                 .Replace(",\"rules\":{\"maxLength\":100}", "", StringComparison.Ordinal)
                 .Replace(",\"rules\":{\"min\":0}", "", StringComparison.Ordinal)),
             new Dictionary<string, Type> { ["categories"] = typeof(Category), ["orderLines"] = typeof(OrderLine), ["products"] = typeof(Product) }));
-        var remote = new Product { Name = new string('x', 101), Price = -1 };
+        var remote = new Product { Name = new string('x', 101), Price = -1, Size = Box() };
         outdated.Products.Add(remote);
         var after = await Assert.ThrowsAsync<RestValidationException>(() => outdated.SaveChangesAsync(Token));
 
@@ -283,6 +283,33 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
         Assert.All(after.Errors, error => Assert.Same(remote, error.Entity));
         Assert.Equal(EntityState.Added, outdated.Entry(remote).State);
     }
+
+    [Fact]
+    public async Task Value_objects_are_queried_and_saved_through_the_generated_client()
+    {
+        var shop = Host.Client();
+
+        var heavy = await shop.Products
+            .Where(p => p.Size.Weight.Amount > 1 && p.Origin != null)
+            .OrderBy(p => p.Size.Width)
+            .Select(p => new { p.Name, p.Origin, p.Size.Weight })
+            .Take(10)
+            .ToListAsync(Token);
+        var chess = await shop.Products.SingleAsync(p => p.Id == 1, Token);
+        chess.Origin = chess.Origin! with { City = "Jaipur" };
+        chess.Size = chess.Size with { Weight = chess.Size.Weight with { Amount = 1.4 } };
+        var games = await shop.Categories.SingleAsync(c => c.Id == 2, Token);
+        games.Contact = null;
+        await shop.SaveChangesAsync(Token);
+
+        Assert.Equal([("Chess", "IN", 1.2), ("Go", "CN", 2.5)], heavy.Select(p => (p.Name, p.Origin!.Country, p.Weight.Amount)));
+        var fresh = Host.Client();
+        var saved = await fresh.Products.SingleAsync(p => p.Id == 1, Token);
+        Assert.Equal((new Place { Country = "IN", City = "Jaipur" }, 1.4, 40.0), (saved.Origin, saved.Size.Weight.Amount, saved.Size.Width));
+        Assert.Null((await fresh.Categories.SingleAsync(c => c.Id == 2, Token)).Contact);
+    }
+
+    private static Dimensions Box() => new() { Width = 1, Height = 1, Weight = new Weight { Amount = 1, Unit = "kg" } };
 }
 
 public sealed class SqliteEndToEndTests() : EndToEndTests(new SqliteDatabase());

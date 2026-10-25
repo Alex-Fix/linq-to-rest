@@ -35,7 +35,7 @@ internal static class Problems
                 .Select(issue =>
                 {
                     var entry = operations[issue.Operation!];
-                    return new RestValidationError(entry.Entity, issue.Member is null ? null : entry.Type.FindProperty(issue.Member)?.Name ?? issue.Member, issue.Code);
+                    return new RestValidationError(entry.Entity, issue.Member is null ? null : entry.Type.MemberPath(issue.Member) ?? issue.Member, issue.Code);
                 })
                 .ToList();
             return new RestValidationException(status, problem.Location, errors, isLocal: false, isTruncated: issues.Any(issue => issue.Code == ErrorCodes.TooManyErrors));
@@ -47,12 +47,15 @@ internal static class Problems
             : new RestSaveException(status, problem.Code, problem.Location, entities, Member(problem.Location, ordered));
     }
 
-    /// <summary>The CLR member a pointer such as <c>/operations/2/values/price</c> names, if it names one.</summary>
+    /// <summary>
+    /// The CLR member a pointer such as <c>/operations/2/values/price</c> (or <c>…/values/address/city</c>) names, if it
+    /// names one.
+    /// </summary>
     private static string? Member(string? location, IReadOnlyList<Entry> ordered)
     {
         var parts = location?.Split('/');
-        return parts is ["", "operations", var index, "values", var member] && int.TryParse(index, NumberStyles.None, CultureInfo.InvariantCulture, out var position) && position < ordered.Count
-            ? ordered[position].Type.FindProperty(member)?.Name
+        return parts is ["", "operations", var index, "values", _, ..] && int.TryParse(index, NumberStyles.None, CultureInfo.InvariantCulture, out var position) && position < ordered.Count
+            ? ordered[position].Type.MemberPath(string.Join('/', parts[4..]))
             : null;
     }
 

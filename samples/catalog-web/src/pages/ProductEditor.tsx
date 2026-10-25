@@ -12,12 +12,20 @@ import {
   Select,
   Skeleton,
   Space,
+  Switch,
   Typography,
 } from "antd";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { RestConcurrencyError, RestValidationError } from "linqtorest";
-import type { CatalogContext, Product, ProductImage, ProductStatus } from "../catalog.generated";
+import { type MemberModel, type MemberRules, RestConcurrencyError, RestValidationError } from "linqtorest";
+import {
+  catalogModel,
+  type CatalogContext,
+  type Dimensions,
+  type Product,
+  type ProductImage,
+  type ProductStatus,
+} from "../catalog.generated";
 import { describe, fieldMessage } from "../errors";
 import { useSession } from "../session";
 
@@ -25,6 +33,35 @@ interface ImageRow {
   readonly key: string;
   readonly id: number | undefined;
   readonly url: string;
+}
+
+/** The package size: a value written whole, so the editor offers all four fields or none. */
+type PackageForm = { readonly [K in keyof Dimensions]: number | null };
+
+const packageFields = [
+  ["widthCm", "Width (cm)"],
+  ["heightCm", "Height (cm)"],
+  ["depthCm", "Depth (cm)"],
+  ["weightKg", "Weight (kg)"],
+] as const;
+
+// The package members' rules come from the value type in the model (products' `rules` lists their own members).
+const packageRules: Partial<Record<string, MemberRules>> = Object.fromEntries(
+  (
+    (catalogModel.sets.products.members as readonly MemberModel[]).find((member) => member.name === "dimensions")?.value
+      ?.members ?? []
+  ).map((member) => [member.name, member.rules]),
+);
+
+function dimensionsOf(form: PackageForm | null): Dimensions | null {
+  return form === null
+    ? null
+    : {
+        widthCm: form.widthCm ?? 0,
+        heightCm: form.heightCm ?? 0,
+        depthCm: form.depthCm ?? 0,
+        weightKg: form.weightKg ?? 0,
+      };
 }
 
 interface Form {
@@ -36,6 +73,7 @@ interface Form {
   readonly stock: string;
   readonly categoryId: number;
   readonly brandId: number;
+  readonly package: PackageForm | null;
   readonly images: readonly ImageRow[];
 }
 
@@ -71,6 +109,7 @@ function formOf(loaded: Loaded): Form {
     stock: String(product.stock),
     categoryId: product.categoryId,
     brandId: product.brandId,
+    package: product.dimensions,
     images: loaded.images.map((image) => ({ key: String(image.id), id: image.id, url: image.url })),
   };
 }
@@ -128,6 +167,7 @@ async function save(catalog: CatalogContext, form: Form, loaded: Loaded | undefi
   product.stock = Number(form.stock);
   product.categoryId = form.categoryId;
   product.brandId = form.brandId;
+  product.dimensions = dimensionsOf(form.package);
 
   const rows = new Map<object, string>();
   form.images.forEach((row, sortOrder) => {
@@ -174,6 +214,7 @@ function candidate(form: Form) {
     description: form.description === "" ? null : form.description,
     price: Number(form.price),
     stock: Number(form.stock),
+    dimensions: dimensionsOf(form.package),
   };
 }
 
@@ -216,7 +257,17 @@ export function ProductEditor() {
         const first = { categoryId: categories[0]?.id ?? 0, brandId: brands[0]?.id ?? 0 };
         setForm(
           current === undefined
-            ? { sku: "", name: "", description: "", price: "0", status: "Draft", stock: "0", ...first, images: [] }
+            ? {
+                sku: "",
+                name: "",
+                description: "",
+                price: "0",
+                status: "Draft",
+                stock: "0",
+                ...first,
+                package: null,
+                images: [],
+              }
             : formOf(current),
         );
       })
@@ -261,6 +312,20 @@ export function ProductEditor() {
       : {
           validateStatus: "error" as const,
           help: [...new Set(codes)].map((code) => fieldMessage(code, rules[member])).join(" "),
+        };
+  };
+  // Errors on the package's members come as dotted paths, such as dimensions.weightKg.
+  const packageHelp = (member: keyof Dimensions) => {
+    const path = `dimensions.${member}`;
+    const codes = [
+      ...local.filter((issue) => issue.member === path && touched.has("package")).map((issue) => issue.code),
+      ...(serverErrors.product[path] ?? []),
+    ];
+    return codes.length === 0
+      ? {}
+      : {
+          validateStatus: "error" as const,
+          help: [...new Set(codes)].map((code) => fieldMessage(code, packageRules[member])).join(" "),
         };
   };
   // Only set an input's maxLength when the model has one (exactOptionalPropertyTypes).
@@ -440,6 +505,34 @@ export function ProductEditor() {
             </Form.Item>
           </Col>
         </Row>
+        <Form.Item label="Package" extra="Size and shipping weight, saved together.">
+          <Switch
+            checked={form.package !== null}
+            onChange={(checked) => {
+              update({ package: checked ? { widthCm: null, heightCm: null, depthCm: null, weightKg: null } : null });
+            }}
+          />
+        </Form.Item>
+        {form.package !== null && (
+          <Row gutter={16}>
+            {packageFields.map(([member, label]) => (
+              <Col key={member} xs={12} md={6}>
+                <Form.Item label={label} {...packageHelp(member)}>
+                  <InputNumber
+                    style={{ width: "100%" }}
+                    step={0.1}
+                    value={form.package?.[member] ?? null}
+                    onChange={(value) => {
+                      if (form.package !== null) {
+                        update({ package: { ...form.package, [member]: value } });
+                      }
+                    }}
+                  />
+                </Form.Item>
+              </Col>
+            ))}
+          </Row>
+        )}
         <Form.Item label="Images" extra="The first image is the card image.">
           <Space orientation="vertical" style={{ width: "100%" }}>
             {images.map((row, index) => (

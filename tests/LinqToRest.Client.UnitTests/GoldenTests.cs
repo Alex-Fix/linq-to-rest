@@ -18,7 +18,7 @@ public sealed class GoldenTests
     public static readonly TheoryData<string> Cases =
     [
         "query-filter-sort-page", "query-lambdas", "query-strings-dates", "query-in-enum-navigation", "query-select",
-        "query-include-cursor", "query-count", "query-group", "query-aggregate", "batch-unit-of-work",
+        "query-include-cursor", "query-count", "query-group", "query-aggregate", "query-value-filter", "batch-unit-of-work", "batch-value",
     ];
 
     [Theory]
@@ -94,6 +94,31 @@ public sealed class GoldenTests
             case "query-aggregate":
                 await shop.Products.Where(p => p.CategoryId == 2).SumAsync(p => p.Price * 2, Token);
                 break;
+            case "query-value-filter":
+                await shop.Products
+                    .Where(p => p.Size != null && p.Size.Weight.Amount > 1 && p.Size.Weight.Unit == "kg")
+                    .OrderBy(p => p.Size!.Width)
+                    .Select(p => new { p.Id, p.Size, p.Size!.Weight.Unit })
+                    .Take(10)
+                    .ToListAsync(Token);
+                break;
+            case "batch-value":
+                http.Respond($$"""{"items":[{{Chess}}]}""");
+                var chess = Assert.Single(await shop.Products.Take(1).ToListAsync(Token));
+                chess.Size = new DimensionsDto { Width = 30, Weight = new WeightDto { Amount = 1.5m, Unit = "kg" } };
+                shop.Products.Add(new ProductDto
+                {
+                    Name = "Cube",
+                    Description = null,
+                    Price = 9.5m,
+                    Status = ProductStatus.Active,
+                    ReleasedOn = null,
+                    CategoryId = null,
+                    Size = new DimensionsDto { Width = 5.7, Weight = new WeightDto { Amount = 0.1m, Unit = "kg" } },
+                });
+                http.Respond("""{"results":[]}""");
+                await shop.SaveChangesAsync(Token);
+                break;
             default:
                 http.Respond($$"""{"items":[{{Chess}},{{Dune}}]}""");
                 var products = await shop.Products.Take(2).ToListAsync(Token);
@@ -101,7 +126,7 @@ public sealed class GoldenTests
                 var puzzles = new CategoryDto { Name = "Puzzles" };
                 shop.Categories.Add(puzzles);
                 // Every writable member set: the .NET client sends them all, the TypeScript client sends those present.
-                shop.Products.Add(new ProductDto { Name = "Cube", Description = null, Price = 9.5m, Status = ProductStatus.Active, ReleasedOn = null, Category = puzzles });
+                shop.Products.Add(new ProductDto { Name = "Cube", Description = null, Price = 9.5m, Status = ProductStatus.Active, ReleasedOn = null, Size = null, Category = puzzles });
                 shop.Products.Remove(products[1]);
                 http.Respond("""{"results":[]}""");
                 await shop.SaveChangesAsync(Token);

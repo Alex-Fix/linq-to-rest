@@ -188,7 +188,7 @@ public abstract class RestDataContext
         var values = entry.State == EntityState.Deleted
             ? null
             : written.Where(property => !entry.References.ContainsKey(property))
-                .ToDictionary(property => property.WireName, property => JsonValues.ToElement(property.Get(entry.Entity)), StringComparer.Ordinal);
+                .ToDictionary(property => property.WireName, property => property.ToElement(property.Get(entry.Entity)), StringComparer.Ordinal);
         var key = entry.State == EntityState.Added
             ? null
             : type.Key.Select((property, index) => (property.WireName, Value: entry.Key!.Value.Values[index]))

@@ -29,6 +29,9 @@
                     <AntDesign.InputNumber TValue="decimal?" Min="0" Placeholder="Max price" @bind-Value="_maxPrice" OnChange="_ => ReloadAsync()" />
                 </SpaceItem>
                 <SpaceItem>
+                    <AntDesign.InputNumber TValue="double?" Min="0" Step="0.5" Placeholder="Max weight (kg)" Style="width: 150px" @bind-Value="_maxWeightKg" OnChange="_ => ReloadAsync()" />
+                </SpaceItem>
+                <SpaceItem>
                     <Switch @bind-Value="_inStockOnly" OnChange="_ => ReloadAsync()" /> <Text>In stock only</Text>
                 </SpaceItem>
                 <SpaceItem>
@@ -126,6 +129,7 @@
     private readonly List<int> _brandIds = [];
     private decimal? _minPrice;
     private decimal? _maxPrice;
+    private double? _maxWeightKg;
     private bool _inStockOnly;
     private string _sort = "name";
 
@@ -211,6 +215,12 @@
         if (_maxPrice is { } max)
         {
             query = query.Where(p => p.Price <= max);
+        }
+
+        // A member of a value: products without package dimensions don't match.
+        if (_maxWeightKg is { } weight)
+        {
+            query = query.Where(p => p.Dimensions != null && p.Dimensions.WeightKg <= weight);
         }
 
         if (_inStockOnly)

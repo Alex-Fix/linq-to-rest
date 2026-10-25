@@ -108,7 +108,9 @@ describe("saveChanges (detect changes + build batch, 10% modified)", () => {
     // An empty result keeps the entries modified, so every run builds the same batch.
     const context = cannedShop({ results: [] });
     for (let id = 1; id <= tracked; id++) {
-      const product = { ...row(id), category: null, lines: [] } as Parameters<typeof context.products.attach>[0];
+      const product = { ...row(id), size: null, category: null, lines: [] } as Parameters<
+        typeof context.products.attach
+      >[0];
       context.products.attach(product);
       if (id % 10 === 0) {
         product.price += 1;

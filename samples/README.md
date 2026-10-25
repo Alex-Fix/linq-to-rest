@@ -7,7 +7,7 @@ Design: [`docs/plans/2026-10-20-catalog-sample-design.md`](../docs/plans/2026-10
 
 | Project | What it is |
 |---|---|
-| `Catalog.Api` | ASP.NET Core + EF Core (SQLite by default), sets, validation rules and a validator, role policies, dev login, CORS (`AllowLinqToRest()` scoped to the API and dev login), `model.json`; published ReadyToRun |
+| `Catalog.Api` | ASP.NET Core + EF Core (SQLite by default), sets, value types (product package size: complex; brand contact: owned), validation rules and a validator, role policies, dev login, CORS (`AllowLinqToRest()` scoped to the API and dev login), `model.json`; published ReadyToRun |
 | `Catalog.Client` | `CatalogContext.generated.cs`, generated from `model.json` (never edit it) |
 | `catalog-web` | React + Vite + [Ant Design](https://ant.design) on `catalog.generated.ts`, generated from the same `model.json` |
 | `Catalog.Blazor` | Blazor WebAssembly + [Ant Design Blazor](https://antblazor.com) on `Catalog.Client` |
@@ -16,6 +16,7 @@ Design: [`docs/plans/2026-10-20-catalog-sample-design.md`](../docs/plans/2026-10
 
 ```sh
 dotnet run --project samples/Catalog.Api              # http://localhost:5095, SQLite, seeds 200 products
+# The database is created once (EnsureCreated): delete samples/Catalog.Api/catalog.db after the schema changes.
 
 (cd clients/typescript && npm ci && npm run build)             # the React app uses the local client package
 (cd samples/catalog-web && npm install && npm run dev) # http://localhost:5173

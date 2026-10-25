@@ -10,7 +10,9 @@ export type MemberKind =
   | "dateonly"
   | "timeonly"
   | "timespan"
-  | "binary";
+  | "binary"
+  /** A value type (`value` describes it), such as an address: read and written whole. */
+  | "value";
 
 /**
  * The built-in validation rules of a writable member, from the model document. The client checks them before saving;
@@ -31,7 +33,13 @@ export interface MemberRules {
   readonly pattern?: string;
 }
 
-/** A scalar or primitive-collection member of a set. */
+/** A value type: a structured value without its own set, replaced whole when written. */
+export interface ValueTypeModel {
+  readonly name: string;
+  readonly members: readonly MemberModel[];
+}
+
+/** A scalar, primitive-collection or value-type member of a set or of a value type. */
 export interface MemberModel {
   readonly name: string;
   readonly kind: MemberKind;
@@ -45,6 +53,8 @@ export interface MemberModel {
   /** Whether sum, min, max and average over groups may read the member (`IsAggregatable()`). */
   readonly aggregatable?: boolean;
   readonly rules?: MemberRules;
+  /** The value type of a `value` member. */
+  readonly value?: ValueTypeModel;
 }
 
 /** A navigation to another set. */

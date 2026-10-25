@@ -25,6 +25,10 @@ generator input changed by `docs/plans/2026-10-20-entity-sets-design.md`.
 
 ## Generated models
 
+- Value types are readonly row interfaces plus `ValueProxy` interfaces (members, `eq(null)`/`ne(null)`); their
+  models are `const` `ValueTypeModel`s (nested first) referenced by `kind: "value"` members, so tracking and
+  validation never look them up. Saves write values in model member order, as the .NET client does.
+
 - `*.generated.ts` files come from `linqtorest-gen ts` reading a model document; never edit them, and they're
   excluded from Prettier and ESLint.
 - `clients/typescript/test/shop.generated.ts` is also the generator's snapshot (`tests/LinqToRest.CodeGen.UnitTests`),

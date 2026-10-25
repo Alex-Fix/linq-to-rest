@@ -5,15 +5,17 @@ public static class ShopData
     public static void Seed(ShopDbContext db)
     {
         var books = new Category { Id = 1, Name = "Books", TenantId = 1 };
-        var games = new Category { Id = 2, Name = "Games", TenantId = 1 };
-        var tools = new Category { Id = 3, Name = "Tools", TenantId = 2 };
+        var games = new Category { Id = 2, Name = "Games", TenantId = 1, Contact = new Contact { Email = "games@shop.example", Phone = "+380 44 000" } };
+        var tools = new Category { Id = 3, Name = "Tools", TenantId = 2, Contact = new Contact { Email = "tools@shop.example" } };
         db.Categories.AddRange(books, games, tools);
         db.Products.AddRange(
             Product(1, "Chess", 20m, ProductStatus.Active, games, new DateTime(2026, 1, 10, 9, 30, 0, DateTimeKind.Utc), new DateOnly(2025, 12, 1), 4.5, featured: true, ["sale", "classic"],
-                [Line(11, "C1", 2, 20m), Line(12, "C2", 1, 18m)], description: "Wooden board"),
-            Product(2, "Dune", 12.5m, ProductStatus.Active, books, new DateTime(2026, 2, 1, 14, 0, 0, DateTimeKind.Utc), null, 4.8, featured: false, ["scifi"], [Line(21, "D1", 3, 12.5m)]),
-            Product(3, "Go", 30m, ProductStatus.Draft, games, new DateTime(2026, 3, 5, 8, 0, 0, DateTimeKind.Utc), new DateOnly(2026, 3, 1), 4.0, featured: false, ["classic"], []),
-            Product(4, "Hammer", 15m, ProductStatus.Active, tools, new DateTime(2026, 1, 20, 12, 0, 0, DateTimeKind.Utc), null, 3.2, featured: false, [], [Line(41, "H1", 0, 15m)], tenant: 2),
+                [Line(11, "C1", 2, 20m, new Place("UA", "Lviv")), Line(12, "C2", 1, 18m)], description: "Wooden board",
+                size: Size(40, 40, 1.2), origin: new Place("IN", null)),
+            Product(2, "Dune", 12.5m, ProductStatus.Active, books, new DateTime(2026, 2, 1, 14, 0, 0, DateTimeKind.Utc), null, 4.8, featured: false, ["scifi"], [Line(21, "D1", 3, 12.5m, new Place("PL", "Krakow"))],
+                size: Size(11, 18, 0.4), origin: new Place("US", "Philadelphia")),
+            Product(3, "Go", 30m, ProductStatus.Draft, games, new DateTime(2026, 3, 5, 8, 0, 0, DateTimeKind.Utc), new DateOnly(2026, 3, 1), 4.0, featured: false, ["classic"], [], size: Size(45, 45, 2.5), origin: new Place("CN", null)),
+            Product(4, "Hammer", 15m, ProductStatus.Active, tools, new DateTime(2026, 1, 20, 12, 0, 0, DateTimeKind.Utc), null, 3.2, featured: false, [], [Line(41, "H1", 0, 15m)], tenant: 2, size: Size(30, 10, 0.8)),
             Product(5, "Notebook", 3m, ProductStatus.Retired, null, new DateTime(2026, 4, 1, 10, 0, 0, DateTimeKind.Utc), null, 3.9, featured: false, ["sale"], [], description: "  A5 dotted "),
             Product(6, "Puzzle", 20m, ProductStatus.Active, games, new DateTime(2026, 5, 1, 16, 45, 0, DateTimeKind.Utc), new DateOnly(2026, 4, 15), 4.1, featured: true, [], []));
         db.SaveChanges();
@@ -22,7 +24,7 @@ public static class ShopData
 
     private static Product Product(
         int id, string name, decimal price, ProductStatus status, Category? category, DateTime createdAt, DateOnly? releasedOn, double rating,
-        bool featured, string[] tags, List<OrderLine> lines, string? description = null, int tenant = 1) =>
+        bool featured, string[] tags, List<OrderLine> lines, string? description = null, int tenant = 1, Dimensions? size = null, Place? origin = null) =>
         new()
         {
             Id = id,
@@ -35,12 +37,17 @@ public static class ShopData
             ReleasedOn = releasedOn,
             Rating = rating,
             IsFeatured = featured,
+            Size = size ?? Size(20, 30, 0.1),
+            Origin = origin,
             TenantId = tenant,
             Category = category,
             Tags = [.. tags.Select((tag, index) => new ProductTag { Id = (id * 10) + index, Value = tag })],
             Lines = lines,
         };
 
-    private static OrderLine Line(int id, string sku, int quantity, decimal unitPrice) =>
-        new() { Id = id, Sku = sku, Quantity = quantity, UnitPrice = unitPrice };
+    private static Dimensions Size(double width, double height, double kilograms) =>
+        new() { Width = width, Height = height, Weight = new Weight(kilograms, "kg") };
+
+    private static OrderLine Line(int id, string sku, int quantity, decimal unitPrice, Place? shipping = null) =>
+        new() { Id = id, Sku = sku, Quantity = quantity, UnitPrice = unitPrice, Shipping = shipping };
 }

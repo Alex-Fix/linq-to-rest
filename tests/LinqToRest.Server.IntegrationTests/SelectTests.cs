@@ -11,7 +11,8 @@ public abstract class SelectTests(ShopFixture shop)
         JsonAssert.Equal("""
             {"id":1,"name":"Chess","description":"Wooden board","price":20,"status":"Active",
              "version":"00000001-0000-0000-0000-000000000000","createdAt":"2026-01-10T09:30:00Z","releasedOn":"2025-12-01",
-             "rating":4.5,"isFeatured":true,"categoryId":2,"tags":["classic","sale"],"categoryName":"Games"}
+             "rating":4.5,"isFeatured":true,"categoryId":2,"size":{"width":40,"height":40,"weight":{"amount":1.2,"unit":"kg"}},
+             "origin":{"country":"IN","city":null},"tags":["classic","sale"],"categoryName":"Games"}
             """, items[0]);
         Assert.Equal("Notebook", items[1].GetProperty("name").GetString());
         Assert.Equal(System.Text.Json.JsonValueKind.Null, items[1].GetProperty("categoryName").ValueKind);
@@ -24,9 +25,10 @@ public abstract class SelectTests(ShopFixture shop)
         var result = await shop.Server.QueryOkAsync("products", """{"v":1,"filter":{"in":[{"member":"id"},[1,5]]},"include":["category","lines"]}""");
 
         var items = result.GetProperty("items");
-        JsonAssert.Equal("""{"id":2,"name":"Games"}""", items[0].GetProperty("category"));
+        JsonAssert.Equal("""{"id":2,"name":"Games","contact":{"email":"games@shop.example","phone":"+380 44 000"}}""", items[0].GetProperty("category"));
         JsonAssert.Equal("""
-            [{"id":11,"productId":1,"sku":"C1","quantity":2,"unitPrice":20},{"id":12,"productId":1,"sku":"C2","quantity":1,"unitPrice":18}]
+            [{"id":11,"productId":1,"sku":"C1","quantity":2,"unitPrice":20,"shipping":{"country":"UA","city":"Lviv"}},
+             {"id":12,"productId":1,"sku":"C2","quantity":1,"unitPrice":18,"shipping":null}]
             """, items[0].GetProperty("lines"));
         Assert.Equal(System.Text.Json.JsonValueKind.Null, items[1].GetProperty("category").ValueKind);
         JsonAssert.Equal("[]", items[1].GetProperty("lines"));
@@ -61,7 +63,8 @@ public abstract class SelectTests(ShopFixture shop)
 
         JsonAssert.Equal("""
             {"id":1,"total":58,"label":"Chess (Games)","bulk":[{"sku":"C1"}],"quantities":[2,1],
-             "category":{"id":2,"name":"Games"},"tags":["classic","sale"],"lineCount":2,"expensive":true,"rating":4.5,
+             "category":{"id":2,"name":"Games","contact":{"email":"games@shop.example","phone":"+380 44 000"}},
+             "tags":["classic","sale"],"lineCount":2,"expensive":true,"rating":4.5,
              "meta":{"featured":true,"constant":"x"}}
             """, JsonAssert.Single(result));
     }
@@ -93,7 +96,7 @@ public abstract class SelectTests(ShopFixture shop)
     {
         var result = await shop.Server.QueryOkAsync("products", """{"v":1,"filter":{"eq":[{"member":"id"},2]},"select":{"new":{"lines":{"member":"lines"}}}}""");
 
-        JsonAssert.Equal("""{"lines":[{"id":21,"productId":2,"sku":"D1","quantity":3,"unitPrice":12.5}]}""", JsonAssert.Single(result));
+        JsonAssert.Equal("""{"lines":[{"id":21,"productId":2,"sku":"D1","quantity":3,"unitPrice":12.5,"shipping":{"country":"PL","city":"Krakow"}}]}""", JsonAssert.Single(result));
     }
 
     [Fact]

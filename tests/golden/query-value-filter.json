@@ -1,0 +1,53 @@
+{
+  "v": 1,
+  "filter": {
+    "and": [
+      {
+        "ne": [
+          {
+            "member": "size"
+          },
+          null
+        ]
+      },
+      {
+        "gt": [
+          {
+            "member": "size/weight/amount"
+          },
+          1
+        ]
+      },
+      {
+        "eq": [
+          {
+            "member": "size/weight/unit"
+          },
+          "kg"
+        ]
+      }
+    ]
+  },
+  "orderBy": [
+    {
+      "member": "size/width"
+    }
+  ],
+  "select": {
+    "new": {
+      "id": {
+        "member": "id"
+      },
+      "size": {
+        "member": "size"
+      },
+      "unit": {
+        "member": "size/weight/unit"
+      }
+    }
+  },
+  "page": {
+    "mode": "offset",
+    "take": 10
+  }
+}

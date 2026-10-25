@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using LinqToRest.Modeling;
@@ -18,8 +19,8 @@ namespace LinqToRest.Server.Batch;
 
 /// <summary>
 /// Applies a batch in one transaction: validates every operation against the model, writes only through members
-/// exposed with <c>Property(...)</c>, saves once, re-reads changed rows through the set (one query per set), and rolls
-/// everything back on any failure.
+/// exposed with <c>Property(...)</c> or <c>Value(...)</c> (whole values, built from their exposed members), saves once,
+/// re-reads changed rows through the set (one query per set), and rolls everything back on any failure.
 /// </summary>
 internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPolicies policies)
 {
@@ -170,6 +171,16 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         var failed = new HashSet<SetProperty>();
         foreach (var property in scope.Mapping.Properties)
         {
+            if (property.ValueType is { } valueType)
+            {
+                if (property.IsWritable && (isInsert || scope.IsSent(property)) && CheckValue(scope, property, valueType, entity))
+                {
+                    failed.Add(property);
+                }
+
+                continue;
+            }
+
             // A foreign key set through refs gets its value when the row it references is saved.
             if (property.Rules is { } rules && (isInsert || scope.IsSent(property)) && operation.Refs?.ContainsKey(property.Name) != true
                 && rules.Check(property.EntityProperty!.GetValue(entity)) is { } code)
@@ -190,6 +201,48 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
                 }
 
                 scope.Add(rule.Member, rule.Code);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks a written value: <c>required</c> when a non-nullable value is missing (an insert that didn't send one and
+    /// whose entity has none), and the built-in rules of its members, nested ones too. Returns whether it failed.
+    /// </summary>
+    private static bool CheckValue(ValidationScope scope, SetProperty property, ServerValueType valueType, object entity)
+    {
+        var value = property.EntityProperty!.GetValue(entity);
+        if (value is null)
+        {
+            if (property.IsNullable)
+            {
+                return false;
+            }
+
+            scope.Add(property.Name, ErrorCodes.Required);
+            return true;
+        }
+
+        var count = scope.Count;
+        CheckMembers(scope, property.Name, valueType, value);
+        return scope.Count > count;
+    }
+
+    private static void CheckMembers(ValidationScope scope, string path, ServerValueType valueType, object value)
+    {
+        foreach (var member in valueType.Properties)
+        {
+            var memberValue = member.EntityProperty!.GetValue(value);
+            if (member.ValueType is { } nested)
+            {
+                if (memberValue is not null)
+                {
+                    CheckMembers(scope, $"{path}/{member.Name}", nested, memberValue);
+                }
+            }
+            else if (member.Rules?.Check(memberValue) is { } code)
+            {
+                scope.Add($"{path}/{member.Name}", code);
             }
         }
     }
@@ -270,13 +323,74 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
                 throw Invalid(ErrorCodes.NotWritable, pointer, operation);
             }
 
-            var value = JsonValues.Read(element, property.ClrType, pointer);
+            var value = property.ValueType is { } valueType
+                ? ReadValue(valueType, element, pointer, operation)
+                : JsonValues.Read(element, property.ClrType, pointer);
             if (value is null && !property.IsNullable)
             {
                 throw Invalid(ErrorCodes.TypeMismatch, pointer, operation);
             }
 
             property.EntityProperty!.SetValue(entity, value);
+        }
+    }
+
+    /// <summary>
+    /// Builds a new value from a JSON object holding every exposed member (nested values too), with the construction
+    /// plan resolved at startup. The value replaces the old one as a whole.
+    /// </summary>
+    private static object? ReadValue(ServerValueType valueType, JsonElement element, string pointer, BatchOperation operation)
+    {
+        if (element.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            throw Invalid(ErrorCodes.TypeMismatch, pointer, operation);
+        }
+
+        var values = new Dictionary<SetProperty, object?>();
+        foreach (var member in element.EnumerateObject())
+        {
+            // An unknown name came from the client and isn't echoed; the pointer names the value.
+            var property = valueType.FindProperty(member.Name) ?? throw Invalid(ErrorCodes.UnknownMember, pointer, operation);
+            var memberPointer = $"{pointer}/{property.Name}";
+            var value = property.ValueType is { } nested
+                ? ReadValue(nested, member.Value, memberPointer, operation)
+                : JsonValues.Read(member.Value, property.ClrType, memberPointer);
+            if (value is null && !property.IsNullable)
+            {
+                throw Invalid(ErrorCodes.TypeMismatch, memberPointer, operation);
+            }
+
+            if (!values.TryAdd(property, value))
+            {
+                throw Invalid(ErrorCodes.InvalidBatch, pointer, operation);
+            }
+        }
+
+        if (Array.Find(valueType.Properties, property => !values.ContainsKey(property)) is { } missing)
+        {
+            throw Invalid(ErrorCodes.InvalidBatch, $"{pointer}/{missing.Name}", operation);
+        }
+
+        var construction = valueType.Construction!;
+        try
+        {
+            var created = construction.Constructor.Invoke([.. construction.Arguments.Select(property => values[property])]);
+            foreach (var setter in construction.Setters)
+            {
+                setter.EntityProperty!.SetValue(created, values[setter]);
+            }
+
+            return created;
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is ArgumentException)
+        {
+            // The value type's own checks refused the values (a guard in its constructor or setter).
+            throw Invalid(ErrorCodes.TypeMismatch, pointer, operation);
         }
     }
 

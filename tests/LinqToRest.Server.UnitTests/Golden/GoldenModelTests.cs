@@ -17,7 +17,7 @@ public sealed class GoldenModelTests
     {
         var services = new ServiceCollection()
             .AddDbContext<GoldenContext>(options => options.UseSqlite("DataSource=:memory:"))
-            .AddLinqToRest(o => o.UseDbContext<GoldenContext>().AddSet(new GoldenProductSet()).AddSet(new GoldenCategorySet()).AddSet(new GoldenOrderLineSet()));
+            .AddLinqToRest(o => o.UseDbContext<GoldenContext>().AddSet(new GoldenProductSet()).AddSet(new GoldenCategorySet()).AddSet(new GoldenOrderLineSet()).AddValueType(new GoldenDimensionsType()).AddValueType(new GoldenWeightType()));
         await using var provider = services.BuildServiceProvider();
         var json = provider.GetRequiredService<ServerModel>().Model.ToJson() + "\n";
 

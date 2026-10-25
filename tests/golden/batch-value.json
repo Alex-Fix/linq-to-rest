@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "operations": [
+    {
+      "id": "o0",
+      "op": "insert",
+      "set": "products",
+      "values": {
+        "name": "Cube",
+        "description": null,
+        "price": 9.5,
+        "status": "Active",
+        "releasedOn": null,
+        "categoryId": null,
+        "size": {
+          "width": 5.7,
+          "weight": {
+            "amount": 0.1,
+            "unit": "kg"
+          }
+        }
+      }
+    },
+    {
+      "id": "o1",
+      "op": "update",
+      "set": "products",
+      "key": {
+        "id": 1
+      },
+      "values": {
+        "size": {
+          "width": 30,
+          "weight": {
+            "amount": 1.5,
+            "unit": "kg"
+          }
+        }
+      },
+      "token": "00000001-0000-0000-0000-000000000000"
+    }
+  ]
+}

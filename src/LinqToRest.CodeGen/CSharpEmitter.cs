@@ -5,9 +5,9 @@ using LinqToRest.Modeling;
 namespace LinqToRest.CodeGen;
 
 /// <summary>
-/// Writes the C# client for a model document: an enum per enum, a <c>partial</c> class per set, the context with a
-/// <c>RestSet</c> per set and its <c>ClientModel</c> bound through generated delegates, and an <c>Add{Context}</c>
-/// registration extension.
+/// Writes the C# client for a model document: an enum per enum, an immutable <c>partial</c> record per value type, a
+/// <c>partial</c> class per set, the context with a <c>RestSet</c> per set and its <c>ClientModel</c> bound through
+/// generated delegates, and an <c>Add{Context}</c> registration extension.
 /// </summary>
 internal sealed class CSharpEmitter(RestModel model, string ns, string context, string source)
 {
@@ -26,7 +26,7 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
     // Members a RestDataContext (and object) already has, which a set property can't reuse.
     private static readonly HashSet<string> ContextMembers =
     [
-        "Model", "Set", "Entry", "SaveChangesAsync", "Equals", "GetHashCode", "GetType", "ToString", "MemberwiseClone",
+        "Model", "Set", "Entry", "SaveChangesAsync", "Equals", "GetHashCode", "GetType", "ToString", "MemberwiseClone", "ValueBindings",
     ];
 
     public string Emit()
@@ -50,6 +50,11 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
             body.Append("}\n");
         }
 
+        foreach (var valueType in model.ValueTypes.OrderBy(valueType => valueType.Name, StringComparer.Ordinal))
+        {
+            WriteRecord(body, valueType);
+        }
+
         foreach (var set in model.Sets.OrderBy(set => set.TypeName, StringComparer.Ordinal))
         {
             WriteClass(body, set);
@@ -59,6 +64,27 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
         return body.ToString();
     }
 
+    // Values are replaced whole (customer.Address = customer.Address with { City = "…" }), so their members are init-only.
+    private void WriteRecord(StringBuilder body, RestValueTypeModel valueType)
+    {
+        body.Append(CultureInfo.InvariantCulture, $"\npublic sealed partial record {valueType.Name}\n{{\n");
+        foreach (var property in valueType.Properties)
+        {
+            var type = ClrType(property.Type);
+            var name = Member(valueType.Name, valueType.Name, property.Name);
+            if (property.IsNullable)
+            {
+                body.Append(CultureInfo.InvariantCulture, $"    public {type}? {name} {{ get; init; }}\n");
+            }
+            else
+            {
+                body.Append(CultureInfo.InvariantCulture, $"    public required {type} {name} {{ get; init; }}\n");
+            }
+        }
+
+        body.Append("}\n");
+    }
+
     private void WriteClass(StringBuilder body, RestSetModel set)
     {
         body.Append(CultureInfo.InvariantCulture, $"\npublic sealed partial class {set.TypeName}\n{{\n");
@@ -66,7 +92,19 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
         {
             var type = ClrType(property.Type);
             var name = Member(set, property.Name);
-            if (property.IsCollection)
+            if (model.FindValueType(property.Type) is not null)
+            {
+                // A record has no empty value; validation reports a non-nullable value still missing when saving.
+                if (property.IsNullable)
+                {
+                    body.Append(CultureInfo.InvariantCulture, $"    public {type}? {name} {{ get; set; }}\n");
+                }
+                else
+                {
+                    body.Append(CultureInfo.InvariantCulture, $"    public {type} {name} {{ get; set; }} = null!;\n");
+                }
+            }
+            else if (property.IsCollection)
             {
                 body.Append(CultureInfo.InvariantCulture, $"    public List<{type}> {name} {{ get; set; }} = [];\n");
             }
@@ -116,6 +154,7 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
         }
 
         body.Append(");\n");
+        WriteValueBindings(body);
         foreach (var set in sets)
         {
             var property = Pascal(set.Name);
@@ -140,13 +179,20 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
 
     // Compile-time delegates for every member, so the client reads and writes rows without reflection (trim- and
     // AOT-safe).
-    private static void WriteBinding(StringBuilder body, RestSetModel set)
+    private void WriteBinding(StringBuilder body, RestSetModel set)
     {
         var type = set.TypeName;
         body.Append(CultureInfo.InvariantCulture, $",\n        new SetBinding<{type}>(\"{set.Name}\", static () => new {type}())");
         foreach (var property in set.Properties)
         {
-            WriteMember(body, property.IsCollection ? "Values" : "Property", type, property.Name, Member(set, property.Name));
+            var member = Member(set, property.Name);
+            if (model.FindValueType(property.Type) is not null)
+            {
+                body.Append(CultureInfo.InvariantCulture, $"\n            .Value(\"{property.Name}\", nameof({type}.{member}), ValueBindings.{property.Type}, static e => e.{member}, static (e, v) => e.{member} = v{(property.IsNullable ? "" : "!")})");
+                continue;
+            }
+
+            WriteMember(body, property.IsCollection ? "Values" : "Property", type, property.Name, member);
         }
 
         foreach (var navigation in set.Navigations)
@@ -155,14 +201,60 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
         }
     }
 
+    /// <summary>
+    /// The value types' bindings, as fields of a nested class initialized in order, nested types first. Member names are
+    /// literals: a field named like its type would shadow the type inside nameof.
+    /// </summary>
+    private void WriteValueBindings(StringBuilder body)
+    {
+        if (model.ValueTypes.Count == 0)
+        {
+            return;
+        }
+
+        body.Append("\n    private static class ValueBindings\n    {\n");
+        var first = true;
+        foreach (var valueType in model.ValueTypes.OrderBy(Height).ThenBy(valueType => valueType.Name, StringComparer.Ordinal))
+        {
+            body.Append(first ? "" : "\n");
+            first = false;
+            var name = valueType.Name;
+            var arguments = valueType.Properties.Select((property, index) =>
+                $"{Member(name, name, property.Name)} = ({ClrType(property.Type)}{(property.IsNullable ? "?" : "")})v[{index}]{(property.IsNullable ? "" : "!")}");
+            body.Append(CultureInfo.InvariantCulture, $"        public static readonly ValueBinding<{name}> {name} = new ValueBinding<{name}>(\"{name}\", static v => new {name} {{ {string.Join(", ", arguments)} }})");
+            foreach (var property in valueType.Properties)
+            {
+                var member = Member(name, name, property.Name);
+                if (model.FindValueType(property.Type) is not null)
+                {
+                    body.Append(CultureInfo.InvariantCulture, $"\n            .Value(\"{property.Name}\", \"{member}\", {property.Type}, static e => e.{member})");
+                }
+                else
+                {
+                    body.Append(CultureInfo.InvariantCulture, $"\n            .Property(\"{property.Name}\", \"{member}\", static e => e.{member})");
+                }
+            }
+
+            body.Append(";\n");
+        }
+
+        body.Append("    }\n");
+    }
+
+    // 1 for a value type without nested ones, else one more than its tallest nested type.
+    private int Height(RestValueTypeModel valueType) =>
+        1 + valueType.Properties.Select(property => model.FindValueType(property.Type) is { } nested ? Height(nested) : 0).DefaultIfEmpty(0).Max();
+
     private static void WriteMember(StringBuilder body, string method, string type, string wireName, string member) =>
         body.Append(CultureInfo.InvariantCulture, $"\n            .{method}(\"{wireName}\", nameof({type}.{member}), static e => e.{member}, static (e, v) => e.{member} = v)");
 
-    private static string Member(RestSetModel set, string wireName)
+    private static string Member(RestSetModel set, string wireName) => Member(set.Name, set.TypeName, wireName);
+
+    private static string Member(string owner, string typeName, string wireName)
     {
         var name = Pascal(wireName);
-        return name == set.TypeName
-            ? throw new GeneratorException($"The member '{set.Name}.{wireName}' would be named like its class {set.TypeName}, which C# doesn't allow. Rename one of them.")
+        return name == typeName
+            ? throw new GeneratorException($"The member '{owner}.{wireName}' would be named like its class {typeName}, which C# doesn't allow. Rename one of them.")
             : name;
     }
 
@@ -184,7 +276,7 @@ internal sealed class CSharpEmitter(RestModel model, string ns, string context, 
         "timeOnly" => "TimeOnly",
         "timeSpan" => "TimeSpan",
         "bytes" => "byte[]",
-        _ when model.FindEnum(type) is not null => type,
+        _ when model.FindEnum(type) is not null || model.FindValueType(type) is not null => type,
         _ => throw new GeneratorException($"The model type '{type}' has no C# equivalent."),
     };
 

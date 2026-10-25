@@ -15,11 +15,17 @@ internal sealed class ValidationScope(BatchOperation operation, string location,
 
     public bool IsSent(SetProperty member) => operation.Values?.ContainsKey(member.Name) == true;
 
-    public void Add(SetProperty? member, string code) => issues.Add(new ValidationIssue
+    /// <summary>Gets how many issues the batch has so far.</summary>
+    public int Count => issues.Count;
+
+    public void Add(SetProperty? member, string code) => Add(member?.Name, code);
+
+    /// <summary>Adds an issue on a member path (<c>size/weight/unit</c> inside a value), or on the row when null.</summary>
+    public void Add(string? path, string code) => issues.Add(new ValidationIssue
     {
         Operation = operation.Id,
-        Location = member is null ? location : $"{location}/values/{member.Name}",
-        Member = member?.Name,
+        Location = path is null ? location : $"{location}/values/{path}",
+        Member = path,
         Code = code,
     });
 }

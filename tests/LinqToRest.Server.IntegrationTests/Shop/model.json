@@ -1,6 +1,37 @@
 {
   "v": 1,
   "enums": {"ProductStatus": ["Draft", "Active", "Retired"]},
+  "valueTypes": [
+    {
+      "name": "Contact",
+      "properties": [
+        {"name": "email", "type": "string", "rules": {"required": true, "maxLength": 100}},
+        {"name": "phone", "type": "string", "nullable": true, "filterable": false}
+      ]
+    },
+    {
+      "name": "Dimensions",
+      "properties": [
+        {"name": "width", "type": "float64", "sortable": true, "rules": {"min": 0}},
+        {"name": "height", "type": "float64", "rules": {"min": 0}},
+        {"name": "weight", "type": "Weight"}
+      ]
+    },
+    {
+      "name": "Place",
+      "properties": [
+        {"name": "country", "type": "string", "sortable": true, "groupable": true, "rules": {"pattern": "^[A-Z]{2}$"}},
+        {"name": "city", "type": "string", "nullable": true}
+      ]
+    },
+    {
+      "name": "Weight",
+      "properties": [
+        {"name": "amount", "type": "float64", "sortable": true, "aggregatable": true, "rules": {"min": 0}},
+        {"name": "unit", "type": "string", "groupable": true, "rules": {"maxLength": 5}}
+      ]
+    }
+  ],
   "sets": [
     {
       "name": "categories",
@@ -10,7 +41,8 @@
       "pagination": {"modes": ["cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
-        {"name": "name", "type": "string", "writable": true, "sortable": true, "groupable": true}
+        {"name": "name", "type": "string", "writable": true, "sortable": true, "groupable": true},
+        {"name": "contact", "type": "Contact", "nullable": true, "writable": true}
       ],
       "navigations": [{"name": "products", "target": "products", "collection": true}]
     },
@@ -25,7 +57,8 @@
         {"name": "productId", "type": "int32"},
         {"name": "sku", "type": "string"},
         {"name": "quantity", "type": "int32"},
-        {"name": "unitPrice", "type": "decimal"}
+        {"name": "unitPrice", "type": "decimal"},
+        {"name": "shipping", "type": "Place", "nullable": true, "filterable": false}
       ],
       "navigations": []
     },
@@ -55,6 +88,8 @@
         {"name": "rating", "type": "float64", "writable": true, "filterable": false, "aggregatable": true},
         {"name": "isFeatured", "type": "bool", "writable": true},
         {"name": "categoryId", "type": "int32", "nullable": true, "writable": true, "groupable": true},
+        {"name": "size", "type": "Dimensions", "writable": true},
+        {"name": "origin", "type": "Place", "nullable": true, "writable": true},
         {"name": "tags", "type": "string", "collection": true},
         {"name": "categoryName", "type": "string", "nullable": true}
       ],

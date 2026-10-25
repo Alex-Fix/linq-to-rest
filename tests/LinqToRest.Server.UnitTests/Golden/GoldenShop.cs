@@ -22,6 +22,7 @@ public sealed class Product
     public Guid Version { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateOnly? ReleasedOn { get; set; }
+    public Dimensions? Size { get; set; }
     public int TenantId { get; set; }
     public int? CategoryId { get; set; }
     public Category? Category { get; set; }
@@ -51,13 +52,24 @@ public sealed class Tag
     public string Value { get; set; } = "";
 }
 
+public sealed record Dimensions
+{
+    public required double Width { get; init; }
+    public required Weight Weight { get; init; }
+}
+
+public sealed record Weight(decimal Amount, string Unit);
+
 public sealed class GoldenContext(DbContextOptions<GoldenContext> options) : DbContext(options)
 {
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Category> Categories => Set<Category>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder) =>
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Product>().Property(p => p.Version).IsConcurrencyToken();
+        modelBuilder.Entity<Product>().ComplexProperty(p => p.Size, size => size.ComplexProperty(d => d.Weight));
+    }
 }
 
 public sealed class GoldenProductSet : IEntitySetConfiguration<Product>
@@ -73,6 +85,7 @@ public sealed class GoldenProductSet : IEntitySetConfiguration<Product>
         builder.Property(p => p.CreatedAt).IsReadOnly();
         builder.Property(p => p.ReleasedOn);
         builder.Property(p => p.CategoryId).IsGroupable();
+        builder.Value(p => p.Size);
         builder.Computed("tags", p => p.Tags.OrderBy(t => t.Value).Select(t => t.Value).ToList());
         builder.Computed("categoryName", p => p.Category != null ? p.Category.Name : null);
         builder.HasOne(p => p.Category).WithForeignKey(p => p.CategoryId);
@@ -99,5 +112,25 @@ public sealed class GoldenOrderLineSet : IEntitySetConfiguration<OrderLine>
         builder.Property(l => l.Quantity).IsAggregatable();
         builder.Property(l => l.UnitPrice).IsAggregatable();
         builder.HasPagination(p => p.Modes(PaginationModes.Offset));
+    }
+}
+
+public sealed class GoldenDimensionsType : IValueTypeConfiguration<Dimensions>
+{
+    public void Configure(ValueTypeBuilder<Dimensions> builder)
+    {
+        builder.HasTypeName("DimensionsDto");
+        builder.Property(d => d.Width).IsSortable().HasMin(0d);
+        builder.Value(d => d.Weight);
+    }
+}
+
+public sealed class GoldenWeightType : IValueTypeConfiguration<Weight>
+{
+    public void Configure(ValueTypeBuilder<Weight> builder)
+    {
+        builder.HasTypeName("WeightDto");
+        builder.Property(w => w.Amount).IsAggregatable();
+        builder.Property(w => w.Unit).HasMaxLength(5);
     }
 }

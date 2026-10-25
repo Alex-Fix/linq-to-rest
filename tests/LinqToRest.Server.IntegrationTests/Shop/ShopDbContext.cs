@@ -52,7 +52,11 @@ public sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbC
             product.Property(p => p.Version).IsConcurrencyToken();
             product.HasMany(p => p.Tags).WithOne().HasForeignKey(t => t.ProductId);
             product.HasMany(p => p.Lines).WithOne().HasForeignKey(l => l.ProductId);
+            product.ComplexProperty(p => p.Size, size => size.ComplexProperty(d => d.Weight));
+            product.ComplexProperty(p => p.Origin);
         });
+        modelBuilder.Entity<Category>().OwnsOne(c => c.Contact);
+        modelBuilder.Entity<OrderLine>().OwnsOne(l => l.Shipping, shipping => shipping.ToJson());
 
         if (Database.IsSqlite())
         {
