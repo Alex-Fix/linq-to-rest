@@ -249,7 +249,7 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
                 foreach (var navigation in set.Navigations)
                 {
                     body.Append(CultureInfo.InvariantCulture,
-                        $"        {{ name: {Quote(navigation.Name)}, target: {Quote(navigation.Target)}, collection: {Bool(navigation.IsCollection)}, foreignKey: {(navigation.ForeignKey is [var foreignKey] ? Quote(foreignKey) : "null")} }},\n");
+                        $"        {{ name: {Quote(navigation.Name)}, target: {Quote(navigation.Target)}, collection: {Bool(navigation.IsCollection)}, foreignKey: [{string.Join(", ", navigation.ForeignKey.Select(Quote))}], links: {Links(navigation.Links)}, onUnlink: {OnUnlink(navigation.OnUnlink)} }},\n");
                 }
 
                 body.Append("      ],\n");
@@ -414,6 +414,20 @@ internal sealed class TypeScriptEmitter(RestModel model, string name, string imp
     }
 
     private static string Bool(bool value) => value ? "true" : "false";
+
+    private static string Links(RestLinkKind? links) => links switch
+    {
+        RestLinkKind.OneToMany => "\"oneToMany\"",
+        RestLinkKind.ManyToMany => "\"manyToMany\"",
+        _ => "null",
+    };
+
+    private static string OnUnlink(RestUnlinkBehavior? onUnlink) => onUnlink switch
+    {
+        RestUnlinkBehavior.Delete => "\"delete\"",
+        RestUnlinkBehavior.Detach => "\"detach\"",
+        _ => "null",
+    };
 
     private static string Quote(string value) => JsonSerializer.Serialize(value);
 }

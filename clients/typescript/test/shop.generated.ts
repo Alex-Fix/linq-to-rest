@@ -179,7 +179,7 @@ export const shopModel = {
         { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true, groupable: true },
       ],
       navigations: [
-        { name: "products", target: "products", collection: true, foreignKey: null },
+        { name: "products", target: "products", collection: true, foreignKey: [], links: "oneToMany", onUnlink: "detach" },
       ],
       pagination: { modes: ["cursor"], defaultPageSize: 2, maxPageSize: 200 },
     },
@@ -231,10 +231,10 @@ export const shopModel = {
         { name: "binSlot", kind: "guid", nullable: true, collection: false, filterable: true, sortable: false, writable: true },
       ],
       navigations: [
-        { name: "category", target: "categories", collection: false, foreignKey: "categoryId" },
-        { name: "bin", target: "bins", collection: false, foreignKey: null },
-        { name: "lines", target: "orderLines", collection: true, foreignKey: null },
-        { name: "labels", target: "labels", collection: true, foreignKey: null },
+        { name: "category", target: "categories", collection: false, foreignKey: ["categoryId"], links: null, onUnlink: null },
+        { name: "bin", target: "bins", collection: false, foreignKey: ["binZone", "binSlot"], links: null, onUnlink: null },
+        { name: "lines", target: "orderLines", collection: true, foreignKey: [], links: "oneToMany", onUnlink: "delete" },
+        { name: "labels", target: "labels", collection: true, foreignKey: [], links: "manyToMany", onUnlink: null },
       ],
       pagination: { modes: ["offset", "cursor"], defaultPageSize: 50, maxPageSize: 200 },
     },

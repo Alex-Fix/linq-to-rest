@@ -176,7 +176,7 @@ export const catalogModel = {
         { name: "productCount", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
       ],
       navigations: [
-        { name: "products", target: "products", collection: true, foreignKey: null },
+        { name: "products", target: "products", collection: true, foreignKey: [], links: null, onUnlink: null },
       ],
       pagination: { modes: ["offset", "cursor"], defaultPageSize: 50, maxPageSize: 200 },
     },
@@ -192,9 +192,9 @@ export const catalogModel = {
         { name: "productCount", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
       ],
       navigations: [
-        { name: "parent", target: "categories", collection: false, foreignKey: "parentId" },
-        { name: "children", target: "categories", collection: true, foreignKey: null },
-        { name: "products", target: "products", collection: true, foreignKey: null },
+        { name: "parent", target: "categories", collection: false, foreignKey: ["parentId"], links: null, onUnlink: null },
+        { name: "children", target: "categories", collection: true, foreignKey: [], links: null, onUnlink: null },
+        { name: "products", target: "products", collection: true, foreignKey: [], links: null, onUnlink: null },
       ],
       pagination: { modes: ["offset", "cursor"], defaultPageSize: 50, maxPageSize: 200 },
     },
@@ -210,7 +210,7 @@ export const catalogModel = {
         { name: "sortOrder", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true },
       ],
       navigations: [
-        { name: "product", target: "products", collection: false, foreignKey: "productId" },
+        { name: "product", target: "products", collection: false, foreignKey: ["productId"], links: null, onUnlink: null },
       ],
       pagination: { modes: ["offset", "cursor"], defaultPageSize: 50, maxPageSize: 200 },
     },
@@ -237,9 +237,9 @@ export const catalogModel = {
         { name: "imageCount", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
       ],
       navigations: [
-        { name: "category", target: "categories", collection: false, foreignKey: "categoryId" },
-        { name: "brand", target: "brands", collection: false, foreignKey: "brandId" },
-        { name: "images", target: "productImages", collection: true, foreignKey: null },
+        { name: "category", target: "categories", collection: false, foreignKey: ["categoryId"], links: null, onUnlink: null },
+        { name: "brand", target: "brands", collection: false, foreignKey: ["brandId"], links: null, onUnlink: null },
+        { name: "images", target: "productImages", collection: true, foreignKey: [], links: null, onUnlink: null },
       ],
       pagination: { modes: ["offset", "cursor"], defaultPageSize: 24, maxPageSize: 96 },
     },

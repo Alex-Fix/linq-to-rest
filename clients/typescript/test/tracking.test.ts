@@ -172,15 +172,16 @@ describe("unit of work", () => {
     expect(s.entry(product).state).toBe("modified");
   });
 
-  it("rejects collection membership changes and untracked navigation targets", async () => {
+  it("needs collection items and navigation targets to be tracked", async () => {
     const { shop: s, http } = shop();
     http.respond({ items: [chess()] });
     const product = await s.products.first();
     product.lines.push({ id: 0, sku: "X", quantity: 1, unitPrice: 1 });
     const added = s.products.add({ name: "Cube", category: { id: 5, name: "Untracked", products: [] } });
 
-    expect(() => s.entry(product).state).toThrow(/Set the foreign key/);
     expect(() => s.entry(added).state).toThrow(/Add or attach it first/);
+    s.products.remove(added);
+    await expect(s.saveChanges()).rejects.toThrow(/products.lines holds a DTO this context doesn't track/);
   });
 
   it("refuses a second instance with the same key", () => {
