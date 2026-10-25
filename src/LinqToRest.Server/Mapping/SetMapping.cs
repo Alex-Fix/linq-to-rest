@@ -59,6 +59,9 @@ internal abstract class SetMapping(RestSetModel model, Type entityType)
     /// <summary>Loads the tracked entity with the given key values, if it passes the policy filter.</summary>
     public abstract Task<object?> FindAsync(DbContext db, LambdaExpression? policyFilter, IReadOnlyList<object?> key, CancellationToken cancellationToken);
 
+    /// <summary>Loads (tracks and fixes up) the rows of a navigation query of this set that match <paramref name="predicate"/>.</summary>
+    public abstract Task LoadAsync(IQueryable rows, LambdaExpression predicate, CancellationToken cancellationToken);
+
     /// <summary><c>e =&gt; (e.Key1 == v1 &amp;&amp; …) || …</c> over the key members, matching any of <paramref name="keys"/>.</summary>
     public LambdaExpression KeyPredicate(IReadOnlyList<IReadOnlyList<object?>> keys)
     {
@@ -95,6 +98,9 @@ internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQ
 
     public override ValueTask ValidateAsync(object validator, object entity, ValidationScope scope, CancellationToken cancellationToken) =>
         ((IEntityValidator<TEntity>)validator).ValidateAsync(new EntityValidationContext<TEntity>((TEntity)entity, scope), cancellationToken);
+
+    public override Task LoadAsync(IQueryable rows, LambdaExpression predicate, CancellationToken cancellationToken) =>
+        ((IQueryable<TEntity>)rows).Where((Expression<Func<TEntity, bool>>)predicate).LoadAsync(cancellationToken);
 
     public override async Task<object?> FindAsync(DbContext db, LambdaExpression? policyFilter, IReadOnlyList<object?> key, CancellationToken cancellationToken)
     {
@@ -296,6 +302,15 @@ internal sealed class SetNavigation
     public required bool IsCollection { get; init; }
 
     public required bool IsNullable { get; init; }
+
+    /// <summary>Gets the EF Core navigation (a skip navigation for many-to-many); links change membership through it.</summary>
+    public required Microsoft.EntityFrameworkCore.Metadata.INavigationBase EfNavigation { get; init; }
+
+    /// <summary>Gets how the collection's membership changes, or null when it's read-only.</summary>
+    public RestLinkKind? Links { get; init; }
+
+    /// <summary>Gets what unlinking does to a one-to-many item.</summary>
+    public RestUnlinkBehavior? OnUnlink { get; init; }
 
     /// <summary>Gets the exposed properties holding the target's key, in its order; empty when none is configured.</summary>
     public IReadOnlyList<SetProperty> ForeignKey { get; init; } = [];

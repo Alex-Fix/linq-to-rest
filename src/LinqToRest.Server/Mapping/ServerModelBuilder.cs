@@ -91,6 +91,9 @@ internal static class ServerModelBuilder
                     IsCollection = navigation.Definition.IsCollection,
                     IsNullable = navigation.IsNullable,
                     ForeignKey = [.. navigation.ForeignKey.Select(property => properties[property])],
+                    EfNavigation = navigation.EfNavigation,
+                    Links = navigation.Links,
+                    OnUnlink = navigation.OnUnlink,
                 })],
                 [.. set.Definition.Rules.Select(rule => ResolveRule(set, rule, properties))],
                 [.. set.Definition.Validators]);
@@ -480,13 +483,47 @@ internal static class ServerModelBuilder
                 throw Invalid(set.Name, entityType, $"uses {string.Join(", ", definition.ForeignKey.Select(property => $"'{property.Name}'"))} as the foreign key of '{definition.Property.Name}', but that isn't the navigation's foreign key in the EF Core model, in order");
             }
 
+            RestLinkKind? links = null;
+            RestUnlinkBehavior? onUnlink = null;
+            if (definition.AllowLinks)
+            {
+                links = efSkip is null ? RestLinkKind.OneToMany : RestLinkKind.ManyToMany;
+                onUnlink = efSkip is null ? efNavigation!.ForeignKey.IsRequired ? RestUnlinkBehavior.Delete : RestUnlinkBehavior.Detach : null;
+                CheckLinkWrites(set, targets[0], definition, onUnlink);
+            }
+
             set.Navigations.Add(new ResolvedNavigation(definition)
             {
                 Name = definition.WireName ?? JsonNamingPolicy.CamelCase.ConvertName(definition.Property.Name),
                 Target = targets[0],
                 IsNullable = !definition.IsCollection && (!efNavigation!.IsOnDependent || !efNavigation.ForeignKey.IsRequired),
                 ForeignKey = foreignKey,
+                EfNavigation = (INavigationBase?)efNavigation ?? efSkip!,
+                Links = links,
+                OnUnlink = onUnlink,
             });
+        }
+    }
+
+    /// <summary>Links change rows of both sets (or a join row), so the sets must allow those writes.</summary>
+    private static void CheckLinkWrites(ResolvedSet set, ResolvedSet target, NavigationDefinition definition, RestUnlinkBehavior? onUnlink)
+    {
+        var name = definition.Property.Name;
+        if ((set.Definition.Writes & WriteOperations.Update) == 0)
+        {
+            throw Invalid(set.Name, set.Definition.EntityType, $"allows links on '{name}', but doesn't allow updates. Call AllowWrites(...)");
+        }
+
+        // One-to-many links rewrite the item's foreign key; unlinking a required one deletes the item.
+        var needed = onUnlink switch
+        {
+            RestUnlinkBehavior.Delete => WriteOperations.Update | WriteOperations.Delete,
+            RestUnlinkBehavior.Detach => WriteOperations.Update,
+            _ => WriteOperations.None,
+        };
+        if ((target.Definition.Writes & needed) != needed)
+        {
+            throw Invalid(set.Name, set.Definition.EntityType, $"allows links on '{name}', but the set '{target.Name}' doesn't allow {(needed.HasFlag(WriteOperations.Delete) ? "updates and deletes (unlinking deletes its rows)" : "updates")}");
         }
     }
 
@@ -506,6 +543,8 @@ internal static class ServerModelBuilder
             IsCollection = navigation.Definition.IsCollection,
             IsNullable = navigation.IsNullable,
             ForeignKey = [.. navigation.ForeignKey.Select(property => property.Name)],
+            Links = navigation.Links,
+            OnUnlink = navigation.OnUnlink,
         })],
     };
 
@@ -623,5 +662,11 @@ internal static class ServerModelBuilder
         public bool IsNullable { get; init; }
 
         public IReadOnlyList<ResolvedProperty> ForeignKey { get; init; } = [];
+
+        public required INavigationBase EfNavigation { get; init; }
+
+        public RestLinkKind? Links { get; init; }
+
+        public RestUnlinkBehavior? OnUnlink { get; init; }
     }
 }

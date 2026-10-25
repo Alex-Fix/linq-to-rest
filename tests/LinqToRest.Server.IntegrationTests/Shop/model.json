@@ -57,7 +57,9 @@
         {"name": "name", "type": "string", "writable": true, "sortable": true, "groupable": true},
         {"name": "contact", "type": "Contact", "nullable": true, "writable": true}
       ],
-      "navigations": [{"name": "products", "target": "products", "collection": true}]
+      "navigations": [
+        {"name": "products", "target": "products", "collection": true, "links": "oneToMany", "onUnlink": "detach"}
+      ]
     },
     {
       "name": "labels",
@@ -75,15 +77,15 @@
       "name": "orderLines",
       "type": "OrderLine",
       "key": ["id"],
-      "writes": [],
+      "writes": ["update", "delete"],
       "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
-        {"name": "productId", "type": "int32"},
-        {"name": "sku", "type": "string"},
-        {"name": "quantity", "type": "int32"},
-        {"name": "unitPrice", "type": "decimal"},
-        {"name": "shipping", "type": "Place", "nullable": true, "filterable": false}
+        {"name": "productId", "type": "int32", "writable": true},
+        {"name": "sku", "type": "string", "writable": true},
+        {"name": "quantity", "type": "int32", "writable": true},
+        {"name": "unitPrice", "type": "decimal", "writable": true},
+        {"name": "shipping", "type": "Place", "nullable": true, "writable": true, "filterable": false}
       ],
       "navigations": []
     },
@@ -123,8 +125,8 @@
       "navigations": [
         {"name": "category", "target": "categories", "nullable": true, "foreignKey": ["categoryId"]},
         {"name": "bin", "target": "bins", "nullable": true, "foreignKey": ["binZone", "binSlot"]},
-        {"name": "lines", "target": "orderLines", "collection": true},
-        {"name": "labels", "target": "labels", "collection": true}
+        {"name": "lines", "target": "orderLines", "collection": true, "links": "oneToMany", "onUnlink": "delete"},
+        {"name": "labels", "target": "labels", "collection": true, "links": "manyToMany"}
       ]
     }
   ]

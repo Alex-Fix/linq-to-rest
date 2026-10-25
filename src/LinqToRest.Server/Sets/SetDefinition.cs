@@ -146,6 +146,9 @@ internal sealed class NavigationDefinition(PropertyInfo property, LambdaExpressi
 
     public string? WireName { get; set; }
 
+    /// <summary>Gets or sets whether batches may change the collection's membership.</summary>
+    public bool AllowLinks { get; set; }
+
     /// <summary>Gets or sets the foreign key members, in the target's key order; empty when none is exposed.</summary>
     public IReadOnlyList<PropertyInfo> ForeignKey { get; set; } = [];
 }

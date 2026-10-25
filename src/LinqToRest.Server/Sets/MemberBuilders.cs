@@ -239,4 +239,16 @@ public sealed class CollectionNavigationBuilder
         _navigation.WireName = name;
         return this;
     }
+
+    /// <summary>
+    /// Lets batches add items to and remove items from the collection (<c>link</c> / <c>unlink</c>). Default: its
+    /// membership is read-only. The set must allow updates; for a one-to-many collection the item's set must allow
+    /// updates too, and deletes when its foreign key is required (unlinking deletes the item).
+    /// </summary>
+    /// <returns>The same builder.</returns>
+    public CollectionNavigationBuilder AllowLinks()
+    {
+        _navigation.AllowLinks = true;
+        return this;
+    }
 }

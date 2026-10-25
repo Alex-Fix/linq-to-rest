@@ -27,8 +27,8 @@ public sealed class ProductSet : IEntitySetConfiguration<Product>
         builder.Property(p => p.BinZone);
         builder.Property(p => p.BinSlot);
         builder.HasOne(p => p.Bin).WithForeignKey(p => new { p.BinZone, p.BinSlot });
-        builder.HasMany(p => p.Lines);
-        builder.HasMany(p => p.Labels);
+        builder.HasMany(p => p.Lines).AllowLinks();
+        builder.HasMany(p => p.Labels).AllowLinks();
         builder.HasPagination(p => p.DefaultPageSize(10).MaxPageSize(20).MaxSkip(100));
     }
 }
@@ -40,7 +40,7 @@ public sealed class CategorySet : IEntitySetConfiguration<Category>
         builder.ToSet("categories").AllowWrites(WriteOperations.Insert | WriteOperations.Update);
         builder.Property(c => c.Name).IsSortable().IsGroupable();
         builder.Value(c => c.Contact);
-        builder.HasMany(c => c.Products);
+        builder.HasMany(c => c.Products).AllowLinks();
         builder.HasPagination(p => p.Modes(PaginationModes.Cursor));
     }
 }
@@ -67,7 +67,7 @@ public sealed class OrderLineSet : IEntitySetConfiguration<OrderLine>
 {
     public void Configure(EntitySetBuilder<OrderLine> builder)
     {
-        builder.ToSet("orderLines");
+        builder.ToSet("orderLines").AllowWrites(WriteOperations.Update | WriteOperations.Delete);
         builder.Property(l => l.ProductId);
         builder.Property(l => l.Sku);
         builder.Property(l => l.Quantity);

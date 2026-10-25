@@ -107,6 +107,41 @@ public sealed class SetConfigurationTests
     }
 
     [Fact]
+    public void Links_are_exported_with_what_unlinking_does()
+    {
+        var model = Build(o => o
+            .AddSet<Product>(b => b.ToSet("products").AllowWrites(WriteOperations.Update).HasMany(p => p.Lines).AllowLinks())
+            .AddSet<Line>(b => b.ToSet("lines").AllowWrites(WriteOperations.Update | WriteOperations.Delete))
+            .AddSet<Tag>(b => b.ToSet("tags").AllowWrites(WriteOperations.Update).HasMany(t => t.Products).AllowLinks())).Model;
+
+        Assert.True(model.FindSet("products")!.FindNavigation("lines") is { Links: RestLinkKind.OneToMany, OnUnlink: RestUnlinkBehavior.Delete });
+        Assert.True(model.FindSet("tags")!.FindNavigation("products") is { Links: RestLinkKind.ManyToMany, OnUnlink: null });
+    }
+
+    [Theory]
+    [InlineData(WriteOperations.None, WriteOperations.Update | WriteOperations.Delete, "allows links on 'Lines', but doesn't allow updates")]
+    [InlineData(WriteOperations.Update, WriteOperations.Update, "the set 'lines' doesn't allow updates and deletes (unlinking deletes its rows)")]
+    [InlineData(WriteOperations.Update, WriteOperations.None, "the set 'lines' doesn't allow updates and deletes")]
+    public void Links_need_the_writes_they_imply(WriteOperations parent, WriteOperations items, string expected)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Build(o => o
+            .AddSet<Product>(b => b.ToSet("products").AllowWrites(parent).HasMany(p => p.Lines).AllowLinks())
+            .AddSet<Line>(b => b.ToSet("lines").AllowWrites(items))));
+
+        Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Many_to_many_links_leave_the_item_set_read_only()
+    {
+        var model = Build(o => o
+            .AddSet<Tag>(b => b.ToSet("tags").AllowWrites(WriteOperations.Update).HasMany(t => t.Products).AllowLinks())
+            .AddSet<Product>(b => b.ToSet("products"))).Model;
+
+        Assert.Equal(WriteOperations.None, model.FindSet("products")!.Writes);
+    }
+
+    [Fact]
     public void Many_to_many_over_a_join_table_with_columns_is_rejected()
     {
         var error = Assert.Throws<InvalidOperationException>(() => Build(o => o
