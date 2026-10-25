@@ -85,7 +85,8 @@ public sealed class LinkTrackingTests
         await shop.SaveChangesAsync(Token);
 
         JsonEqual("""{"key":{"id":1},"token":"00000001-0000-0000-0000-000000000000"}""", http.LastJson.GetProperty("operations")[0].GetProperty("item"));
-        Assert.Equal((null, null), (chess.CategoryId, chess.Category));
+        Assert.Null(chess.CategoryId);
+        Assert.Null(chess.Category);
         Assert.Equal(EntityState.Unchanged, shop.Entry(chess).State);
     }
 

@@ -61,7 +61,7 @@ public sealed class ProductSet : IEntitySetConfiguration<Product>
         b.Property(p => p.CategoryId);
         b.Computed("tags", p => p.Tags.Select(t => t.Value).ToList());   // read-only, computed in SQL
         b.HasOne(p => p.Category).WithForeignKey(p => p.CategoryId);    // to another configured set
-        b.HasMany(p => p.Lines);
+        b.HasMany(p => p.Lines).AllowLinks();                           // membership changes from the parent
         b.HasPagination(p => p.DefaultPageSize(20).MaxPageSize(100));
     }
 }
@@ -243,6 +243,37 @@ await shop.SaveChangesAsync();
   starts as `null!` until you set it); TypeScript gets readonly interfaces and proxies with `eq(null)`/`ne(null)`.
 - Collections of value objects (`OwnsMany`, complex collections) aren't supported yet.
 
+## Collection links
+
+A collection's membership is read-only until `AllowLinks()`; then clients add and remove items from the parent side,
+saved as `link` / `unlink` operations in the same atomic batch:
+
+```csharp
+b.HasMany(p => p.Lines).AllowLinks();     // one-to-many: the line's foreign key needn't be exposed
+b.HasMany(p => p.Labels).AllowLinks();    // many-to-many over a pure join table (an EF Core skip navigation)
+b.HasOne(p => p.Bin).WithForeignKey(p => new { p.BinZone, p.BinSlot });   // composite foreign keys, in key order
+```
+
+```csharp
+var chess = await shop.Products.Include(p => p.Labels).SingleAsync(p => p.Id == 1);
+shop.OrderLines.Add(line);
+chess.Lines.Add(line);           // insert + link (by ref)
+chess.Labels.Remove(sale);       // unlink: deletes the join row
+await shop.SaveChangesAsync();   // TypeScript: product.lines.push(line), product.labels.splice(…), saveChanges()
+```
+
+- **What unlinking does** follows the EF Core relationship: a required foreign key deletes the item, an optional one
+  is set to null. The model document says which (`links`, `onUnlink`), so both clients behave the same.
+- **Startup checks:** the set needs updates; for one-to-many the item's set needs updates too, and deletes when
+  unlinking deletes. Many-to-many only changes the join table, so the item's set can stay read-only. A join entity with
+  columns of its own isn't a skip navigation: expose it as a set with two `HasOne`s.
+- **On the server,** parent and item load through their policies (hidden rows and non-members are 404), a one-to-many
+  item's token is checked, only the affected membership is loaded, and the item set's update hook runs when its row
+  changes. A foreign key set by a link is checked by the database, like one set through `refs`.
+- **In the clients,** items must be tracked (added or attached) first; links go after inserts and updates and before
+  deletes; afterwards a linked item points at its parent, a detached one at nothing and a deleted one is detached.
+  Changing a collection without links still throws.
+
 ## Validation
 
 Rules run on every insert and update of a batch, after all its values are applied and before anything is written;
@@ -334,8 +365,14 @@ The list is closed: anything else is rejected.
   {"id":"o0","op":"insert","set":"categories","values":{"name":"Puzzles"}},
   {"id":"o1","op":"insert","set":"products","values":{"name":"Cube","price":9.5},"refs":{"categoryId":"o0"}},
   {"id":"o2","op":"update","set":"products","key":{"id":7},"values":{"price":12},"token":"…"},
-  {"id":"o3","op":"delete","set":"products","key":{"id":9},"token":"…"}]}
+  {"id":"o3","op":"delete","set":"products","key":{"id":9},"token":"…"},
+  {"id":"o4","op":"link","set":"products","key":{"id":7},"navigation":"labels","item":{"key":{"id":3}}},
+  {"id":"o5","op":"unlink","set":"categories","ref":"o0","navigation":"products","item":{"ref":"o1"}}]}
 ```
+
+`link` / `unlink` name the parent by `key` or by `ref` to an earlier insert, a collection `navigation`, and an `item`
+(`key` or `ref`, plus `token` for a one-to-many item whose set has one). A composite foreign key's `refs` name every
+member, all pointing at the same insert.
 
 → `{"results":[{"id":"o0","value":{…}},…]}`, each value re-read through its set.
 

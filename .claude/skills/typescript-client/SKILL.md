@@ -29,6 +29,9 @@ generator input changed by `docs/plans/2026-10-20-entity-sets-design.md`.
   models are `const` `ValueTypeModel`s (nested first) referenced by `kind: "value"` members, so tracking and
   validation never look them up. Saves write values in model member order, as the .NET client does.
 
+- Navigation models carry `foreignKey` as a list (composite keys), `links` and `onUnlink`. Linkable collections are
+  plain arrays diffed by identity against their snapshots; links go after inserts and updates and before deletes, in
+  the same order as the .NET client (golden `batch-link.json`).
 - `*.generated.ts` files come from `linqtorest-gen ts` reading a model document; never edit them, and they're
   excluded from Prettier and ESLint.
 - `clients/typescript/test/shop.generated.ts` is also the generator's snapshot (`tests/LinqToRest.CodeGen.UnitTests`),
