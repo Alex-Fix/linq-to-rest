@@ -88,6 +88,31 @@ describe("TypeScript client against samples/Catalog.Api", () => {
     expect(streamed).toEqual(seen);
   });
 
+  it("pages with cursors through a nullable member, nulls first", async () => {
+    const catalog = client();
+    const sorted = catalog.products
+      .orderBy((p) => p.dimensions.weightKg)
+      .select((p) => ({ sku: p.sku, weight: p.dimensions.weightKg }));
+    const seen: { sku: string; weight: number | null }[] = [];
+    let page = await sorted.take(7).toCursorPage({ includeTotalCount: true });
+    const total = page.totalCount;
+    seen.push(...page.items);
+    while (page.nextCursor !== undefined) {
+      page = await sorted.after(page.nextCursor).take(7).toCursorPage();
+      seen.push(...page.items);
+    }
+
+    // Products without dimensions come first, then weights never decrease; every row exactly once.
+    const weights = seen.map((row) => row.weight);
+    const firstWeight = weights.findIndex((weight) => weight !== null);
+    expect(firstWeight).toBeGreaterThan(0);
+    expect(weights.slice(firstWeight)).not.toContain(null);
+    const present = weights.slice(firstWeight) as number[];
+    expect(present).toEqual([...present].sort((a, b) => a - b));
+    expect(new Set(seen.map((row) => row.sku)).size).toBe(total);
+    expect(seen.length).toBe(total);
+  });
+
   it("hides drafts from everyone but editors", async () => {
     const visitors = await client().products.count();
     const editors = await client({ editor: true }).products.count();
