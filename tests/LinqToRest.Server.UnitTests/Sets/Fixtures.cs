@@ -53,8 +53,18 @@ public sealed class Line
 {
     public int Id { get; set; }
     public int ProductId { get; set; }
+    public int? ShelfAisle { get; set; }
+    public int? ShelfNumber { get; set; }
+    public Shelf? Shelf { get; set; }
     public int Quantity { get; set; }
     public Place? Shipping { get; set; }
+}
+
+/// <summary>A composite key, referenced by <see cref="Line"/> through two members.</summary>
+public sealed class Shelf
+{
+    public int Aisle { get; set; }
+    public int Number { get; set; }
 }
 
 public sealed record Dimensions
@@ -105,6 +115,8 @@ public sealed class ShopContext(DbContextOptions<ShopContext> options) : DbConte
         modelBuilder.Entity<Supplier>().OwnsOne(s => s.Contact);
         modelBuilder.Entity<Category>().OwnsOne(c => c.Address, address => address.Property(a => a.City).IsRequired());
         modelBuilder.Entity<Line>().OwnsOne(l => l.Shipping, shipping => shipping.ToJson());
+        modelBuilder.Entity<Shelf>().HasKey(s => new { s.Aisle, s.Number });
+        modelBuilder.Entity<Line>().HasOne(l => l.Shelf).WithMany().HasForeignKey(l => new { l.ShelfAisle, l.ShelfNumber });
     }
 }
 

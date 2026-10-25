@@ -11,7 +11,8 @@ public abstract class SelectTests(ShopFixture shop)
         JsonAssert.Equal("""
             {"id":1,"name":"Chess","description":"Wooden board","price":20,"status":"Active",
              "version":"00000001-0000-0000-0000-000000000000","createdAt":"2026-01-10T09:30:00Z","releasedOn":"2025-12-01",
-             "rating":4.5,"isFeatured":true,"categoryId":2,"size":{"width":40,"height":40,"weight":{"amount":1.2,"unit":"kg"}},
+             "rating":4.5,"isFeatured":true,"categoryId":2,"binZone":"0a000000-0000-0000-0000-000000000001",
+             "binSlot":"0b000000-0000-0000-0000-000000000001","size":{"width":40,"height":40,"weight":{"amount":1.2,"unit":"kg"}},
              "origin":{"country":"IN","city":null},"tags":["classic","sale"],"categoryName":"Games"}
             """, items[0]);
         Assert.Equal("Notebook", items[1].GetProperty("name").GetString());

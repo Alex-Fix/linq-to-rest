@@ -69,7 +69,7 @@ public sealed class SetConfigurationTests
         Assert.Equal(typeof(Product), products.EntityType);
         Assert.Equal(nameof(Product.Name), products.FindProperty("name")!.EntityProperty!.Name);
         Assert.Null(products.FindProperty("label")!.EntityProperty);
-        Assert.Same(products.FindProperty("categoryId"), products.FindNavigation("category")!.ForeignKey);
+        Assert.Same(products.FindProperty("categoryId"), Assert.Single(products.FindNavigation("category")!.ForeignKey));
         Assert.Same(server.FindSet("categories"), products.FindNavigation("category")!.Target);
         Assert.Equal(typeof(SetPolicy<Product>), products.PolicyType);
     }
@@ -96,6 +96,49 @@ public sealed class SetConfigurationTests
         Assert.NotNull(model.FindSet("categories")!.FindProperty("title"));
     }
 
+    [Fact]
+    public void Composite_foreign_keys_are_exported_in_key_order()
+    {
+        var model = Build(o => o
+            .AddSet<Line>(b =>
+            {
+                b.ToSet("lines").Property(l => l.ShelfAisle);
+                b.Property(l => l.ShelfNumber);
+                b.HasOne(l => l.Shelf).WithForeignKey(l => new { l.ShelfAisle, l.ShelfNumber });
+            })
+            .AddSet<Shelf>(b => b.ToSet("shelves"))).Model;
+
+        Assert.Equal(["shelfAisle", "shelfNumber"], model.FindSet("lines")!.FindNavigation("shelf")!.ForeignKey);
+    }
+
+    [Theory]
+    [InlineData("outOfOrder", "isn't the navigation's foreign key in the EF Core model, in order")]
+    [InlineData("partial", "isn't the navigation's foreign key in the EF Core model, in order")]
+    [InlineData("unexposed", "uses 'ShelfNumber' in the foreign key of 'Shelf', but it isn't exposed")]
+    public void Invalid_composite_foreign_key_is_rejected(string problem, string expected)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => Build(o => o
+            .AddSet<Line>(b =>
+            {
+                b.ToSet("lines").Property(l => l.ShelfAisle);
+                if (problem != "unexposed")
+                {
+                    b.Property(l => l.ShelfNumber);
+                }
+
+                var shelf = b.HasOne(l => l.Shelf);
+                _ = problem switch
+                {
+                    "outOfOrder" => shelf.WithForeignKey(l => new { l.ShelfNumber, l.ShelfAisle }),
+                    "partial" => shelf.WithForeignKey(l => l.ShelfAisle),
+                    _ => shelf.WithForeignKey(l => new { l.ShelfAisle, l.ShelfNumber }),
+                };
+            })
+            .AddSet<Shelf>(b => b.ToSet("shelves"))));
+
+        Assert.Contains(expected, error.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("label", "isn't a property mapped by EF Core")]
     [InlineData("category", "isn't a property mapped by EF Core")]
@@ -104,7 +147,7 @@ public sealed class SetConfigurationTests
     [InlineData("computedNavigation", "of unsupported type Category")]
     [InlineData("hasOneOnCollection", "isn't a reference navigation")]
     [InlineData("unexposedForeignKey", "it isn't exposed. Call Property(...)")]
-    [InlineData("wrongForeignKey", "isn't that navigation's foreign key")]
+    [InlineData("wrongForeignKey", "isn't the navigation's foreign key in the EF Core model")]
     [InlineData("noName", "has no name. Call ToSet(...)")]
     [InlineData("badName", "set name 'Products' is invalid")]
     [InlineData("badWireName", "invalid or duplicate member name 'Title'")]

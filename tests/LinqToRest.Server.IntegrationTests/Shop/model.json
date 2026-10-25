@@ -34,6 +34,19 @@
   ],
   "sets": [
     {
+      "name": "bins",
+      "type": "Bin",
+      "key": ["zone", "slot"],
+      "writes": ["insert"],
+      "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "zone", "type": "guid", "sortable": true},
+        {"name": "slot", "type": "guid", "sortable": true},
+        {"name": "label", "type": "string", "writable": true, "rules": {"maxLength": 20}}
+      ],
+      "navigations": []
+    },
+    {
       "name": "categories",
       "type": "Category",
       "key": ["id"],
@@ -91,10 +104,13 @@
         {"name": "size", "type": "Dimensions", "writable": true},
         {"name": "origin", "type": "Place", "nullable": true, "writable": true},
         {"name": "tags", "type": "string", "collection": true},
-        {"name": "categoryName", "type": "string", "nullable": true}
+        {"name": "categoryName", "type": "string", "nullable": true},
+        {"name": "binZone", "type": "guid", "nullable": true, "writable": true},
+        {"name": "binSlot", "type": "guid", "nullable": true, "writable": true}
       ],
       "navigations": [
         {"name": "category", "target": "categories", "nullable": true, "foreignKey": ["categoryId"]},
+        {"name": "bin", "target": "bins", "nullable": true, "foreignKey": ["binZone", "binSlot"]},
         {"name": "lines", "target": "orderLines", "collection": true}
       ]
     }

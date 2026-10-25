@@ -90,7 +90,7 @@ internal static class ServerModelBuilder
                     Target = mappings[navigation.Target!],
                     IsCollection = navigation.Definition.IsCollection,
                     IsNullable = navigation.IsNullable,
-                    ForeignKey = navigation.ForeignKey is null ? null : properties[navigation.ForeignKey],
+                    ForeignKey = [.. navigation.ForeignKey.Select(property => properties[property])],
                 })],
                 [.. set.Definition.Rules.Select(rule => ResolveRule(set, rule, properties))],
                 [.. set.Definition.Validators]);
@@ -457,15 +457,18 @@ internal static class ServerModelBuilder
                     : $"exposes the navigation '{definition.Property.Name}' to {definition.TargetEntity.Name}, which has several sets");
             }
 
-            ResolvedProperty? foreignKey = null;
-            if (definition.ForeignKey is { } foreignKeyInfo)
+            var foreignKey = new List<ResolvedProperty>();
+            foreach (var foreignKeyInfo in definition.ForeignKey)
             {
-                foreignKey = set.Properties.Find(property => property.Member.Property == foreignKeyInfo)
-                    ?? throw Invalid(set.Name, entityType, $"uses '{foreignKeyInfo.Name}' as the foreign key of '{definition.Property.Name}', but it isn't exposed. Call Property(...)");
-                if (!efNavigation.IsOnDependent || efNavigation.ForeignKey.Properties is not [{ PropertyInfo: { } efForeignKey }] || efForeignKey != foreignKeyInfo)
-                {
-                    throw Invalid(set.Name, entityType, $"uses '{foreignKeyInfo.Name}' as the foreign key of '{definition.Property.Name}', but it isn't that navigation's foreign key in the EF Core model");
-                }
+                foreignKey.Add(set.Properties.Find(property => property.Member.Property == foreignKeyInfo)
+                    ?? throw Invalid(set.Name, entityType, $"uses '{foreignKeyInfo.Name}' in the foreign key of '{definition.Property.Name}', but it isn't exposed. Call Property(...)"));
+            }
+
+            // Every member of the EF foreign key, in its order (which follows the target's key).
+            if (foreignKey.Count > 0
+                && (!efNavigation.IsOnDependent || !efNavigation.ForeignKey.Properties.Select(property => property.PropertyInfo).SequenceEqual(definition.ForeignKey)))
+            {
+                throw Invalid(set.Name, entityType, $"uses {string.Join(", ", definition.ForeignKey.Select(property => $"'{property.Name}'"))} as the foreign key of '{definition.Property.Name}', but that isn't the navigation's foreign key in the EF Core model, in order");
             }
 
             set.Navigations.Add(new ResolvedNavigation(definition)
@@ -493,7 +496,7 @@ internal static class ServerModelBuilder
             Target = navigation.Target!.Name,
             IsCollection = navigation.Definition.IsCollection,
             IsNullable = navigation.IsNullable,
-            ForeignKey = navigation.ForeignKey is null ? [] : [navigation.ForeignKey.Name],
+            ForeignKey = [.. navigation.ForeignKey.Select(property => property.Name)],
         })],
     };
 
@@ -610,6 +613,6 @@ internal static class ServerModelBuilder
 
         public bool IsNullable { get; init; }
 
-        public ResolvedProperty? ForeignKey { get; init; }
+        public IReadOnlyList<ResolvedProperty> ForeignKey { get; init; } = [];
     }
 }

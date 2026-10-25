@@ -397,11 +397,20 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
 
     private async Task ApplyReferencesAsync(SetMapping mapping, object entity, BatchOperation operation, string location, CancellationToken cancellationToken)
     {
-        foreach (var (name, target) in operation.Refs ?? new Dictionary<string, string>())
+        var refs = operation.Refs ?? new Dictionary<string, string>();
+        var used = 0;
+        foreach (var navigation in mapping.Navigations.Where(navigation => navigation.ForeignKey.Count > 0))
         {
-            var navigation = mapping.Navigations.FirstOrDefault(navigation => navigation.ForeignKey?.Name == name);
-            if (navigation is null || operation.Values?.ContainsKey(name) == true
-                || !_applied.TryGetValue(target, out var referenced) || referenced.Operation.Op != BatchOperationKind.Insert || referenced.Mapping != navigation.Target)
+            // A ref names every member of one foreign key, all pointing at the same earlier insert of the target set.
+            var targets = navigation.ForeignKey.Select(property => refs.GetValueOrDefault(property.Name)).ToList();
+            if (targets.TrueForAll(target => target is null))
+            {
+                continue;
+            }
+
+            used += targets.Count;
+            if (targets.Distinct().Count() != 1 || navigation.ForeignKey.Any(property => operation.Values?.ContainsKey(property.Name) == true)
+                || !_applied.TryGetValue(targets[0]!, out var referenced) || referenced.Operation.Op != BatchOperationKind.Insert || referenced.Mapping != navigation.Target)
             {
                 throw Invalid(ErrorCodes.InvalidBatch, $"{location}/refs", operation);
             }
@@ -409,19 +418,30 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
             navigation.EntityProperty.SetValue(entity, referenced.Entity);
         }
 
+        if (used != refs.Count)
+        {
+            throw Invalid(ErrorCodes.InvalidBatch, $"{location}/refs", operation);
+        }
+
         // A foreign key written by value must point at a row the caller can see.
         foreach (var navigation in mapping.Navigations)
         {
-            if (navigation.ForeignKey is not { } foreignKey || operation.Values?.TryGetValue(foreignKey.Name, out var element) != true
-                || JsonValues.Read(element, foreignKey.ClrType, $"{location}/values/{foreignKey.Name}") is not { } value)
+            if (navigation.ForeignKey.FirstOrDefault(property => operation.Values?.ContainsKey(property.Name) == true) is not { } sent)
+            {
+                continue;
+            }
+
+            // The whole key as the row now holds it: a composite key may be written in part.
+            var key = navigation.ForeignKey.Select(property => property.EntityProperty!.GetValue(entity)).ToList();
+            if (key.Contains(null))
             {
                 continue;
             }
 
             var target = navigation.Target;
-            if (await target.FindAsync(db, policies.Filter(target), [value], cancellationToken).ConfigureAwait(false) is null)
+            if (await target.FindAsync(db, policies.Filter(target), key, cancellationToken).ConfigureAwait(false) is null)
             {
-                throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values/{foreignKey.Name}", operation);
+                throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values/{sent.Name}", operation);
             }
         }
     }

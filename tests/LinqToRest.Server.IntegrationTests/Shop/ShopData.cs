@@ -8,6 +8,8 @@ public static class ShopData
         var games = new Category { Id = 2, Name = "Games", TenantId = 1, Contact = new Contact { Email = "games@shop.example", Phone = "+380 44 000" } };
         var tools = new Category { Id = 3, Name = "Tools", TenantId = 2, Contact = new Contact { Email = "tools@shop.example" } };
         db.Categories.AddRange(books, games, tools);
+        var a1 = Bins.A1;
+        db.Bins.AddRange(a1, Bins.A2);
         db.Products.AddRange(
             Product(1, "Chess", 20m, ProductStatus.Active, games, new DateTime(2026, 1, 10, 9, 30, 0, DateTimeKind.Utc), new DateOnly(2025, 12, 1), 4.5, featured: true, ["sale", "classic"],
                 [Line(11, "C1", 2, 20m, new Place("UA", "Lviv")), Line(12, "C2", 1, 18m)], description: "Wooden board",
@@ -18,8 +20,17 @@ public static class ShopData
             Product(4, "Hammer", 15m, ProductStatus.Active, tools, new DateTime(2026, 1, 20, 12, 0, 0, DateTimeKind.Utc), null, 3.2, featured: false, [], [Line(41, "H1", 0, 15m)], tenant: 2, size: Size(30, 10, 0.8)),
             Product(5, "Notebook", 3m, ProductStatus.Retired, null, new DateTime(2026, 4, 1, 10, 0, 0, DateTimeKind.Utc), null, 3.9, featured: false, ["sale"], [], description: "  A5 dotted "),
             Product(6, "Puzzle", 20m, ProductStatus.Active, games, new DateTime(2026, 5, 1, 16, 45, 0, DateTimeKind.Utc), new DateOnly(2026, 4, 15), 4.1, featured: true, [], []));
+        db.Products.Local.Single(product => product.Id == 1).Bin = a1;
         db.SaveChanges();
         db.ResetSequences();
+    }
+
+    /// <summary>The seeded bins (Chess sits in A1), with fixed keys so tests can name them.</summary>
+    public static class Bins
+    {
+        public static Bin A1 => new() { Zone = new Guid("0a000000-0000-0000-0000-000000000001"), Slot = new Guid("0b000000-0000-0000-0000-000000000001"), Label = "A1" };
+
+        public static Bin A2 => new() { Zone = new Guid("0a000000-0000-0000-0000-000000000001"), Slot = new Guid("0b000000-0000-0000-0000-000000000002"), Label = "A2" };
     }
 
     private static Product Product(

@@ -297,8 +297,8 @@ internal sealed class SetNavigation
 
     public required bool IsNullable { get; init; }
 
-    /// <summary>Gets the exposed property holding the target's key, if configured.</summary>
-    public SetProperty? ForeignKey { get; init; }
+    /// <summary>Gets the exposed properties holding the target's key, in its order; empty when none is configured.</summary>
+    public IReadOnlyList<SetProperty> ForeignKey { get; init; } = [];
 
     public override string ToString() => Name;
 }

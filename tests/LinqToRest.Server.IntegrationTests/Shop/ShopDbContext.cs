@@ -8,6 +8,7 @@ public sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbC
 {
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<Bin> Bins => Set<Bin>();
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
@@ -54,6 +55,13 @@ public sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbC
             product.HasMany(p => p.Lines).WithOne().HasForeignKey(l => l.ProductId);
             product.ComplexProperty(p => p.Size, size => size.ComplexProperty(d => d.Weight));
             product.ComplexProperty(p => p.Origin);
+            product.HasOne(p => p.Bin).WithMany().HasForeignKey(p => new { p.BinZone, p.BinSlot });
+        });
+        modelBuilder.Entity<Bin>(bin =>
+        {
+            bin.HasKey(b => new { b.Zone, b.Slot });
+            bin.Property(b => b.Zone).ValueGeneratedOnAdd();
+            bin.Property(b => b.Slot).ValueGeneratedOnAdd();
         });
         modelBuilder.Entity<Category>().OwnsOne(c => c.Contact);
         modelBuilder.Entity<OrderLine>().OwnsOne(l => l.Shipping, shipping => shipping.ToJson());
