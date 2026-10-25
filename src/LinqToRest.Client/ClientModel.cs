@@ -194,7 +194,7 @@ public sealed class ClientModel
 
         return new ClientNavigation(member, model, target)
         {
-            ForeignKey = model.ForeignKey is [var name] ? set.Properties.Single(property => property.WireName == name) : null,
+            ForeignKey = [.. model.ForeignKey.Select(name => set.Properties.Single(property => property.WireName == name))],
         };
     }
 
@@ -574,7 +574,14 @@ internal sealed class ClientNavigation(MemberBinding binding, RestNavigationMode
 
     public bool IsNullable => model.IsNullable;
 
-    public ClientProperty? ForeignKey { get; init; }
+    /// <summary>Gets the properties holding the target's key, in its order; empty when none is exposed.</summary>
+    public IReadOnlyList<ClientProperty> ForeignKey { get; init; } = [];
+
+    /// <summary>Gets how the collection's membership changes, or null when it's read-only.</summary>
+    public RestLinkKind? Links => model.Links;
+
+    /// <summary>Gets what unlinking does to a one-to-many item.</summary>
+    public RestUnlinkBehavior? OnUnlink => model.OnUnlink;
 
     public Func<object, object?> Get => binding.Get;
 

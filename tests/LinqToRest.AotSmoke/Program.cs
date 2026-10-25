@@ -15,6 +15,7 @@ var scenarios = new (string Name, Func<Task> Run)[]
     ("projections", Projections),
     ("count and any", CountAndAny),
     ("tracking and save", TrackingAndSave),
+    ("links", Links),
     ("validation", Validation),
     ("grouping", Grouping),
     ("value types", ValueTypes),
@@ -156,6 +157,27 @@ static async Task TrackingAndSave()
     Check(operations.Count == 3 && operations.SequenceEqual([("insert", "categories"), ("insert", "products"), ("update", "products")]), "batch operations");
     Check(chess.Version == new Guid("00000002-0000-0000-0000-000000000000") && (cube.Id, cube.CategoryId, cube.Category.Id) == (42, 7, 7), "saved values written back");
     Check(shop.Entry(cube).State == EntityState.Unchanged, "saved state");
+}
+
+static async Task Links()
+{
+    var (shop, http) = Create();
+    http.Respond($$"""{"items":[{{Rows.Chess}}]}""");
+    var chess = Single(await shop.Products.Take(1).ToListAsync());
+    var games = new CategoryDto { Name = "Games" };
+    var label = new LabelDto { Id = 3, Name = "Eco" };
+    shop.Categories.Add(games);
+    shop.Labels.Attach(label);
+    games.Products.Add(chess);
+    chess.Labels.Add(label);
+    http.Respond("""{"results":[{"id":"o0","value":{"id":7,"name":"Games"}},{"id":"o1"},{"id":"o2"}]}""");
+
+    Check(await shop.SaveChangesAsync() == 3, "saved operations");
+
+    using var batch = JsonDocument.Parse(http.LastBody);
+    var operations = batch.RootElement.GetProperty("operations").EnumerateArray().Select(op => (op.GetProperty("op").GetString(), op.GetProperty("set").GetString())).ToList();
+    Check(operations.SequenceEqual([("insert", "categories"), ("link", "products"), ("link", "categories")]), "link operations (in detection order)");
+    Check((chess.CategoryId, chess.Category) == (7, games) && shop.Entry(chess).State == EntityState.Unchanged, "linked item points at its parent");
 }
 
 static async Task Validation()

@@ -15,7 +15,7 @@ public sealed class ClientModelTests
         Assert.Equal(["Id", "Text", "Kind", "Score", "Labels", "AuthorId"], notes.Properties.Select(property => property.Name));
         Assert.True(notes.Properties[0].IsKey);
         Assert.Same(model.FindSet(typeof(Author)), notes.Navigations.Single().Target);
-        Assert.Same(notes.Properties[^1], notes.Navigations.Single().ForeignKey);
+        Assert.Same(notes.Properties[^1], Assert.Single(notes.Navigations.Single().ForeignKey));
         Assert.Null(notes.FindProperty("local"));
     }
 

@@ -1,0 +1,53 @@
+{
+  "v": 1,
+  "operations": [
+    {
+      "id": "o0",
+      "op": "insert",
+      "set": "labels",
+      "values": {
+        "name": "Sale"
+      }
+    },
+    {
+      "id": "o1",
+      "op": "unlink",
+      "set": "products",
+      "key": {
+        "id": 1
+      },
+      "navigation": "lines",
+      "item": {
+        "key": {
+          "id": 11
+        }
+      }
+    },
+    {
+      "id": "o2",
+      "op": "link",
+      "set": "products",
+      "key": {
+        "id": 1
+      },
+      "navigation": "labels",
+      "item": {
+        "ref": "o0"
+      }
+    },
+    {
+      "id": "o3",
+      "op": "link",
+      "set": "products",
+      "key": {
+        "id": 1
+      },
+      "navigation": "labels",
+      "item": {
+        "key": {
+          "id": 3
+        }
+      }
+    }
+  ]
+}
