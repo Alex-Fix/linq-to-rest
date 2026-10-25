@@ -200,6 +200,49 @@ decimal total = await shop.Products.Where(p => p.CategoryId == 4).SumAsync(p => 
 - TypeScript: `groupBy(p => ...)`, `.select(g => ({ key: g.key, count: g.count(), ... }))`, then `where`/`orderBy` over
   the fields; `sum`/`min`/`max`/`average` on a query. Non-groupable keys don't compile.
 
+## Value types
+
+Value objects such as an address or a product's package size, mapped with EF Core's `ComplexProperty` or `OwnsOne`
+(also `ToJson()`), are exposed once per type and used by any set:
+
+```csharp
+public sealed class AddressType : IValueTypeConfiguration<Address>      // found by AddSetsFromAssembly, or AddValueType
+{
+    public void Configure(ValueTypeBuilder<Address> b)
+    {
+        b.Property(a => a.Street).IsRequired().HasMaxLength(200);       // the usual flags and rules
+        b.Property(a => a.City).IsSortable().IsGroupable();
+        b.Value(a => a.Geo);                                            // nested value types, at most three levels
+    }
+}
+
+b.Value(c => c.ShippingAddress);                     // in a set: writable as a whole, nullability from EF Core
+b.Value(c => c.BillingAddress).IsReadOnly();
+
+var lviv = await shop.Customers
+    .Where(c => c.ShippingAddress != null && c.ShippingAddress.City == "Lviv")   // members filter, sort and group
+    .OrderBy(c => c.ShippingAddress!.City)
+    .Select(c => new { c.Name, c.ShippingAddress })                            // whole values: selected as objects
+    .ToListAsync();
+customer.ShippingAddress = customer.ShippingAddress! with { City = "Kyiv" };   // generated records: replace the value
+await shop.SaveChangesAsync();
+```
+
+- **On the wire** a value is a path segment (`shippingAddress/city`) and a nested object in rows and batch `values`,
+  `null` when missing. The model document lists the types under `valueTypes`.
+- **A whole value** can only be selected or compared with `null`; sorting, grouping or comparing it otherwise is
+  refused (`not_sortable`, `not_groupable`, `type_mismatch`), and both clients fail before sending.
+- **Writes replace the whole value:** every exposed member must be sent (`invalid_batch` otherwise). So a writable use
+  must expose every member EF Core maps, or startup fails, and the type needs a constructor matching its members (a
+  record) or settable members. An `ArgumentException` from the type's own guards is a `type_mismatch`.
+- **Validation:** member rules run whenever the value is written; errors point into it
+  (`/operations/0/values/shippingAddress/city`, member `shippingAddress/city`). `ErrorsFor` keys them by CLR path
+  (`ShippingAddress.City`), TypeScript's `errorsFor` by `shippingAddress.city`. A non-nullable value left null is
+  `required`.
+- **Generated code:** C# value types are immutable `record`s (`required init` members; a non-nullable value property
+  starts as `null!` until you set it); TypeScript gets readonly interfaces and proxies with `eq(null)`/`ne(null)`.
+- Collections of value objects (`OwnsMany`, complex collections) aren't supported yet.
+
 ## Validation
 
 Rules run on every insert and update of a batch, after all its values are applied and before anything is written;
@@ -280,7 +323,7 @@ whose row doesn't exist.
 Nodes: `member`, `var`, literals, `new` (shapes), `and` `or` `not` `eq` `ne` `gt` `ge` `lt` `le` `in` `add` `sub` `mul`
 `div` `mod` `neg` `contains` `startsWith` `endsWith` `toLower` `toUpper` `length` `trim` `concat` `year` `month` `day`
 `hour` `minute` `date` `if` `coalesce`, and the collection lambdas `any` `all` `count` `sum` `min` `max` `avg` `map`.
-Grouped queries add `"groupBy": ["brandId", "brand/name"]`, `having`, and inside `select` the nodes `{"key": n}` and
+Value-type members are path segments too (`shippingAddress/city`). Grouped queries add `"groupBy": ["brandId", "brand/name"]`, `having`, and inside `select` the nodes `{"key": n}` and
 `{"group": {}}` (the source of `count`/`sum`/`min`/`max`/`avg`); `having` and `orderBy` name the select's fields.
 The list is closed: anything else is rejected.
 

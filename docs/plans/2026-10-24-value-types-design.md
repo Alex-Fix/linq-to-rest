@@ -1,5 +1,5 @@
 # Value types (owned / complex types) — design
-Status: approved, in progress (see Implementation notes) · Date: 2026-10-24
+Status: approved, implemented (see Implementation notes) · Date: 2026-10-24
 
 ## Problem
 
@@ -300,6 +300,11 @@ Where the implementation differs from the sections above, this list wins.
    `orderBy` is a compile error; at run time a whole value outside a select or null test throws before sending. A
    value member named `eq` or `ne` is a generator error. Saves write values in model member order whatever order the
    object was built in, so request bodies equal the .NET client's.
+
+7. **Benchmarks (step 10) not run yet.** The before/after run of the query binding, execution, batch, client
+   translation, materialization and change detection suites was postponed. To compare the code on the same workload,
+   run `main` against `main` with this branch's `src/` (the benchmarks link the integration shop, which now exposes
+   value types).
 
 ## Open questions
 

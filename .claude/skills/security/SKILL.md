@@ -71,6 +71,15 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
   author-defined but run on untrusted strings: keep the match timeout and the portable-subset check. Validators query
   past the policies, so their codes must not reveal hidden rows; a validator bug (bad code or member) is a 500.
 
+### Value types
+- Only members configured on a value type (`IValueTypeConfiguration<T>`) exist on the wire, wherever it's used; an
+  unknown segment is `unknown_member`. Value segments add no joins, nesting is capped at 3 at startup.
+- Batch values replace the whole value: unknown members are `unknown_member` (pointer at the value, never the
+  client's name), missing ones `invalid_batch`. A writable use must expose every EF-mapped member, so a replacement
+  can't reset data the API doesn't show. Values are built with the constructor/setter plan resolved at startup.
+- A whole value is only selected or null-tested; members carry filters, sorts and groups with their own flags, and
+  a use's `IsNotFilterable()` covers its members.
+
 ### Grouping
 - Group keys must be `IsGroupable()` and members inside sum/min/max/avg `IsAggregatable()` (both per column, like
   sorting); `{"group": {}}` only feeds direct aggregates (no nested collection lambdas); a grouped select can't read
@@ -116,6 +125,7 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
 - [ ] Can a client write to a set (or an operation) that didn't opt in with `AllowWrites(...)`?
 - [ ] Is the policy `Filter` applied to reads, counts, cursor pages, includes, updates and deletes?
 - [ ] Can `values` set anything not bound with `Property(...)` (computed, key, token, read-only)?
+- [ ] Value types: can a client reach an unconfigured member, or can a writable use hide an EF-mapped member?
 - [ ] CORS: explicit origins, no origin reflection with credentials, scoped to the endpoints that need it?
 - [ ] Is every limit enforced before allocation and tested at and past its boundary?
 - [ ] Any `Compile()`, reflection on client strings, string-built query or dynamic LINQ on the server? → reject.
