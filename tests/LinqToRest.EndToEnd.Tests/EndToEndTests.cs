@@ -245,7 +245,7 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
         // A client built from an outdated model sends the delete; the server refuses it the same way.
         var outdated = Host.Client(model: ClientModel.Bind(
             RestModel.Parse(ShopClient.Model.Document.ToJson(indented: false).Replace("\"name\":\"categories\",\"type\":\"Category\",\"key\":[\"id\"],\"writes\":[\"insert\",\"update\"]", "\"name\":\"categories\",\"type\":\"Category\",\"key\":[\"id\"],\"writes\":[\"insert\",\"update\",\"delete\"]", StringComparison.Ordinal)),
-            new Dictionary<string, Type> { ["categories"] = typeof(Category), ["orderLines"] = typeof(OrderLine), ["products"] = typeof(Product) }));
+            new Dictionary<string, Type> { ["bins"] = typeof(Bin), ["categories"] = typeof(Category), ["labels"] = typeof(Label), ["orderLines"] = typeof(OrderLine), ["products"] = typeof(Product) }));
         var stale = await outdated.Categories.FirstAsync(c => c.Name == "Games", Token);
         outdated.Categories.Remove(stale);
         var remote = await Assert.ThrowsAsync<RestSaveException>(() => outdated.SaveChangesAsync(Token));
@@ -294,7 +294,7 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
             RestModel.Parse(ShopClient.Model.Document.ToJson(indented: false)
                 .Replace(",\"rules\":{\"maxLength\":100}", "", StringComparison.Ordinal)
                 .Replace(",\"rules\":{\"min\":0}", "", StringComparison.Ordinal)),
-            new Dictionary<string, Type> { ["categories"] = typeof(Category), ["orderLines"] = typeof(OrderLine), ["products"] = typeof(Product) }));
+            new Dictionary<string, Type> { ["bins"] = typeof(Bin), ["categories"] = typeof(Category), ["labels"] = typeof(Label), ["orderLines"] = typeof(OrderLine), ["products"] = typeof(Product) }));
         var remote = new Product { Name = new string('x', 101), Price = -1, Size = Box() };
         outdated.Products.Add(remote);
         var after = await Assert.ThrowsAsync<RestValidationException>(() => outdated.SaveChangesAsync(Token));

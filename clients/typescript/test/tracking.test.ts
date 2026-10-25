@@ -146,7 +146,7 @@ describe("unit of work", () => {
 
   it("update sends every writable member; setModified(false) accepts a change", async () => {
     const { shop: s, http } = shop();
-    const games = { id: 2, name: "Games" };
+    const games = { id: 2, name: "Games", products: [] };
     s.categories.update(games);
     http.respond({ results: [{ id: "o0", value: games }] });
     await s.saveChanges();
@@ -177,7 +177,7 @@ describe("unit of work", () => {
     http.respond({ items: [chess()] });
     const product = await s.products.first();
     product.lines.push({ id: 0, sku: "X", quantity: 1, unitPrice: 1 });
-    const added = s.products.add({ name: "Cube", category: { id: 5, name: "Untracked" } });
+    const added = s.products.add({ name: "Cube", category: { id: 5, name: "Untracked", products: [] } });
 
     expect(() => s.entry(product).state).toThrow(/Set the foreign key/);
     expect(() => s.entry(added).state).toThrow(/Add or attach it first/);
@@ -185,10 +185,10 @@ describe("unit of work", () => {
 
   it("refuses a second instance with the same key", () => {
     const { shop: s } = shop();
-    s.categories.attach({ id: 1, name: "A" });
+    s.categories.attach({ id: 1, name: "A", products: [] });
 
     expect(() => {
-      s.categories.attach({ id: 1, name: "B" });
+      s.categories.attach({ id: 1, name: "B", products: [] });
     }).toThrow(/already tracked/);
   });
 
@@ -203,7 +203,7 @@ describe("unit of work", () => {
 
     it("fail locally with the .NET client's messages", () => {
       const { context, set } = categories([]);
-      const games = { id: 1, name: "Games" };
+      const games = { id: 1, name: "Games", products: [] };
 
       expect(() => set.add({ name: "Puzzles" })).toThrow("The set 'categories' doesn't allow inserts.");
       expect(() => {
@@ -226,7 +226,7 @@ describe("unit of work", () => {
 
     it("reject a modified entity before anything is sent", async () => {
       const { context, set, http } = categories(["insert"]);
-      const games = { id: 1, name: "Games" };
+      const games = { id: 1, name: "Games", products: [] };
       set.attach(games);
       games.name = "Board games";
 

@@ -30,7 +30,21 @@ public sealed partial record WeightDto
     public required string Unit { get; init; }
 }
 
+public sealed partial class BinDto
+{
+    public Guid Zone { get; set; }
+    public Guid Slot { get; set; }
+    public string Code { get; set; } = "";
+}
+
 public sealed partial class CategoryDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public List<ProductDto> Products { get; set; } = [];
+}
+
+public sealed partial class LabelDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
@@ -58,18 +72,30 @@ public sealed partial class ProductDto
     public DimensionsDto? Size { get; set; }
     public List<string> Tags { get; set; } = [];
     public string? CategoryName { get; set; }
+    public Guid? BinZone { get; set; }
+    public Guid? BinSlot { get; set; }
     public CategoryDto? Category { get; set; }
+    public BinDto? Bin { get; set; }
     public List<OrderLineDto> Lines { get; set; } = [];
+    public List<LabelDto> Labels { get; set; } = [];
 }
 
 public sealed partial class ShopContext(RestDataContextOptions<ShopContext> options) : RestDataContext(options)
 {
     /// <summary>Gets the model document bound to the generated classes.</summary>
     public static ClientModel Model { get; } = ClientModel.Bind(
-        RestModel.Parse("""{"v":1,"enums":{"ProductStatus":["Draft","Active"]},"valueTypes":[{"name":"DimensionsDto","properties":[{"name":"width","type":"float64","sortable":true,"rules":{"min":0}},{"name":"weight","type":"WeightDto"}]},{"name":"WeightDto","properties":[{"name":"amount","type":"decimal","aggregatable":true},{"name":"unit","type":"string","rules":{"maxLength":5}}]}],"sets":[{"name":"categories","type":"CategoryDto","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["cursor"],"defaultPageSize":2,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"groupable":true}],"navigations":[]},{"name":"orderLines","type":"OrderLineDto","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["offset"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"sku","type":"string","writable":true},{"name":"quantity","type":"int32","writable":true,"aggregatable":true},{"name":"unitPrice","type":"decimal","writable":true,"aggregatable":true}],"navigations":[]},{"name":"products","type":"ProductDto","key":["id"],"concurrencyToken":"version","writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"rules":{"maxLength":100}},{"name":"description","type":"string","nullable":true,"writable":true},{"name":"price","type":"decimal","writable":true,"sortable":true,"aggregatable":true,"rules":{"min":0}},{"name":"status","type":"ProductStatus","writable":true,"groupable":true},{"name":"version","type":"guid"},{"name":"createdAt","type":"dateTime"},{"name":"releasedOn","type":"dateOnly","nullable":true,"writable":true},{"name":"categoryId","type":"int32","nullable":true,"writable":true,"groupable":true},{"name":"size","type":"DimensionsDto","nullable":true,"writable":true},{"name":"tags","type":"string","collection":true},{"name":"categoryName","type":"string","nullable":true}],"navigations":[{"name":"category","target":"categories","nullable":true,"foreignKey":["categoryId"]},{"name":"lines","target":"orderLines","collection":true}]}]}"""),
+        RestModel.Parse("""{"v":1,"enums":{"ProductStatus":["Draft","Active"]},"valueTypes":[{"name":"DimensionsDto","properties":[{"name":"width","type":"float64","sortable":true,"rules":{"min":0}},{"name":"weight","type":"WeightDto"}]},{"name":"WeightDto","properties":[{"name":"amount","type":"decimal","aggregatable":true},{"name":"unit","type":"string","rules":{"maxLength":5}}]}],"sets":[{"name":"bins","type":"BinDto","key":["zone","slot"],"writes":["insert"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"zone","type":"guid","sortable":true},{"name":"slot","type":"guid","sortable":true},{"name":"code","type":"string","writable":true}],"navigations":[]},{"name":"categories","type":"CategoryDto","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["cursor"],"defaultPageSize":2,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"groupable":true}],"navigations":[{"name":"products","target":"products","collection":true,"links":"oneToMany","onUnlink":"detach"}]},{"name":"labels","type":"LabelDto","key":["id"],"writes":["insert"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true}],"navigations":[]},{"name":"orderLines","type":"OrderLineDto","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["offset"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"sku","type":"string","writable":true},{"name":"quantity","type":"int32","writable":true,"aggregatable":true},{"name":"unitPrice","type":"decimal","writable":true,"aggregatable":true}],"navigations":[]},{"name":"products","type":"ProductDto","key":["id"],"concurrencyToken":"version","writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"rules":{"maxLength":100}},{"name":"description","type":"string","nullable":true,"writable":true},{"name":"price","type":"decimal","writable":true,"sortable":true,"aggregatable":true,"rules":{"min":0}},{"name":"status","type":"ProductStatus","writable":true,"groupable":true},{"name":"version","type":"guid"},{"name":"createdAt","type":"dateTime"},{"name":"releasedOn","type":"dateOnly","nullable":true,"writable":true},{"name":"categoryId","type":"int32","nullable":true,"writable":true,"groupable":true},{"name":"size","type":"DimensionsDto","nullable":true,"writable":true},{"name":"tags","type":"string","collection":true},{"name":"categoryName","type":"string","nullable":true},{"name":"binZone","type":"guid","nullable":true,"writable":true},{"name":"binSlot","type":"guid","nullable":true,"writable":true}],"navigations":[{"name":"category","target":"categories","nullable":true,"foreignKey":["categoryId"]},{"name":"bin","target":"bins","nullable":true,"foreignKey":["binZone","binSlot"]},{"name":"lines","target":"orderLines","collection":true,"links":"oneToMany","onUnlink":"delete"},{"name":"labels","target":"labels","collection":true,"links":"manyToMany"}]}]}"""),
+        new SetBinding<BinDto>("bins", static () => new BinDto())
+            .Property("zone", nameof(BinDto.Zone), static e => e.Zone, static (e, v) => e.Zone = v)
+            .Property("slot", nameof(BinDto.Slot), static e => e.Slot, static (e, v) => e.Slot = v)
+            .Property("code", nameof(BinDto.Code), static e => e.Code, static (e, v) => e.Code = v),
         new SetBinding<CategoryDto>("categories", static () => new CategoryDto())
             .Property("id", nameof(CategoryDto.Id), static e => e.Id, static (e, v) => e.Id = v)
-            .Property("name", nameof(CategoryDto.Name), static e => e.Name, static (e, v) => e.Name = v),
+            .Property("name", nameof(CategoryDto.Name), static e => e.Name, static (e, v) => e.Name = v)
+            .Collection("products", nameof(CategoryDto.Products), static e => e.Products, static (e, v) => e.Products = v),
+        new SetBinding<LabelDto>("labels", static () => new LabelDto())
+            .Property("id", nameof(LabelDto.Id), static e => e.Id, static (e, v) => e.Id = v)
+            .Property("name", nameof(LabelDto.Name), static e => e.Name, static (e, v) => e.Name = v),
         new SetBinding<OrderLineDto>("orderLines", static () => new OrderLineDto())
             .Property("id", nameof(OrderLineDto.Id), static e => e.Id, static (e, v) => e.Id = v)
             .Property("sku", nameof(OrderLineDto.Sku), static e => e.Sku, static (e, v) => e.Sku = v)
@@ -88,8 +114,12 @@ public sealed partial class ShopContext(RestDataContextOptions<ShopContext> opti
             .Value("size", nameof(ProductDto.Size), ValueBindings.DimensionsDto, static e => e.Size, static (e, v) => e.Size = v)
             .Values("tags", nameof(ProductDto.Tags), static e => e.Tags, static (e, v) => e.Tags = v)
             .Property("categoryName", nameof(ProductDto.CategoryName), static e => e.CategoryName, static (e, v) => e.CategoryName = v)
+            .Property("binZone", nameof(ProductDto.BinZone), static e => e.BinZone, static (e, v) => e.BinZone = v)
+            .Property("binSlot", nameof(ProductDto.BinSlot), static e => e.BinSlot, static (e, v) => e.BinSlot = v)
             .Reference("category", nameof(ProductDto.Category), static e => e.Category, static (e, v) => e.Category = v)
-            .Collection("lines", nameof(ProductDto.Lines), static e => e.Lines, static (e, v) => e.Lines = v));
+            .Reference("bin", nameof(ProductDto.Bin), static e => e.Bin, static (e, v) => e.Bin = v)
+            .Collection("lines", nameof(ProductDto.Lines), static e => e.Lines, static (e, v) => e.Lines = v)
+            .Collection("labels", nameof(ProductDto.Labels), static e => e.Labels, static (e, v) => e.Labels = v));
 
     private static class ValueBindings
     {
@@ -102,7 +132,11 @@ public sealed partial class ShopContext(RestDataContextOptions<ShopContext> opti
             .Value("weight", "Weight", WeightDto, static e => e.Weight);
     }
 
+    public RestSet<BinDto> Bins => Set<BinDto>();
+
     public RestSet<CategoryDto> Categories => Set<CategoryDto>();
+
+    public RestSet<LabelDto> Labels => Set<LabelDto>();
 
     public RestSet<OrderLineDto> OrderLines => Set<OrderLineDto>();
 

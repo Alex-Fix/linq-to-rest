@@ -415,7 +415,7 @@ public sealed class SetConfigurationTests
         });
 
         Assert.Equal(
-            ["categories", "categories", "lines", "orderLines", "products", "products", "suppliers"],
+            ["bins", "categories", "categories", "labels", "lines", "orderLines", "products", "products", "suppliers"],
             builder!.Sets.Select(registration => registration.Configure().Name).Order(StringComparer.Ordinal));
     }
 

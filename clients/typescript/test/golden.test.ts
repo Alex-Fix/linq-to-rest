@@ -132,6 +132,8 @@ const cases: Record<string, (context: ReturnType<typeof shop>) => Promise<unknow
       releasedOn: null,
       categoryId: null,
       size: { width: 5.7, weight: { amount: 0.1, unit: "kg" } },
+      binZone: null,
+      binSlot: null,
     });
     http.respond({ results: [] });
     return shop.saveChanges();
@@ -152,6 +154,8 @@ const cases: Record<string, (context: ReturnType<typeof shop>) => Promise<unknow
       status: "Active",
       releasedOn: null,
       size: null,
+      binZone: null,
+      binSlot: null,
       category: puzzles,
     });
     shop.products.remove(second);
