@@ -123,11 +123,28 @@ export function ProductPage() {
             {product.description !== null && <Typography.Paragraph>{product.description}</Typography.Paragraph>}
             <Descriptions column={1} bordered size="small">
               <Descriptions.Item label="SKU">{product.sku}</Descriptions.Item>
-              <Descriptions.Item label="Brand">{product.brand?.name}</Descriptions.Item>
+              <Descriptions.Item label="Brand">
+                {product.brand?.name}
+                {product.brand?.contact != null && (
+                  <>
+                    {" · "}
+                    <Typography.Link href={product.brand.contact.website} target="_blank" rel="noreferrer">
+                      {product.brand.contact.website}
+                    </Typography.Link>{" "}
+                    ({product.brand.contact.country})
+                  </>
+                )}
+              </Descriptions.Item>
               <Descriptions.Item label="Category">{product.category?.name}</Descriptions.Item>
               <Descriptions.Item label="Availability">
                 {product.inStock ? <Tag color="green">{product.stock} in stock</Tag> : <Tag>Out of stock</Tag>}
               </Descriptions.Item>
+              {product.dimensions !== null && (
+                <Descriptions.Item label="Package">
+                  {product.dimensions.widthCm} × {product.dimensions.heightCm} × {product.dimensions.depthCm} cm,{" "}
+                  {product.dimensions.weightKg} kg
+                </Descriptions.Item>
+              )}
               {product.tags.length > 0 && (
                 <Descriptions.Item label="Tags">
                   {product.tags.map((tag) => (

@@ -19,13 +19,28 @@ import {
   type RestSet,
   type Sortable,
   type StringExpr,
+  type ValueProxy,
+  type ValueTypeModel,
 } from "linqtorest";
 
 export type ProductStatus = "Draft" | "Active" | "Discontinued";
 
+export interface Contact {
+  readonly website: string;
+  readonly country: string;
+}
+
+export interface Dimensions {
+  readonly widthCm: number;
+  readonly heightCm: number;
+  readonly depthCm: number;
+  readonly weightKg: number;
+}
+
 export interface Brand {
   readonly id: number;
   name: string;
+  contact: Contact | null;
   readonly productCount: number;
   products: Product[];
 }
@@ -49,6 +64,7 @@ export interface Product {
   price: number;
   status: ProductStatus;
   stock: number;
+  dimensions: Dimensions | null;
   categoryId: number;
   brandId: number;
   readonly createdAt: string;
@@ -69,9 +85,22 @@ export interface ProductImage {
   product: Product | null;
 }
 
+export interface ContactProxy extends ValueProxy<Contact> {
+  readonly website: StringExpr;
+  readonly country: StringExpr & Groupable;
+}
+
+export interface DimensionsProxy extends ValueProxy<Dimensions> {
+  readonly widthCm: NumberExpr;
+  readonly heightCm: NumberExpr;
+  readonly depthCm: NumberExpr;
+  readonly weightKg: NumberExpr & Sortable & Aggregatable;
+}
+
 export interface BrandProxy extends EntityProxy<Brand> {
   readonly id: NumberExpr & Sortable;
   readonly name: StringExpr & Sortable & Groupable;
+  readonly contact: ContactProxy;
   readonly productCount: NumberExpr;
   readonly products: CollectionExpr<ProductProxy>;
 }
@@ -94,6 +123,7 @@ export interface ProductProxy extends EntityProxy<Product> {
   readonly price: NumberExpr & Sortable & Aggregatable;
   readonly status: OrderedExpr<ProductStatus> & Groupable;
   readonly stock: NumberExpr & Sortable & Aggregatable;
+  readonly dimensions: DimensionsProxy;
   readonly categoryId: NumberExpr & Groupable;
   readonly brandId: NumberExpr & Groupable;
   readonly createdAt: DateTimeExpr & Sortable;
@@ -114,6 +144,24 @@ export interface ProductImageProxy extends EntityProxy<ProductImage> {
   readonly product: ProductProxy;
 }
 
+const contactValue = {
+  name: "Contact",
+  members: [
+    { name: "website", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: false, rules: { required: true, maxLength: 200, pattern: "^https://" } },
+    { name: "country", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: false, groupable: true, rules: { required: true, pattern: "^[A-Z]{2}$" } },
+  ],
+} as const satisfies ValueTypeModel;
+
+const dimensionsValue = {
+  name: "Dimensions",
+  members: [
+    { name: "widthCm", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false, rules: { min: 0.1, max: 500 } },
+    { name: "heightCm", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false, rules: { min: 0.1, max: 500 } },
+    { name: "depthCm", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false, rules: { min: 0.1, max: 500 } },
+    { name: "weightKg", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false, aggregatable: true, rules: { min: 0.01, max: 1000 } },
+  ],
+} as const satisfies ValueTypeModel;
+
 export const catalogModel = {
   sets: {
     brands: {
@@ -124,6 +172,7 @@ export const catalogModel = {
       members: [
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
         { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: true, writable: true, groupable: true, rules: { required: true, maxLength: 50 } },
+        { name: "contact", kind: "value", nullable: true, collection: false, filterable: true, sortable: false, writable: true, value: contactValue },
         { name: "productCount", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: false },
       ],
       navigations: [
@@ -178,6 +227,7 @@ export const catalogModel = {
         { name: "price", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true, aggregatable: true, rules: { min: 0.01, max: 100000 } },
         { name: "status", kind: "enum", nullable: false, collection: false, filterable: true, sortable: false, writable: true, groupable: true },
         { name: "stock", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: true, aggregatable: true, rules: { min: 0 } },
+        { name: "dimensions", kind: "value", nullable: true, collection: false, filterable: true, sortable: false, writable: true, value: dimensionsValue },
         { name: "categoryId", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: true, groupable: true },
         { name: "brandId", kind: "number", nullable: false, collection: false, filterable: true, sortable: false, writable: true, groupable: true },
         { name: "createdAt", kind: "datetime", nullable: false, collection: false, filterable: true, sortable: true, writable: false },

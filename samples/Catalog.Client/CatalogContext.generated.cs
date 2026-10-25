@@ -19,10 +19,25 @@ public enum ProductStatus
     Discontinued,
 }
 
+public sealed partial record Contact
+{
+    public required string Website { get; init; }
+    public required string Country { get; init; }
+}
+
+public sealed partial record Dimensions
+{
+    public required double WidthCm { get; init; }
+    public required double HeightCm { get; init; }
+    public required double DepthCm { get; init; }
+    public required double WeightKg { get; init; }
+}
+
 public sealed partial class Brand
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public Contact? Contact { get; set; }
     public int ProductCount { get; set; }
     public List<Product> Products { get; set; } = [];
 }
@@ -47,6 +62,7 @@ public sealed partial class Product
     public decimal Price { get; set; }
     public ProductStatus Status { get; set; }
     public int Stock { get; set; }
+    public Dimensions? Dimensions { get; set; }
     public int CategoryId { get; set; }
     public int BrandId { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -72,10 +88,11 @@ public sealed partial class CatalogContext(RestDataContextOptions<CatalogContext
 {
     /// <summary>Gets the model document bound to the generated classes.</summary>
     public static ClientModel Model { get; } = ClientModel.Bind(
-        RestModel.Parse("""{"v":1,"enums":{"ProductStatus":["Draft","Active","Discontinued"]},"sets":[{"name":"brands","type":"Brand","key":["id"],"writes":["insert","update"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"sortable":true,"groupable":true,"rules":{"required":true,"maxLength":50}},{"name":"productCount","type":"int32"}],"navigations":[{"name":"products","target":"products","collection":true}]},{"name":"categories","type":"Category","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"sortable":true,"rules":{"required":true,"maxLength":50}},{"name":"parentId","type":"int32","nullable":true,"writable":true},{"name":"productCount","type":"int32"}],"navigations":[{"name":"parent","target":"categories","nullable":true,"foreignKey":["parentId"]},{"name":"children","target":"categories","collection":true},{"name":"products","target":"products","collection":true}]},{"name":"productImages","type":"ProductImage","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"productId","type":"int32","writable":true},{"name":"url","type":"string","writable":true,"rules":{"required":true,"maxLength":500,"pattern":"^https://"}},{"name":"sortOrder","type":"int32","writable":true,"sortable":true}],"navigations":[{"name":"product","target":"products","foreignKey":["productId"]}]},{"name":"products","type":"Product","key":["id"],"concurrencyToken":"version","writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":24,"maxPageSize":96,"maxSkip":1000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"sku","type":"string","writable":true,"rules":{"required":true,"pattern":"^[A-Z0-9-]{3,20}$"}},{"name":"name","type":"string","writable":true,"sortable":true,"rules":{"required":true,"maxLength":100}},{"name":"description","type":"string","nullable":true,"writable":true,"filterable":false,"rules":{"maxLength":2000}},{"name":"price","type":"decimal","writable":true,"sortable":true,"aggregatable":true,"rules":{"min":0.01,"max":100000}},{"name":"status","type":"ProductStatus","writable":true,"groupable":true},{"name":"stock","type":"int32","writable":true,"sortable":true,"aggregatable":true,"rules":{"min":0}},{"name":"categoryId","type":"int32","writable":true,"groupable":true},{"name":"brandId","type":"int32","writable":true,"groupable":true},{"name":"createdAt","type":"dateTime","sortable":true},{"name":"version","type":"guid"},{"name":"inStock","type":"bool"},{"name":"tags","type":"string","collection":true},{"name":"imageCount","type":"int32"}],"navigations":[{"name":"category","target":"categories","foreignKey":["categoryId"]},{"name":"brand","target":"brands","foreignKey":["brandId"]},{"name":"images","target":"productImages","collection":true}]}]}"""),
+        RestModel.Parse("""{"v":1,"enums":{"ProductStatus":["Draft","Active","Discontinued"]},"valueTypes":[{"name":"Contact","properties":[{"name":"website","type":"string","rules":{"required":true,"maxLength":200,"pattern":"^https://"}},{"name":"country","type":"string","groupable":true,"rules":{"required":true,"pattern":"^[A-Z]{2}$"}}]},{"name":"Dimensions","properties":[{"name":"widthCm","type":"float64","rules":{"min":0.1,"max":500}},{"name":"heightCm","type":"float64","rules":{"min":0.1,"max":500}},{"name":"depthCm","type":"float64","rules":{"min":0.1,"max":500}},{"name":"weightKg","type":"float64","sortable":true,"aggregatable":true,"rules":{"min":0.01,"max":1000}}]}],"sets":[{"name":"brands","type":"Brand","key":["id"],"writes":["insert","update"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"sortable":true,"groupable":true,"rules":{"required":true,"maxLength":50}},{"name":"contact","type":"Contact","nullable":true,"writable":true},{"name":"productCount","type":"int32"}],"navigations":[{"name":"products","target":"products","collection":true}]},{"name":"categories","type":"Category","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"name","type":"string","writable":true,"sortable":true,"rules":{"required":true,"maxLength":50}},{"name":"parentId","type":"int32","nullable":true,"writable":true},{"name":"productCount","type":"int32"}],"navigations":[{"name":"parent","target":"categories","nullable":true,"foreignKey":["parentId"]},{"name":"children","target":"categories","collection":true},{"name":"products","target":"products","collection":true}]},{"name":"productImages","type":"ProductImage","key":["id"],"writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":50,"maxPageSize":200,"maxSkip":10000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"productId","type":"int32","writable":true},{"name":"url","type":"string","writable":true,"rules":{"required":true,"maxLength":500,"pattern":"^https://"}},{"name":"sortOrder","type":"int32","writable":true,"sortable":true}],"navigations":[{"name":"product","target":"products","foreignKey":["productId"]}]},{"name":"products","type":"Product","key":["id"],"concurrencyToken":"version","writes":["insert","update","delete"],"pagination":{"modes":["offset","cursor"],"defaultPageSize":24,"maxPageSize":96,"maxSkip":1000},"properties":[{"name":"id","type":"int32","sortable":true},{"name":"sku","type":"string","writable":true,"rules":{"required":true,"pattern":"^[A-Z0-9-]{3,20}$"}},{"name":"name","type":"string","writable":true,"sortable":true,"rules":{"required":true,"maxLength":100}},{"name":"description","type":"string","nullable":true,"writable":true,"filterable":false,"rules":{"maxLength":2000}},{"name":"price","type":"decimal","writable":true,"sortable":true,"aggregatable":true,"rules":{"min":0.01,"max":100000}},{"name":"status","type":"ProductStatus","writable":true,"groupable":true},{"name":"stock","type":"int32","writable":true,"sortable":true,"aggregatable":true,"rules":{"min":0}},{"name":"dimensions","type":"Dimensions","nullable":true,"writable":true},{"name":"categoryId","type":"int32","writable":true,"groupable":true},{"name":"brandId","type":"int32","writable":true,"groupable":true},{"name":"createdAt","type":"dateTime","sortable":true},{"name":"version","type":"guid"},{"name":"inStock","type":"bool"},{"name":"tags","type":"string","collection":true},{"name":"imageCount","type":"int32"}],"navigations":[{"name":"category","target":"categories","foreignKey":["categoryId"]},{"name":"brand","target":"brands","foreignKey":["brandId"]},{"name":"images","target":"productImages","collection":true}]}]}"""),
         new SetBinding<Brand>("brands", static () => new Brand())
             .Property("id", nameof(Brand.Id), static e => e.Id, static (e, v) => e.Id = v)
             .Property("name", nameof(Brand.Name), static e => e.Name, static (e, v) => e.Name = v)
+            .Value("contact", nameof(Brand.Contact), ValueBindings.Contact, static e => e.Contact, static (e, v) => e.Contact = v)
             .Property("productCount", nameof(Brand.ProductCount), static e => e.ProductCount, static (e, v) => e.ProductCount = v)
             .Collection("products", nameof(Brand.Products), static e => e.Products, static (e, v) => e.Products = v),
         new SetBinding<Category>("categories", static () => new Category())
@@ -100,6 +117,7 @@ public sealed partial class CatalogContext(RestDataContextOptions<CatalogContext
             .Property("price", nameof(Product.Price), static e => e.Price, static (e, v) => e.Price = v)
             .Property("status", nameof(Product.Status), static e => e.Status, static (e, v) => e.Status = v)
             .Property("stock", nameof(Product.Stock), static e => e.Stock, static (e, v) => e.Stock = v)
+            .Value("dimensions", nameof(Product.Dimensions), ValueBindings.Dimensions, static e => e.Dimensions, static (e, v) => e.Dimensions = v)
             .Property("categoryId", nameof(Product.CategoryId), static e => e.CategoryId, static (e, v) => e.CategoryId = v)
             .Property("brandId", nameof(Product.BrandId), static e => e.BrandId, static (e, v) => e.BrandId = v)
             .Property("createdAt", nameof(Product.CreatedAt), static e => e.CreatedAt, static (e, v) => e.CreatedAt = v)
@@ -110,6 +128,19 @@ public sealed partial class CatalogContext(RestDataContextOptions<CatalogContext
             .Reference("category", nameof(Product.Category), static e => e.Category, static (e, v) => e.Category = v)
             .Reference("brand", nameof(Product.Brand), static e => e.Brand, static (e, v) => e.Brand = v)
             .Collection("images", nameof(Product.Images), static e => e.Images, static (e, v) => e.Images = v));
+
+    private static class ValueBindings
+    {
+        public static readonly ValueBinding<Contact> Contact = new ValueBinding<Contact>("Contact", static v => new Contact { Website = (string)v[0]!, Country = (string)v[1]! })
+            .Property("website", "Website", static e => e.Website)
+            .Property("country", "Country", static e => e.Country);
+
+        public static readonly ValueBinding<Dimensions> Dimensions = new ValueBinding<Dimensions>("Dimensions", static v => new Dimensions { WidthCm = (double)v[0]!, HeightCm = (double)v[1]!, DepthCm = (double)v[2]!, WeightKg = (double)v[3]! })
+            .Property("widthCm", "WidthCm", static e => e.WidthCm)
+            .Property("heightCm", "HeightCm", static e => e.HeightCm)
+            .Property("depthCm", "DepthCm", static e => e.DepthCm)
+            .Property("weightKg", "WeightKg", static e => e.WeightKg);
+    }
 
     public RestSet<Brand> Brands => Set<Brand>();
 

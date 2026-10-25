@@ -81,6 +81,22 @@ public sealed class CatalogTests(CatalogApi api) : IClassFixture<CatalogApi>
     }
 
     [Fact]
+    public async Task Products_filter_by_package_weight_and_brands_show_their_contact()
+    {
+        var anonymous = await api.ClientAsync();
+
+        var light = await anonymous.QueryOkAsync("products", """
+            {"v":1,"filter":{"and":[{"ne":[{"member":"dimensions"},null]},{"le":[{"member":"dimensions/weightKg"},0.5]}]},
+             "page":{"mode":"offset","take":0},"count":true}
+            """);
+        var unpacked = await anonymous.QueryOkAsync("products", """{"v":1,"filter":{"eq":[{"member":"dimensions"},null]},"page":{"mode":"offset","take":0},"count":true}""");
+        var contacts = await anonymous.QueryOkAsync("brands", """{"v":1,"orderBy":[{"member":"id"}],"select":{"member":"contact"},"page":{"mode":"offset","take":2}}""");
+
+        Assert.Equal((12, 30), (light.Total(), unpacked.Total()));
+        Assert.Equal("""[{"website":"https://acme.example","country":"DE"},null]""", contacts.GetProperty("items").GetRawText());
+    }
+
+    [Fact]
     public async Task Cors_allows_a_query_preflight_from_a_configured_origin_only()
     {
         var client = await api.ClientAsync();
@@ -192,6 +208,28 @@ public sealed class CatalogWriteTests
         Assert.Equal(
             [("p", "stock", "out_of_range"), ("p", "price", "too_precise"), ("p", "sku", "duplicate"), ("i", "url", "invalid_format")],
             problem.GetProperty("errors").EnumerateArray().Select(error => (error.GetProperty("operation").GetString(), error.GetProperty("member").GetString(), error.GetProperty("code").GetString())));
+    }
+
+    [Fact]
+    public async Task Editors_save_a_package_whole_and_get_nested_field_errors()
+    {
+        await using var api = new CatalogApi();
+        var editor = await api.ClientAsync("editor");
+        var product = (await editor.QueryOkAsync("products", """{"v":1,"filter":{"eq":[{"member":"id"},5]}}""")).GetProperty("items")[0];
+        var token = product.GetProperty("version").GetString();
+
+        var (rejected, problem) = await editor.BatchAsync("""
+            {"v":1,"operations":[{"id":"u","op":"update","set":"products","key":{"id":5},"token":"TOKEN",
+              "values":{"dimensions":{"widthCm":10,"heightCm":10,"depthCm":10,"weightKg":2000}}}]}
+            """.Replace("TOKEN", token, StringComparison.Ordinal));
+        var (saved, result) = await editor.BatchAsync("""
+            {"v":1,"operations":[{"id":"u","op":"update","set":"products","key":{"id":5},"token":"TOKEN",
+              "values":{"dimensions":{"widthCm":10,"heightCm":20,"depthCm":3,"weightKg":1.5}}}]}
+            """.Replace("TOKEN", token, StringComparison.Ordinal));
+
+        Assert.Equal((HttpStatusCode.UnprocessableEntity, "dimensions/weightKg", "out_of_range"), (rejected, problem.GetProperty("errors")[0].GetProperty("member").GetString(), problem.GetProperty("errors")[0].GetProperty("code").GetString()));
+        Assert.Equal(HttpStatusCode.OK, saved);
+        Assert.Equal("""{"widthCm":10,"heightCm":20,"depthCm":3,"weightKg":1.5}""", result.GetProperty("results")[0].GetProperty("value").GetProperty("dimensions").GetRawText());
     }
 
     [Fact]

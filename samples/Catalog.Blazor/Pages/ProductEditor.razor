@@ -52,6 +52,23 @@ else
                     <FormItem Label="Status"><EnumSelect TEnum="ProductStatus" @bind-Value="_form.Status" /></FormItem>
                 </GridCol>
             </GridRow>
+            <FormItem Label="Package" Extra="Size and shipping weight, saved together.">
+                <Switch @bind-Value="_form.HasPackage" @bind-Value:after="() => Touch(PackageMembers)" />
+            </FormItem>
+            @if (_form.HasPackage)
+            {
+                <GridRow Gutter="16">
+                    @foreach (var (member, label) in PackageFields)
+                    {
+                        <GridCol Xs="12" Md="6">
+                            <FormItem Label="@label" @attributes="Help(member)">
+                                <AntDesign.InputNumber TValue="double" Step="0.1" Style="width: 100%" Value="_form.Package(member)"
+                                                       ValueChanged="value => { _form.SetPackage(member, value); Touch(member); }" />
+                            </FormItem>
+                        </GridCol>
+                    }
+                </GridRow>
+            }
             <GridRow Gutter="16">
                 <GridCol Xs="24" Md="12">
                     <FormItem Label="Category">
@@ -244,12 +261,23 @@ else
         await SaveAsync(_loaded);
     }
 
-    private static readonly string[] Members = [nameof(Product.Sku), nameof(Product.Name), nameof(Product.Description), nameof(Product.Price), nameof(Product.Stock)];
+    // Errors on the package's members come as dotted paths, such as Dimensions.WeightKg.
+    private static readonly (string Member, string Label)[] PackageFields =
+    [
+        ("Dimensions.WidthCm", "Width (cm)"), ("Dimensions.HeightCm", "Height (cm)"), ("Dimensions.DepthCm", "Depth (cm)"), ("Dimensions.WeightKg", "Weight (kg)"),
+    ];
 
-    private void Touch(string member)
+    private static readonly string[] PackageMembers = [.. PackageFields.Select(field => field.Member)];
+
+    private static readonly string[] Members = [nameof(Product.Sku), nameof(Product.Name), nameof(Product.Description), nameof(Product.Price), nameof(Product.Stock), .. PackageMembers];
+
+    private void Touch(params string[] members)
     {
-        _touched.Add(member);
-        _serverErrors.Remove(member);
+        foreach (var member in members)
+        {
+            _touched.Add(member);
+            _serverErrors.Remove(member);
+        }
     }
 
     /// <summary>
@@ -293,6 +321,7 @@ else
         Stock = product.Stock,
         CategoryId = product.CategoryId,
         BrandId = product.BrandId,
+        Dimensions = product.Dimensions,
         CreatedAt = product.CreatedAt,
         Version = product.Version,
     };
@@ -317,8 +346,20 @@ else
 
         public RestPropertyRules? Url { get; } = catalog.ProductImages.Rules(i => i.Url);
 
+        private RestPropertyRules? WidthCm { get; } = catalog.Products.Rules(p => p.Dimensions!.WidthCm);
+
+        private RestPropertyRules? HeightCm { get; } = catalog.Products.Rules(p => p.Dimensions!.HeightCm);
+
+        private RestPropertyRules? DepthCm { get; } = catalog.Products.Rules(p => p.Dimensions!.DepthCm);
+
+        private RestPropertyRules? WeightKg { get; } = catalog.Products.Rules(p => p.Dimensions!.WeightKg);
+
         public RestPropertyRules? For(string member) => member switch
         {
+            "Dimensions.WidthCm" => WidthCm,
+            "Dimensions.HeightCm" => HeightCm,
+            "Dimensions.DepthCm" => DepthCm,
+            "Dimensions.WeightKg" => WeightKg,
             nameof(Product.Sku) => Sku,
             nameof(Product.Name) => Name,
             nameof(Product.Description) => Description,
@@ -345,7 +386,26 @@ else
         public int Stock { get; set; }
         public int CategoryId { get; set; }
         public int BrandId { get; set; }
+        public bool HasPackage { get; set; }
+        private Dimensions PackageValues { get; set; } = new() { WidthCm = 0, HeightCm = 0, DepthCm = 0, WeightKg = 0 };
         public List<ImageRow> Images { get; } = [];
+
+        public double Package(string member) => member switch
+        {
+            "Dimensions.WidthCm" => PackageValues.WidthCm,
+            "Dimensions.HeightCm" => PackageValues.HeightCm,
+            "Dimensions.DepthCm" => PackageValues.DepthCm,
+            _ => PackageValues.WeightKg,
+        };
+
+        // The package is a record: each change replaces it.
+        public void SetPackage(string member, double value) => PackageValues = member switch
+        {
+            "Dimensions.WidthCm" => PackageValues with { WidthCm = value },
+            "Dimensions.HeightCm" => PackageValues with { HeightCm = value },
+            "Dimensions.DepthCm" => PackageValues with { DepthCm = value },
+            _ => PackageValues with { WeightKg = value },
+        };
 
         public static EditorForm Of(Loaded loaded)
         {
@@ -360,7 +420,13 @@ else
                 Stock = product.Stock,
                 CategoryId = product.CategoryId,
                 BrandId = product.BrandId,
+                HasPackage = product.Dimensions is not null,
             };
+            if (product.Dimensions is { } dimensions)
+            {
+                form.PackageValues = dimensions;
+            }
+
             form.Images.AddRange(loaded.Images.Select(image => new ImageRow(image.Id, image.Url)));
             return form;
         }
@@ -375,6 +441,7 @@ else
             product.Stock = Stock;
             product.CategoryId = CategoryId;
             product.BrandId = BrandId;
+            product.Dimensions = HasPackage ? PackageValues : null;
         }
     }
 }

@@ -21,8 +21,19 @@ public sealed class Brand
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public BrandContact? Contact { get; set; }
     public List<Product> Products { get; set; } = [];
 }
+
+/// <summary>A brand's public contact, owned by the brand (OwnsOne, stored in the brands table).</summary>
+public sealed class BrandContact
+{
+    public string Website { get; set; } = "";
+    public string Country { get; set; } = "";
+}
+
+/// <summary>A product's package size and shipping weight: a complex type, stored in the products table.</summary>
+public sealed record Dimensions(double WidthCm, double HeightCm, double DepthCm, double WeightKg);
 
 public sealed class Product
 {
@@ -33,6 +44,7 @@ public sealed class Product
     public decimal Price { get; set; }
     public ProductStatus Status { get; set; }
     public int Stock { get; set; }
+    public Dimensions? Dimensions { get; set; }
     public DateTime CreatedAt { get; set; }
     public Guid Version { get; set; }
     public int CategoryId { get; set; }
