@@ -249,7 +249,7 @@ internal static class QueryCompiler
             {
                 var value = ToComparable(ExpressionHelpers.Parameter(values[index], sort.Key.ReturnType));
                 after = QueryBinder.Comparison(sort.Descending ? ExpressionType.LessThan : ExpressionType.GreaterThan, key, value)!;
-                if (sort.Descending && sort.IsNullable)
+                if (sort is { Descending: true, IsNullable: true })
                 {
                     after = Expression.OrElse(after, Expression.Equal(key, Expression.Constant(null, key.Type)));
                 }

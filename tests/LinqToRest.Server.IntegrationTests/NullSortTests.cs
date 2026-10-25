@@ -1,4 +1,3 @@
-using System.Text.Json;
 using LinqToRest.Protocol;
 using LinqToRest.Server.IntegrationTests.Shop;
 

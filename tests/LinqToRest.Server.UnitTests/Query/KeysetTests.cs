@@ -18,12 +18,12 @@ public sealed class KeysetTests
             Id = id,
             Number = (id % 4) switch { 0 => null, 1 => 10, 2 => 20, _ => id },
             Text = (id % 3) switch { 0 => null, 1 => "a", _ => "b" },
-            Level = (id % 5) switch { 0 => null, 1 => Level.Low, _ => Level.High },
+            Level = (id % 5) switch { 0 => null, 1 => Grade.Low, _ => Grade.High },
             Required = id % 2 == 0 ? "x" : "y",
         }),
     ];
 
-    public enum Level
+    public enum Grade
     {
         Low,
         High,
@@ -133,7 +133,7 @@ public sealed class KeysetTests
 
         public string? Text { get; init; }
 
-        public Level? Level { get; init; }
+        public Grade? Level { get; init; }
 
         public string Required { get; init; } = "";
     }

@@ -36,7 +36,10 @@ public static class ErrorCodes
     /// <summary>The cursor is malformed or doesn't match the query's sort.</summary>
     public const string InvalidCursor = "invalid_cursor";
 
-    /// <summary>Cursor pagination was requested with a nullable sort member.</summary>
+    /// <summary>
+    /// No longer returned: cursor pages sort by nullable members, with <c>null</c> smallest. Kept so code that
+    /// matches on it still compiles.
+    /// </summary>
     public const string CursorNullableSort = "cursor_nullable_sort";
 
     /// <summary>A server limit was exceeded; the <c>limit</c> member names it.</summary>

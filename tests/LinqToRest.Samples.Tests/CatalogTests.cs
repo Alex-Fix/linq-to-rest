@@ -120,7 +120,7 @@ public sealed class CatalogTests(CatalogApi api) : IClassFixture<CatalogApi>
         var weights = rows.Select(row => row.Weight).ToList();
         Assert.Equal(170, rows.Select(row => row.Sku).Distinct().Count());
         Assert.Equal(170, rows.Count);
-        Assert.All(weights[^30..], weight => Assert.Null(weight));
+        Assert.All(weights[^30..], Assert.Null);
         Assert.Equal(weights[..^30].OrderDescending(), weights[..^30]);
     }
 
