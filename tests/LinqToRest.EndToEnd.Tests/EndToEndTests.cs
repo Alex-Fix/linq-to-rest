@@ -171,6 +171,33 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Collections_change_membership_through_links()
+    {
+        var shop = Host.Client();
+        var chess = await shop.Products.Include(p => p.Labels).Include(p => p.Lines).SingleAsync(p => p.Id == 1, Token);
+        var dune = await shop.Products.SingleAsync(p => p.Id == 2, Token);
+        var eco = await shop.Labels.SingleAsync(l => l.Name == "Eco", Token);
+        var puzzles = new Category { Name = "Puzzles" };
+        shop.Categories.Add(puzzles);
+        chess.Labels.Add(eco);
+        chess.Labels.Remove(chess.Labels.Single(l => l.Name == "Gift"));
+        var c2 = chess.Lines.Single(l => l.Sku == "C2");
+        chess.Lines.Remove(c2);
+        puzzles.Products.Add(dune);
+
+        Assert.Equal(5, await shop.SaveChangesAsync(Token));
+
+        Assert.Equal((puzzles.Id, puzzles), (dune.CategoryId, dune.Category));
+        Assert.Equal(EntityState.Detached, shop.Entry(c2).State);
+        var fresh = Host.Client();
+        var reloaded = await fresh.Products.Include(p => p.Labels).Include(p => p.Lines).SingleAsync(p => p.Id == 1, Token);
+        Assert.Equal(["Eco"], reloaded.Labels.Select(l => l.Name));
+        Assert.Equal(["C1"], reloaded.Lines.Select(l => l.Sku));
+        Assert.Equal(puzzles.Id, (await fresh.Products.SingleAsync(p => p.Id == 2, Token)).CategoryId);
+        Assert.Equal(0, await shop.SaveChangesAsync(Token));
+    }
+
+    [Fact]
     public async Task Removed_dtos_are_deleted()
     {
         var shop = Host.Client();
