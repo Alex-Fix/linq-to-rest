@@ -78,6 +78,13 @@ internal static class QueryCompiler
             if (page?.After is { } after)
             {
                 var values = Cursor.Decode(after, hash, [.. sorts.Select(sort => sort.Key.ReturnType)], "/page/after");
+
+                // Strings read as null whatever the member, so a forged cursor could hold one for a required member.
+                if (sorts.Where((sort, index) => values[index] is null && !sort.IsNullable).Any())
+                {
+                    throw RequestException.Invalid(ErrorCodes.InvalidCursor, "/page/after");
+                }
+
                 keyset = Expression.Lambda(Keyset(sorts, values), root);
             }
         }
@@ -152,11 +159,12 @@ internal static class QueryCompiler
                 throw RequestException.Invalid(ErrorCodes.NotSortable, $"/orderBy/{index}");
             }
 
-            sorts.Add(new SortKey(Expression.Lambda(value, group), item.Descending, item.Member.Path));
+            // Every field binds as nullable; only a type that can hold null needs null ordering.
+            sorts.Add(new SortKey(Expression.Lambda(value, group), item.Descending, item.Member.Path, ExpressionHelpers.IsNullable(value.Type)));
         }
 
         // Keys end the order, so pages of groups are deterministic.
-        sorts.AddRange(keyBounds.Select((key, index) => new SortKey(Expression.Lambda(key.Expression, group), false, $"key{index}")));
+        sorts.AddRange(keyBounds.Select((key, index) => new SortKey(Expression.Lambda(key.Expression, group), false, $"key{index}", key.IsNullable)));
 
         var pagination = mapping.Pagination;
         int? maxGroups = request.Page?.Take is null ? server.Limits.MaxGroups : null;
@@ -198,47 +206,79 @@ internal static class QueryCompiler
                 throw RequestException.Invalid(ErrorCodes.NotSortable, $"/orderBy/{index}");
             }
 
-            if (cursor && value.IsNullable)
-            {
-                throw RequestException.Invalid(ErrorCodes.CursorNullableSort, $"/orderBy/{index}");
-            }
-
-            if (cursor && !CursorTypes.Contains(ExpressionHelpers.Underlying(value.Expression.Type)) && !value.Expression.Type.IsEnum)
+            var type = ExpressionHelpers.Underlying(value.Expression.Type);
+            if (cursor && !CursorTypes.Contains(type) && !type.IsEnum)
             {
                 throw RequestException.Invalid(ErrorCodes.NotSortable, $"/orderBy/{index}");
             }
 
-            sorts.Add(new SortKey(Expression.Lambda(value.Expression, root), item.Descending, item.Member.Path));
+            sorts.Add(new SortKey(Expression.Lambda(value.Expression, root), item.Descending, item.Member.Path, value.IsNullable));
         }
 
         // The key always ends the sort, so pages are deterministic and cursors identify one row.
         foreach (var key in mapping.Key.Where(key => sorts.TrueForAll(sort => sort.Path != key.Name)))
         {
-            sorts.Add(new SortKey(Expression.Lambda(ExpressionHelpers.Inline(key.Binding, root), root), false, key.Name));
+            sorts.Add(new SortKey(Expression.Lambda(ExpressionHelpers.Inline(key.Binding, root), root), false, key.Name, IsNullable: false));
         }
 
         return sorts;
     }
 
-    /// <summary><c>k1 &gt; v1 OR (k1 == v1 AND k2 &gt; v2) OR …</c>, with &lt; for descending members.</summary>
-    private static Expression Keyset(List<SortKey> sorts, IReadOnlyList<object?> values)
+    /// <summary>
+    /// <c>k1 &gt; v1 OR (k1 == v1 AND k2 &gt; v2) OR …</c>, with &lt; for descending members. A null sorts smallest:
+    /// after a value, ascending excludes nulls and descending includes them; after a null, ascending takes every value
+    /// and descending nothing; equality with a null is <c>k == null</c>.
+    /// </summary>
+    internal static Expression Keyset(IReadOnlyList<SortKey> sorts, IReadOnlyList<object?> values)
     {
         Expression? result = null;
         Expression? equalPrefix = null;
         for (var index = 0; index < sorts.Count; index++)
         {
-            var key = ToComparable(sorts[index].Key.Body);
-            var value = ToComparable(ExpressionHelpers.Parameter(values[index], sorts[index].Key.ReturnType));
-            var after = QueryBinder.Comparison(sorts[index].Descending ? ExpressionType.LessThan : ExpressionType.GreaterThan, key, value)!;
-            var term = equalPrefix is null ? after : Expression.AndAlso(equalPrefix, after);
-            result = result is null ? term : Expression.OrElse(result, term);
-            var equal = Expression.Equal(key, value);
+            var sort = sorts[index];
+            var key = ToComparable(sort.Key.Body);
+            Expression? after;
+            Expression equal;
+            if (values[index] is null)
+            {
+                var none = Expression.Constant(null, key.Type);
+                after = sort.Descending ? null : Expression.NotEqual(key, none);
+                equal = Expression.Equal(key, none);
+            }
+            else
+            {
+                var value = ToComparable(ExpressionHelpers.Parameter(values[index], sort.Key.ReturnType));
+                after = QueryBinder.Comparison(sort.Descending ? ExpressionType.LessThan : ExpressionType.GreaterThan, key, value)!;
+                if (sort.Descending && sort.IsNullable)
+                {
+                    after = Expression.OrElse(after, Expression.Equal(key, Expression.Constant(null, key.Type)));
+                }
+
+                equal = Expression.Equal(key, value);
+            }
+
+            if (after is not null)
+            {
+                var term = equalPrefix is null ? after : Expression.AndAlso(equalPrefix, after);
+                result = result is null ? term : Expression.OrElse(result, term);
+            }
+
             equalPrefix = equalPrefix is null ? equal : Expression.AndAlso(equalPrefix, equal);
         }
 
+        // The key ends every cursor sort and is never null, so there's always a term.
         return result!;
     }
 
-    private static Expression ToComparable(Expression value) =>
-        value.Type.IsEnum ? Expression.Convert(value, Enum.GetUnderlyingType(value.Type)) : value;
+    private static Expression ToComparable(Expression value)
+    {
+        var type = ExpressionHelpers.Underlying(value.Type);
+        if (!type.IsEnum)
+        {
+            return value;
+        }
+
+        var underlying = Enum.GetUnderlyingType(type);
+        return Expression.Convert(value, value.Type == type ? underlying : ExpressionHelpers.MakeNullable(underlying));
+    }
 }
