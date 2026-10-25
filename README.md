@@ -196,7 +196,7 @@ decimal total = await shop.Products.Where(p => p.CategoryId == 4).SumAsync(p => 
   more is `limit_exceeded` (`groups`). `CountAsync` counts groups. No cursors, includes or grouped rows.
 - `SumAsync`, `MinAsync`, `MaxAsync` and `AverageAsync` aggregate every row a query filters, with LINQ's empty-set
   results (sum 0; min, max and average throw, or are null for nullable values).
-- Providers order a `null` key differently (SQLite first, PostgreSQL last).
+- A `null` key or field sorts smallest, as everywhere (first ascending, last descending).
 - TypeScript: `groupBy(p => ...)`, `.select(g => ({ key: g.key, count: g.count(), ... }))`, then `where`/`orderBy` over
   the fields; `sum`/`min`/`max`/`average` on a query. Non-groupable keys don't compile.
 
@@ -344,7 +344,7 @@ Errors are `application/problem+json` with a stable `code`, a JSON `pointer` int
 
 | Status | Codes |
 |---|---|
-| 400 | `invalid_json` `unknown_node` `bad_arity` `unknown_member` `not_filterable` `not_sortable` `not_groupable` `not_aggregatable` `not_writable` `type_mismatch` `invalid_cursor` `cursor_nullable_sort` `limit_exceeded` `unsupported_version` `invalid_query` `invalid_batch` |
+| 400 | `invalid_json` `unknown_node` `bad_arity` `unknown_member` `not_filterable` `not_sortable` `not_groupable` `not_aggregatable` `not_writable` `type_mismatch` `invalid_cursor` `limit_exceeded` `unsupported_version` `invalid_query` `invalid_batch` |
 | 403 / 404 | `forbidden`, `operation_not_allowed` / `not_found` |
 | 409 / 412 | `conflict` (constraint violation) / `concurrency_conflict` |
 | 422 | `validation_failed`, with `errors` (`required` `too_short` `too_long` `out_of_range` `invalid_format`, custom codes, and a final `too_many_errors` past the limit) |
@@ -364,8 +364,14 @@ Errors are `application/problem+json` with a stable `code`, a JSON `pointer` int
 | Group keys / groups without `Take` | 4 / 1000 |
 | Validation errors per response | 100 |
 
-Every query is paged and every sort ends with the key. Cursor pagination only sorts by non-nullable members, because
-providers order `NULL` differently.
+Every query is paged and every sort ends with the key. `null` sorts smallest, as in LINQ: first ascending, last
+descending, on every provider and in offset, cursor and grouped queries alike. Cursor pages can sort by nullable
+members too: nullable columns, members through optional navigations and members of optional value types. SQLite and
+SQL Server already order `NULL` that way, so their `ORDER BY` is unchanged; on PostgreSQL (and any other provider)
+each nullable sort gets an `IS NULL` key first, which an index on the member alone can't serve.
+
+Before null cursors, PostgreSQL offset pages put `null` last ascending; they now match the other providers, and
+`cursor_nullable_sort` is no longer returned.
 
 ## Databases
 

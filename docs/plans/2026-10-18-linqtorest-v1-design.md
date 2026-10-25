@@ -122,7 +122,9 @@ types.
   base64url(`{v:1, sort:<hash of sort spec>, values:[<last row's sort values>]}`). Next page becomes a keyset
   predicate (`price < 19.99 OR (price == 19.99 AND id > 1042)`). Mismatched hash / wrong value types or count →
   `400 invalid_cursor`. Not signed — tampering only moves the comparison point on visible, sortable members.
-  Cursor mode allows only non-nullable sort members (`cursor_nullable_sort`).
+  Cursor mode allows only non-nullable sort members (`cursor_nullable_sort`). *Superseded by
+  [`2026-10-25-nullable-cursors-design.md`](2026-10-25-nullable-cursors-design.md): nullable members sort `null`
+  smallest.*
 - Every query is paged: no `take` → `DefaultPageSize`. `count: true` adds one `COUNT` with the same filter in either
   mode.
 
