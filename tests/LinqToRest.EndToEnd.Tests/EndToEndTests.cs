@@ -100,6 +100,30 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Cursor_pages_sort_by_a_nullable_member_with_nulls_smallest()
+    {
+        var shop = Host.Client();
+        var ascending = new List<int>();
+        var page = await shop.Products.OrderBy(p => p.ReleasedOn).Take(1).ToCursorPageAsync(cancellationToken: Token);
+        ascending.AddRange(page.Items.Select(p => p.Id));
+        while (page.NextCursor is { } cursor)
+        {
+            page = await shop.Products.OrderBy(p => p.ReleasedOn).After(cursor).Take(1).ToCursorPageAsync(cancellationToken: Token);
+            ascending.AddRange(page.Items.Select(p => p.Id));
+        }
+
+        var descending = new List<int>();
+        await foreach (var product in shop.Products.OrderByDescending(p => p.ReleasedOn).AsAsyncEnumerable(Token))
+        {
+            descending.Add(product.Id);
+        }
+
+        // Dune (2) and Notebook (5) have no release date.
+        Assert.Equal([2, 5, 1, 3, 6], ascending);
+        Assert.Equal([6, 3, 1, 2, 5], descending);
+    }
+
+    [Fact]
     public async Task Count_any_first_and_single()
     {
         var shop = Host.Client();

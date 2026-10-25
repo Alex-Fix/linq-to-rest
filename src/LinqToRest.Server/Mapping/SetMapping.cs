@@ -122,7 +122,7 @@ internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQ
 
         if (plan.Group is { } group)
         {
-            return await ExecuteGroupedAsync(query, plan, group, cancellationToken).ConfigureAwait(false);
+            return await ExecuteGroupedAsync(query, plan, group, NullOrdering.IsNative(db.Database.ProviderName), cancellationToken).ConfigureAwait(false);
         }
 
         long? total = plan.Count ? await query.LongCountAsync(cancellationToken).ConfigureAwait(false) : null;
@@ -131,19 +131,7 @@ internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQ
             query = query.Where(keyset);
         }
 
-        for (var index = 0; index < plan.Sorts.Count; index++)
-        {
-            var sort = plan.Sorts[index];
-            var method = (index == 0, sort.Descending) switch
-            {
-                (true, false) => nameof(Queryable.OrderBy),
-                (true, true) => nameof(Queryable.OrderByDescending),
-                (false, false) => nameof(Queryable.ThenBy),
-                (false, true) => nameof(Queryable.ThenByDescending),
-            };
-            query = query.Provider.CreateQuery<TEntity>(
-                Expression.Call(typeof(Queryable), method, [typeof(TEntity), sort.Key.ReturnType], query.Expression, Expression.Quote(sort.Key)));
-        }
+        query = query.Provider.CreateQuery<TEntity>(NullOrdering.Sort(query.Expression, typeof(TEntity), plan.Sorts, NullOrdering.IsNative(db.Database.ProviderName)));
 
         if (plan is { Mode: Protocol.PageMode.Offset, Skip: > 0 })
         {
@@ -175,7 +163,7 @@ internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQ
     }
 
     /// <summary>GroupBy, having, order, page and the per-group projection, composed as one query over the filtered rows.</summary>
-    private static async Task<QueryResult> ExecuteGroupedAsync(IQueryable<TEntity> rows, QueryPlan plan, GroupPlan group, CancellationToken cancellationToken)
+    private static async Task<QueryResult> ExecuteGroupedAsync(IQueryable<TEntity> rows, QueryPlan plan, GroupPlan group, bool nativeNulls, CancellationToken cancellationToken)
     {
         var groupType = plan.Projection.Parameters[0].Type;
         Expression groups = Expression.Call(typeof(Queryable), nameof(Queryable.GroupBy), [typeof(TEntity), group.Key.ReturnType], rows.Expression, Expression.Quote(group.Key));
@@ -191,18 +179,7 @@ internal sealed class SetMapping<TEntity>(RestSetModel model, Func<DbContext, IQ
             total = await rows.Provider.CreateQuery<int>(counted).LongCountAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        for (var index = 0; index < group.Sorts.Count; index++)
-        {
-            var sort = group.Sorts[index];
-            var method = (index == 0, sort.Descending) switch
-            {
-                (true, false) => nameof(Queryable.OrderBy),
-                (true, true) => nameof(Queryable.OrderByDescending),
-                (false, false) => nameof(Queryable.ThenBy),
-                (false, true) => nameof(Queryable.ThenByDescending),
-            };
-            groups = Expression.Call(typeof(Queryable), method, [groupType, sort.Key.ReturnType], groups, Expression.Quote(sort.Key));
-        }
+        groups = NullOrdering.Sort(groups, groupType, group.Sorts, nativeNulls);
 
         if (plan.Skip > 0)
         {

@@ -98,7 +98,8 @@ description: Conventions and scaffolding for the LinqToRest .NET solution — pa
   subclasses. Never start or skip a provider inside a fixture's `InitializeAsync`; reach the server through the lazy
   `Server` property, which skips when PostgreSQL isn't available.
 - Results that differ between providers are a library bug (for example, unordered collections) unless the database
-  defines them differently (collation, null ordering). Then the test uses values both providers agree on.
+  defines them differently (collation). Then the test uses values both providers agree on. Null ordering is not one:
+  `null` sorts smallest everywhere (`NullOrdering`).
 
 ## Benchmarks (`benchmarks/`)
 - `LinqToRest.Benchmarks`: BenchmarkDotNet console app, Release only, not packable; one class per suite

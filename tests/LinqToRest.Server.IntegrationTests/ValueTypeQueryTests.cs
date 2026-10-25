@@ -98,7 +98,6 @@ public abstract class ValueTypeQueryTests(ShopFixture shop)
     [InlineData("""{"filter":{"member":"origin"}}""", "type_mismatch", "/filter")]
     [InlineData("""{"orderBy":[{"member":"origin"}]}""", "not_sortable", "/orderBy/0/member")]
     [InlineData("""{"orderBy":[{"member":"origin/city"}]}""", "not_sortable", "/orderBy/0/member")]
-    [InlineData("""{"orderBy":[{"member":"origin/country"}],"page":{"mode":"cursor"}}""", "cursor_nullable_sort", "/orderBy/0")]
     [InlineData("""{"groupBy":["origin"],"select":{"key":0}}""", "not_groupable", "/groupBy/0")]
     [InlineData("""{"filter":{"eq":[{"member":"category/contact/phone"},"1"]}}""", "not_filterable", "/filter/eq/0")]
     [InlineData("""{"filter":{"any":{"source":{"member":"lines"},"var":"l","body":{"eq":[{"member":"l/shipping/country"},"UA"]}}}}""", "not_filterable", "/filter/any/body/eq/0")]

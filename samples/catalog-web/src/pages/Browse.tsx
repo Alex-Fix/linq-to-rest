@@ -22,7 +22,7 @@ import type { CatalogContext } from "../catalog.generated";
 import { CategoryTree, descendants, type CategoryNode } from "../CategoryTree";
 import { useSession } from "../session";
 
-type Sort = "name" | "price" | "priceDesc" | "newest";
+type Sort = "name" | "price" | "priceDesc" | "newest" | "lightest" | "heaviest";
 
 const pageSize = 24;
 
@@ -107,7 +107,12 @@ function productQuery(catalog: CatalogContext, filters: Filters, categories: rea
         ? query.orderByDescending((p) => p.price)
         : filters.sort === "newest"
           ? query.orderByDescending((p) => p.createdAt)
-          : query.orderBy((p) => p.name);
+          : // Dimensions are optional: products without them sort as the smallest weight (first, or last descending).
+            filters.sort === "lightest"
+            ? query.orderBy((p) => p.dimensions.weightKg)
+            : filters.sort === "heaviest"
+              ? query.orderByDescending((p) => p.dimensions.weightKg)
+              : query.orderBy((p) => p.name);
 
   // Cards only need a few members and the first image, so that's all the server sends.
   return sorted.select((p) => ({
@@ -336,6 +341,8 @@ export function Browse() {
                 { value: "price", label: "Price: low to high" },
                 { value: "priceDesc", label: "Price: high to low" },
                 { value: "newest", label: "Newest" },
+                { value: "lightest", label: "Weight: light to heavy" },
+                { value: "heaviest", label: "Weight: heavy to light" },
               ]}
             />
           </Space>

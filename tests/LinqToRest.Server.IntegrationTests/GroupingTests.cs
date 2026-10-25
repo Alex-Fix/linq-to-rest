@@ -69,8 +69,8 @@ public abstract class GroupingTests(ShopDatabase database) : IAsyncLifetime
              games.GetProperty("from").GetDecimal(), games.GetProperty("to").GetDecimal(), games.GetProperty("total").GetDecimal(),
              Math.Round(games.GetProperty("rating").GetDouble(), 2), games.GetProperty("latest").GetDateTime().ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture)));
 
-        // Books and products without a category: one each, in the provider's null order.
-        Assert.Equal([null, "Books"], body.GetProperty("items").EnumerateArray().Skip(1).Select(item => item.GetProperty("category").GetString()).Order());
+        // Books and products without a category tie on count; the key breaks the tie, null smallest on every provider.
+        Assert.Equal([null, "Books"], body.GetProperty("items").EnumerateArray().Skip(1).Select(item => item.GetProperty("category").GetString()));
         Assert.Contains(Server.Sql, sql => sql.Contains("GROUP BY", StringComparison.OrdinalIgnoreCase));
     }
 

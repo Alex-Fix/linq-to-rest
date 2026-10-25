@@ -141,6 +141,8 @@
         new("price", "Price: low to high"),
         new("priceDesc", "Price: high to low"),
         new("newest", "Newest"),
+        new("lightest", "Weight: light to heavy"),
+        new("heaviest", "Weight: heavy to light"),
     ];
 
     protected override async Task OnInitializedAsync()
@@ -239,6 +241,10 @@
             "price" => Filtered().OrderBy(p => p.Price),
             "priceDesc" => Filtered().OrderByDescending(p => p.Price),
             "newest" => Filtered().OrderByDescending(p => p.CreatedAt),
+
+            // Dimensions are optional: products without them sort as the smallest weight (first, or last descending).
+            "lightest" => Filtered().OrderBy(p => p.Dimensions!.WeightKg),
+            "heaviest" => Filtered().OrderByDescending(p => p.Dimensions!.WeightKg),
             _ => Filtered().OrderBy(p => p.Name),
         };
 

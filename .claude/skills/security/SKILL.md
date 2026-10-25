@@ -87,8 +87,9 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
   `MaxGroupKeys`, `MaxGroups` (without `take`) or the set's page limits, and the node limits.
 
 ### Cursors
-- Unsigned by design; validate version, sort-spec hash, value count and types. They must never grant access beyond
-  what a filter on visible, sortable members could.
+- Unsigned by design; validate version, sort-spec hash, value count and types, and reject `null` for a sort member
+  that isn't nullable (strings read as `null` whatever the member). They must never grant access beyond what a
+  filter on visible, sortable members could.
 
 ### Model document
 - Export contains only what the wire exposes: set, type, member and enum names, scalar types, flags. Never entity
@@ -128,6 +129,7 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
 - [ ] Value types: can a client reach an unconfigured member, or can a writable use hide an EF-mapped member?
 - [ ] CORS: explicit origins, no origin reflection with credentials, scoped to the endpoints that need it?
 - [ ] Is every limit enforced before allocation and tested at and past its boundary?
+- [ ] Cursors: are decoded values checked against their sort members (count, type, nullability)?
 - [ ] Any `Compile()`, reflection on client strings, string-built query or dynamic LINQ on the server? → reject.
 - [ ] Error responses and logs free of raw values, type names and member names as typed?
 - [ ] New dependency: free/OSS, and not in Abstractions/Client unless BCL? `dotnet list package --vulnerable` clean?

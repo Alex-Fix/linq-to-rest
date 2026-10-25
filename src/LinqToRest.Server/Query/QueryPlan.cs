@@ -40,6 +40,7 @@ internal sealed class QueryPlan
 /// </summary>
 internal sealed record GroupPlan(LambdaExpression Key, LambdaExpression? Having, IReadOnlyList<SortKey> Sorts, int? MaxGroups);
 
-internal sealed record SortKey(LambdaExpression Key, bool Descending, string Path);
+/// <summary>One sort member; a nullable one sorts <c>null</c> smallest (first ascending, last descending), as LINQ does.</summary>
+internal sealed record SortKey(LambdaExpression Key, bool Descending, string Path, bool IsNullable);
 
 internal sealed record QueryResult(IReadOnlyList<object?[]> Rows, string? NextCursor, long? TotalCount);
