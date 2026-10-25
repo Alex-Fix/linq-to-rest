@@ -262,6 +262,12 @@ public sealed partial class RestModel
             {
                 throw Invalid($"The collection navigation '{set.Name}.{navigation.Name}' can't be nullable or have a foreign key.");
             }
+
+            if ((navigation.Links is not null && !navigation.IsCollection)
+                || (navigation.OnUnlink is not null) != (navigation.Links == RestLinkKind.OneToMany))
+            {
+                throw Invalid($"The navigation '{set.Name}.{navigation.Name}' has links that don't fit it: only collections link, and only one-to-many ones say what unlinking does.");
+            }
         }
     }
 

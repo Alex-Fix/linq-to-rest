@@ -85,7 +85,8 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         {
             BatchOperationKind.Insert => (SetOperation.Insert, WriteOperations.Insert),
             BatchOperationKind.Update => (SetOperation.Update, WriteOperations.Update),
-            _ => (SetOperation.Delete, WriteOperations.Delete),
+            BatchOperationKind.Delete => (SetOperation.Delete, WriteOperations.Delete),
+            _ => throw Invalid(ErrorCodes.InvalidBatch, $"{location}/op", operation),
         };
 
         // The set's own rules come first: a read-only set never reaches its policy or the database.

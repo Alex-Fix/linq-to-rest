@@ -9,7 +9,7 @@ public sealed class RestNavigationModel
     /// <summary>Gets the name of the target set.</summary>
     public required string Target { get; init; }
 
-    /// <summary>Gets whether the navigation is a collection (one-to-many).</summary>
+    /// <summary>Gets whether the navigation is a collection (one-to-many or many-to-many).</summary>
     public bool IsCollection { get; init; }
 
     /// <summary>Gets whether a reference navigation may be null.</summary>
@@ -24,6 +24,12 @@ public sealed class RestNavigationModel
         get;
         init => field = [.. value];
     } = [];
+
+    /// <summary>Gets how the collection's membership changes, or <see langword="null"/> when it's read-only.</summary>
+    public RestLinkKind? Links { get; init; }
+
+    /// <summary>Gets what unlinking does to an item of a one-to-many collection that allows links.</summary>
+    public RestUnlinkBehavior? OnUnlink { get; init; }
 
     /// <inheritdoc/>
     public override string ToString() => Name;

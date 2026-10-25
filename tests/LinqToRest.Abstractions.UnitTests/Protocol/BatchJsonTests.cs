@@ -29,6 +29,31 @@ public sealed class BatchJsonTests
     }
 
     [Fact]
+    public void Reads_links_and_unlinks()
+    {
+        const string json = """
+            {"v":1,"operations":[
+              {"id":"o0","op":"insert","set":"orderLines","values":{"sku":"C3"}},
+              {"id":"o1","op":"link","set":"products","key":{"id":7},"navigation":"lines","item":{"ref":"o0"}},
+              {"id":"o2","op":"unlink","set":"products","key":{"id":7},"navigation":"lines","item":{"key":{"id":12},"token":"AAAAB9E="}},
+              {"id":"o3","op":"insert","set":"products","values":{"name":"Cube"}},
+              {"id":"o4","op":"link","set":"products","ref":"o3","navigation":"labels","item":{"key":{"id":3}}}]}
+            """;
+
+        var batch = Read(json);
+
+        Assert.Equal(
+            [BatchOperationKind.Insert, BatchOperationKind.Link, BatchOperationKind.Unlink, BatchOperationKind.Insert, BatchOperationKind.Link],
+            batch.Operations.Select(operation => operation.Op));
+        Assert.Equal(("lines", "o0"), (batch.Operations[1].Navigation, batch.Operations[1].Item!.Ref));
+        Assert.Equal((12, "AAAAB9E="), (batch.Operations[2].Item!.Key!["id"].GetInt32(), batch.Operations[2].Item!.Token!.Value.GetString()));
+        Assert.Equal("o3", batch.Operations[4].Ref);
+        using var expected = JsonDocument.Parse(json);
+        using var written = JsonDocument.Parse(BatchJson.Write(batch));
+        Assert.True(JsonElement.DeepEquals(expected.RootElement, written.RootElement));
+    }
+
+    [Fact]
     public void Write_then_read_round_trips()
     {
         var written = BatchJson.Write(Read(DesignExample));
@@ -63,6 +88,21 @@ public sealed class BatchJsonTests
     [InlineData("""{"v":1,"operations":[]}""", ErrorCodes.InvalidBatch, "/operations")]
     [InlineData("""{"v":1,"operations":[{"id":"a","op":"insert","set":"s"},{"id":"a","op":"insert","set":"s"}]}""", ErrorCodes.InvalidBatch, "/operations/1/id")]
     [InlineData("""{"v":1,"operations":[{"id":"a b","op":"insert","set":"s"}]}""", ErrorCodes.InvalidBatch, "/operations/0/id")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"insert","set":"s","navigation":"lines"}]}""", ErrorCodes.InvalidBatch, "/operations/0/navigation")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"update","set":"s","key":{"id":1},"item":{"key":{"id":1}}}]}""", ErrorCodes.InvalidBatch, "/operations/0/item")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"delete","set":"s","key":{"id":1},"ref":"b"}]}""", ErrorCodes.InvalidBatch, "/operations/0/ref")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","key":{"id":1},"navigation":"l","item":{"key":{"id":2}},"values":{}}]}""", ErrorCodes.InvalidBatch, "/operations/0/values")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","key":{"id":1},"navigation":"l","item":{"key":{"id":2}},"refs":{}}]}""", ErrorCodes.InvalidBatch, "/operations/0/refs")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"unlink","set":"s","key":{"id":1},"navigation":"l","item":{"key":{"id":2}},"token":"x"}]}""", ErrorCodes.InvalidBatch, "/operations/0/token")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","key":{"id":1},"item":{"key":{"id":2}}}]}""", ErrorCodes.InvalidBatch, "/operations/0/navigation")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","key":{"id":1},"navigation":"a b","item":{"key":{"id":2}}}]}""", ErrorCodes.InvalidBatch, "/operations/0/navigation")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","navigation":"l","item":{"key":{"id":2}}}]}""", ErrorCodes.InvalidBatch, "/operations/0/key")]
+    [InlineData("""{"v":1,"operations":[{"id":"o","op":"insert","set":"s","values":{}},{"id":"a","op":"link","set":"s","key":{"id":1},"ref":"o","navigation":"l","item":{"key":{"id":2}}}]}""", ErrorCodes.InvalidBatch, "/operations/1/key")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","key":{"id":1},"navigation":"l"}]}""", ErrorCodes.InvalidBatch, "/operations/0/item")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","key":{"id":1},"navigation":"l","item":{}}]}""", ErrorCodes.InvalidBatch, "/operations/0/item")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","ref":"b","navigation":"l","item":{"key":{"id":2}}},{"id":"b","op":"insert","set":"s","values":{}}]}""", ErrorCodes.InvalidBatch, "/operations/0/ref")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","key":{"id":1},"navigation":"l","item":{"ref":"a"}}]}""", ErrorCodes.InvalidBatch, "/operations/0/item/ref")]
+    [InlineData("""{"v":1,"operations":[{"id":"a","op":"link","set":"s","key":{"id":1},"navigation":"l","item":{"key":{"id":2},"extra":1}}]}""", ErrorCodes.InvalidJson, "")]
     public void Rejects_invalid_batches(string json, string code, string location)
     {
         var error = Assert.Throws<ProtocolException>(() => Read(json));
