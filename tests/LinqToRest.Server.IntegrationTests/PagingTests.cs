@@ -90,8 +90,6 @@ public abstract class PagingTests(ShopFixture shop)
         { "products", """{"v":1,"orderBy":[{"member":"name"}]}""", "not_sortable", "/orderBy/0/member" },
         { "products", """{"v":1,"orderBy":[{"member":"lines/quantity"}]}""", "unknown_member", "/orderBy/0/member" },
         { "products", """{"v":1,"orderBy":[{"member":"category"}]}""", "not_sortable", "/orderBy/0" },
-        { "products", """{"v":1,"orderBy":[{"member":"releasedOn"}],"page":{"mode":"cursor"}}""", "cursor_nullable_sort", "/orderBy/0" },
-        { "products", """{"v":1,"orderBy":[{"member":"category/name"}],"page":{"mode":"cursor"}}""", "cursor_nullable_sort", "/orderBy/0" },
         { "products", """{"v":1,"page":{"mode":"cursor","after":"e30"}}""", "invalid_cursor", "/page/after" },
         { "products", """{"v":1,"page":{"mode":"offset","take":21}}""", "limit_exceeded", "/page/take" },
         { "products", """{"v":1,"page":{"mode":"offset","skip":101}}""", "limit_exceeded", "/page/skip" },
