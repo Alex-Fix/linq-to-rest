@@ -86,7 +86,7 @@ public abstract class EndpointTests(ShopFixture shop)
     private sealed class RejectingProvider : DbCommandInterceptor
     {
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default) =>
-            command.CommandText.Contains("CreatedAt", StringComparison.Ordinal) || command.CommandText.StartsWith("INSERT", StringComparison.Ordinal)
+            command.CommandText.Contains("CreatedAt", StringComparison.Ordinal) || command.CommandText.Contains("INSERT", StringComparison.Ordinal)
                 ? throw new ArgumentException("Cannot write DateTime with Kind=Unspecified.")
                 : base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
     }
@@ -259,3 +259,5 @@ public abstract class EndpointTests(ShopFixture shop)
 public sealed class SqliteEndpointTests(SqliteShopFixture shop) : EndpointTests(shop), IClassFixture<SqliteShopFixture>;
 
 public sealed class PostgresEndpointTests(PostgresShopFixture shop) : EndpointTests(shop), IClassFixture<PostgresShopFixture>;
+
+public sealed class SqlServerEndpointTests(SqlServerShopFixture shop) : EndpointTests(shop), IClassFixture<SqlServerShopFixture>;

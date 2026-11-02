@@ -272,3 +272,5 @@ public abstract class ValidationTests(ShopDatabase database) : IAsyncLifetime
 public sealed class SqliteValidationTests() : ValidationTests(new SqliteDatabase());
 
 public sealed class PostgresValidationTests(PostgresContainer postgres) : ValidationTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerValidationTests(SqlServerContainer sqlServer) : ValidationTests(new SqlServerDatabase(sqlServer));

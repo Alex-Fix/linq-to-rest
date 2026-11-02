@@ -24,8 +24,9 @@ dotnet run --project samples/Catalog.Api              # http://localhost:5095, S
 dotnet run --project samples/Catalog.Blazor           # http://localhost:5174
 ```
 
-PostgreSQL instead of SQLite: `docker compose -f samples/docker-compose.yml up -d`, then add
-`--Database:Provider=Postgres` to the API.
+PostgreSQL instead of SQLite: `docker compose -f samples/docker-compose.yml up -d postgres`, then add
+`--Database:Provider=Postgres` to the API. SQL Server: `... up -d sqlserver` and `--Database:Provider=SqlServer` (its
+default collation ignores case, so searches do too).
 
 **The sign-in is for development only.** The header switches between Anonymous, Viewer and Editor through
 `POST /auth/dev-login`, which issues a one-hour token signed with a key from `appsettings.Development.json`. It isn't

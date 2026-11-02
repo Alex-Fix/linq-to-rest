@@ -106,6 +106,23 @@ public abstract class PagingTests(ShopFixture shop)
     }
 
     [Fact]
+    public async Task Cursor_pages_over_a_guid_key_walk_the_database_order()
+    {
+        var all = await shop.Server.QueryOkAsync("bins", """{"v":1,"page":{"mode":"offset"}}""");
+        var first = await shop.Server.QueryOkAsync("bins", """{"v":1,"page":{"mode":"cursor","take":1}}""");
+        shop.Server.Sql.Clear();
+
+        var second = await shop.Server.QueryOkAsync("bins", $$$"""{"v":1,"page":{"mode":"cursor","take":1,"after":"{{{first.GetProperty("nextCursor").GetString()}}}"}}""");
+
+        Assert.Equal(Labels(all), Labels(first).Concat(Labels(second)));
+        Assert.False(second.TryGetProperty("nextCursor", out _));
+        Assert.Single(shop.Server.Sql);
+    }
+
+    private static string[] Labels(JsonElement result) =>
+        [.. result.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("label").GetString()!)];
+
+    [Fact]
     public async Task Sorting_through_a_navigation_works_in_offset_mode()
     {
         var result = await shop.Server.QueryOkAsync("products", """{"v":1,"filter":{"ne":[{"member":"categoryId"},null]},"orderBy":[{"member":"category/name","desc":true}]}""");
@@ -128,3 +145,5 @@ public abstract class PagingTests(ShopFixture shop)
 public sealed class SqlitePagingTests(SqliteShopFixture shop) : PagingTests(shop), IClassFixture<SqliteShopFixture>;
 
 public sealed class PostgresPagingTests(PostgresShopFixture shop) : PagingTests(shop), IClassFixture<PostgresShopFixture>;
+
+public sealed class SqlServerPagingTests(SqlServerShopFixture shop) : PagingTests(shop), IClassFixture<SqlServerShopFixture>;

@@ -151,3 +151,5 @@ public abstract class ShopFixture(ShopDatabase database) : IAsyncLifetime
 public sealed class SqliteShopFixture() : ShopFixture(new SqliteDatabase());
 
 public sealed class PostgresShopFixture(PostgresContainer postgres) : ShopFixture(new PostgresDatabase(postgres));
+
+public sealed class SqlServerShopFixture(SqlServerContainer sqlServer) : ShopFixture(new SqlServerDatabase(sqlServer));

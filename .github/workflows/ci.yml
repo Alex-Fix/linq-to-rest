@@ -19,8 +19,8 @@ jobs:
     env:
       DOTNET_NOLOGO: "1"
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-      # The runners have Docker: missing PostgreSQL is a failure here, not a skip.
-      LINQTOREST_REQUIRE_POSTGRES: "1"
+      # The runners have Docker: a missing PostgreSQL or SQL Server is a failure here, not a skip.
+      LINQTOREST_REQUIRE_DATABASES: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -58,7 +58,7 @@ jobs:
             exit 1
           fi
 
-      - name: Test (SQLite and PostgreSQL)
+      - name: Test (SQLite, PostgreSQL and SQL Server)
         run: dotnet test --solution LinqToRest.slnx -c Release --no-build
 
       # The tests check the golden models and the client tests' context; these clients are generated from them too.

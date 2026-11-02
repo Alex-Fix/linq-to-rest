@@ -6,12 +6,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddDbContext<CatalogDbContext>(options =>
 {
-    // SQLite by default; --Database:Provider=Postgres with docker compose -f samples/docker-compose.yml up -d.
+    // SQLite by default; --Database:Provider=Postgres or SqlServer with docker compose -f samples/docker-compose.yml up -d.
     _ = builder.Configuration["Database:Provider"] switch
     {
         "Sqlite" => options.UseSqlite(ConnectionString("CatalogSqlite")),
         "Postgres" => options.UseNpgsql(ConnectionString("CatalogPostgres")),
-        _ => throw new InvalidOperationException("Set Database:Provider to Sqlite or Postgres."),
+        "SqlServer" => options.UseSqlServer(ConnectionString("CatalogSqlServer")),
+        _ => throw new InvalidOperationException("Set Database:Provider to Sqlite, Postgres or SqlServer."),
     };
 });
 builder.Services.AddLinqToRest(options => options

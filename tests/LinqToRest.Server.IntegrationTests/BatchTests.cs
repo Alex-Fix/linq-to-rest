@@ -316,3 +316,5 @@ public abstract class BatchTests(ShopDatabase database) : IAsyncLifetime
 public sealed class SqliteBatchTests() : BatchTests(new SqliteDatabase());
 
 public sealed class PostgresBatchTests(PostgresContainer postgres) : BatchTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerBatchTests(SqlServerContainer sqlServer) : BatchTests(new SqlServerDatabase(sqlServer));

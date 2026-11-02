@@ -234,3 +234,5 @@ public abstract class LinkTests(ShopDatabase database) : IAsyncLifetime
 public sealed class SqliteLinkTests() : LinkTests(new SqliteDatabase());
 
 public sealed class PostgresLinkTests(PostgresContainer postgres) : LinkTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerLinkTests(SqlServerContainer sqlServer) : LinkTests(new SqlServerDatabase(sqlServer));

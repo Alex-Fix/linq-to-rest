@@ -1,3 +1,5 @@
+using LinqToRest.Server.IntegrationTests.Shop;
+
 namespace LinqToRest.Server.IntegrationTests;
 
 public abstract class SelectTests(ShopFixture shop)
@@ -87,7 +89,7 @@ public abstract class SelectTests(ShopFixture shop)
         var sql = Assert.Single(server.Sql);
         // Providers spell functions differently (SUM / sum), so only the function matters.
         Assert.Contains("SUM(", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("||", sql, StringComparison.Ordinal);
+        Assert.Contains(shop.Database.Provider == TestProvider.SqlServer ? " + " : "||", sql, StringComparison.Ordinal);
         Assert.Contains("upper(", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("COUNT(", sql, StringComparison.OrdinalIgnoreCase);
     }
@@ -133,3 +135,5 @@ public abstract class SelectTests(ShopFixture shop)
 public sealed class SqliteSelectTests(SqliteShopFixture shop) : SelectTests(shop), IClassFixture<SqliteShopFixture>;
 
 public sealed class PostgresSelectTests(PostgresShopFixture shop) : SelectTests(shop), IClassFixture<PostgresShopFixture>;
+
+public sealed class SqlServerSelectTests(SqlServerShopFixture shop) : SelectTests(shop), IClassFixture<SqlServerShopFixture>;

@@ -132,3 +132,5 @@ public abstract class PolicyTests(ShopDatabase database) : IAsyncLifetime
 public sealed class SqlitePolicyTests() : PolicyTests(new SqliteDatabase());
 
 public sealed class PostgresPolicyTests(PostgresContainer postgres) : PolicyTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerPolicyTests(SqlServerContainer sqlServer) : PolicyTests(new SqlServerDatabase(sqlServer));

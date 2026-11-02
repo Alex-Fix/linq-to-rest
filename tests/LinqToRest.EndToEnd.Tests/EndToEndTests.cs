@@ -366,3 +366,5 @@ public abstract class EndToEndTests(ShopDatabase database) : IAsyncLifetime
 public sealed class SqliteEndToEndTests() : EndToEndTests(new SqliteDatabase());
 
 public sealed class PostgresEndToEndTests(PostgresContainer postgres) : EndToEndTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerEndToEndTests(SqlServerContainer sqlServer) : EndToEndTests(new SqlServerDatabase(sqlServer));

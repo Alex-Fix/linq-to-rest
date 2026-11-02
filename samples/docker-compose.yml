@@ -1,5 +1,6 @@
-# Local PostgreSQL for samples/Catalog.Api (--Database:Provider=Postgres). Dev-only credentials: never reuse them
-# outside your machine.
+# Local databases for samples/Catalog.Api (--Database:Provider=Postgres or SqlServer); start one with
+# `docker compose -f samples/docker-compose.yml up -d postgres` (or `sqlserver`). Dev-only credentials: never reuse
+# them outside your machine.
 services:
   postgres:
     image: postgres:17-alpine
@@ -16,5 +17,23 @@ services:
       interval: 2s
       retries: 15
 
+  sqlserver:
+    # The image is x64 only; on Apple Silicon, Docker Desktop runs it through Rosetta.
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: Catalog-dev-1
+    ports:
+      - "1433:1433"
+    volumes:
+      - catalog-sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P Catalog-dev-1 -Q 'SELECT 1' || exit 1"]
+      interval: 5s
+      retries: 20
+
 volumes:
   catalog-data:
+  catalog-sqlserver-data:
