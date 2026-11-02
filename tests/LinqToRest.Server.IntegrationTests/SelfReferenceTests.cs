@@ -228,3 +228,5 @@ public sealed class NodePolicy : SetPolicy<Node>
 public sealed class SqliteSelfReferenceTests() : SelfReferenceTests(new SqliteDatabase());
 
 public sealed class PostgresSelfReferenceTests(PostgresContainer postgres) : SelfReferenceTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerSelfReferenceTests(SqlServerContainer sqlServer) : SelfReferenceTests(new SqlServerDatabase(sqlServer));

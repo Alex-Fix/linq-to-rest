@@ -53,3 +53,5 @@ public abstract class ManyToManyQueryTests(ShopFixture shop)
 public sealed class SqliteManyToManyQueryTests(SqliteShopFixture shop) : ManyToManyQueryTests(shop), IClassFixture<SqliteShopFixture>;
 
 public sealed class PostgresManyToManyQueryTests(PostgresShopFixture shop) : ManyToManyQueryTests(shop), IClassFixture<PostgresShopFixture>;
+
+public sealed class SqlServerManyToManyQueryTests(SqlServerShopFixture shop) : ManyToManyQueryTests(shop), IClassFixture<SqlServerShopFixture>;

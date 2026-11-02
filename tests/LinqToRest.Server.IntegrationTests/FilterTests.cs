@@ -114,3 +114,5 @@ public abstract class FilterTests(ShopFixture shop)
 public sealed class SqliteFilterTests(SqliteShopFixture shop) : FilterTests(shop), IClassFixture<SqliteShopFixture>;
 
 public sealed class PostgresFilterTests(PostgresShopFixture shop) : FilterTests(shop), IClassFixture<PostgresShopFixture>;
+
+public sealed class SqlServerFilterTests(SqlServerShopFixture shop) : FilterTests(shop), IClassFixture<SqlServerShopFixture>;

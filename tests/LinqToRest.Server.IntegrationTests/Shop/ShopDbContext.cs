@@ -22,10 +22,10 @@ public sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbC
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    /// <summary>Points identity sequences past explicitly seeded ids, so later inserts don't collide (PostgreSQL).</summary>
+    /// <summary>Points key sequences past explicitly seeded ids, so later inserts don't collide (PostgreSQL, SQL Server).</summary>
     public void ResetSequences()
     {
-        if (!Database.IsNpgsql())
+        if (!Database.IsNpgsql() && !Database.IsSqlServer())
         {
             return;
         }
@@ -39,10 +39,14 @@ public sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbC
 
             // Names come from the EF model, never from input.
             var column = key.GetColumnName();
-            var sql = $"SELECT setval(pg_get_serial_sequence('\"{table}\"', '{column}'), (SELECT MAX(\"{column}\") FROM \"{table}\"))";
+            var sql = Database.IsNpgsql()
+                ? $"SELECT setval(pg_get_serial_sequence('\"{table}\"', '{column}'), (SELECT MAX(\"{column}\") FROM \"{table}\"))"
+                : $"DECLARE @next bigint = (SELECT ISNULL(MAX([{column}]), 0) + 1 FROM [{table}]); EXEC('ALTER SEQUENCE [{KeySequence(table)}] RESTART WITH ' + @next)";
             Database.ExecuteSqlRaw(sql);
         }
     }
+
+    private static string KeySequence(string table) => $"{table}Sequence";
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
         configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
@@ -74,6 +78,21 @@ public sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbC
             // operations in SQL. PostgreSQL keeps native numeric.
             modelBuilder.Entity<Product>().Property(p => p.Price).HasConversion<double>();
             modelBuilder.Entity<OrderLine>().Property(l => l.UnitPrice).HasConversion<double>();
+        }
+
+        if (Database.IsSqlServer())
+        {
+            // The seed sets ids, which identity columns refuse (IDENTITY_INSERT is per table); sequences accept them.
+            foreach (var entity in modelBuilder.Model.GetEntityTypes().Where(entity => !entity.IsOwned()).ToList())
+            {
+                if (entity.FindPrimaryKey()?.Properties is [{ ClrType: var type } key] && type == typeof(int) && entity.GetTableName() is { } table)
+                {
+                    SqlServerPropertyBuilderExtensions.UseSequence(modelBuilder.Entity(entity.Name).Property(key.Name), KeySequence(table));
+                }
+            }
+
+            modelBuilder.Entity<Product>().Property(p => p.Price).HasPrecision(18, 2);
+            modelBuilder.Entity<OrderLine>().Property(l => l.UnitPrice).HasPrecision(18, 2);
         }
     }
 }

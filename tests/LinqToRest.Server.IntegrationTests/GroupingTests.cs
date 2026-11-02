@@ -219,3 +219,5 @@ public abstract class GroupingTests(ShopDatabase database) : IAsyncLifetime
 public sealed class SqliteGroupingTests() : GroupingTests(new SqliteDatabase());
 
 public sealed class PostgresGroupingTests(PostgresContainer postgres) : GroupingTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerGroupingTests(SqlServerContainer sqlServer) : GroupingTests(new SqlServerDatabase(sqlServer));
