@@ -412,8 +412,14 @@ Before null cursors, PostgreSQL offset pages put `null` last ascending; they now
 
 ## Databases
 
-Every query and batch test runs on **SQLite** and **PostgreSQL**. LinqToRest only builds standard EF Core
-expressions, so other EF Core providers should work, but these two are the ones verified.
+Every query and batch test runs on **SQLite**, **PostgreSQL** and **SQL Server**. LinqToRest only builds standard EF
+Core expressions, so other EF Core providers should work, but these three are the ones verified.
+
+**Strings follow the database collation.** Equality, `Contains`/`StartsWith`/`EndsWith`, sorting and cursor pages
+compare strings the way the column's collation does. SQLite and PostgreSQL compare case-sensitively by default; SQL
+Server's default collation ignores case and trailing spaces, so `name == "books"` finds `Books` there. For the same
+result everywhere, compare case-insensitively on purpose (`string.Equals(a, b, StringComparison.OrdinalIgnoreCase)`,
+`equalsIgnoreCase` in TypeScript), or give the column the collation you want.
 
 **`DateTime` values:**
 
@@ -437,6 +443,10 @@ expressions, so other EF Core providers should work, but these two are the ones 
 
 **SQLite** stores `decimal` as text, which it can't compare, sort or sum. Convert those columns to `double` on SQLite
 only, as the tests and sample do.
+
+**SQL Server** needs a precision for `decimal` columns (`HasPrecision(10, 2)`); a value that doesn't fit is a 400
+`type_mismatch`, in queries and batches alike. `uniqueidentifier` sorts differently from .NET's `Guid.CompareTo`;
+pages and cursors over `Guid` keys follow the database's order.
 
 ## Deployment notes
 
@@ -497,7 +507,7 @@ app.MapLinqToRest("/api").RequireCors("linqtorest");
 ## Development
 
 ```sh
-dotnet test --solution LinqToRest.slnx                       # unit tests, plus integration and end-to-end tests on SQLite and PostgreSQL
+dotnet test --solution LinqToRest.slnx                       # unit tests, plus integration and end-to-end tests on SQLite, PostgreSQL and SQL Server
 dotnet format LinqToRest.slnx --verify-no-changes
 dotnet tool restore && dotnet jb inspectcode LinqToRest.slnx --format=Text --output=- --no-build
 
@@ -508,9 +518,10 @@ dotnet run --project samples/Catalog.Api -- --export-linqtorest-model model.json
 (cd clients/typescript && npm ci && npm run check && npm run test:e2e)   # TypeScript client (e2e starts the sample API)
 ```
 
-The PostgreSQL tests start a throwaway container with Testcontainers, so they need Docker. Without it they are
-reported as **skipped**, with the reason. `LINQTOREST_REQUIRE_POSTGRES=1` makes that a failure instead, which is how CI
-runs them. CI (`.github/workflows/ci.yml`) also checks formatting, ReSharper inspections and vulnerable packages on
+The PostgreSQL and SQL Server tests start throwaway containers with Testcontainers, so they need Docker. Without it
+they are reported as **skipped**, with the reason. `LINQTOREST_REQUIRE_DATABASES=1` makes that a failure instead, which
+is how CI runs them. The SQL Server image is x64 only: on Apple Silicon, turn on Docker Desktop's "Use Rosetta for
+x86_64/amd64 emulation". CI (`.github/workflows/ci.yml`) also checks formatting, ReSharper inspections and vulnerable packages on
 every push to `main` and every pull request.
 
 ## License

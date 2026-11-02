@@ -20,7 +20,8 @@ SQLite, which isn't the setup people deploy.
 - Fix `DateTime` handling so client values never cause a 500 or depend on the server's time zone.
 
 **Non-goals**
-- SQL Server (the same test pattern can add it later).
+- SQL Server (the same test pattern can add it later; done in
+  [`2026-11-02-sqlserver-design.md`](2026-11-02-sqlserver-design.md)).
 - Migrations (sample and tests keep `EnsureCreated`).
 - NuGet publishing (the MIT license was added separately).
 - Coercing literals by inspecting column types in the EF model.
@@ -145,7 +146,7 @@ time.
 
 ## Open questions
 
-- SQL Server next (same pattern), or on demand?
+- ~~SQL Server next (same pattern), or on demand?~~ Done: [`2026-11-02-sqlserver-design.md`](2026-11-02-sqlserver-design.md).
 - Should the safety net also cover other provider exception types if new ones show up?
 
 ## Implementation steps

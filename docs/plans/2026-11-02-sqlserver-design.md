@@ -1,5 +1,5 @@
 # SQL Server in the provider matrix — design
-Status: approved · Date: 2026-11-02
+Status: approved, implemented (see Implementation notes) · Date: 2026-11-02
 
 Backlog item of [`2026-10-20-roadmap.md`](2026-10-20-roadmap.md): "SQL Server in the provider matrix", left as a
 non-goal by [`2026-10-18-postgresql-design.md`](2026-10-18-postgresql-design.md).
@@ -61,7 +61,7 @@ assembly (xUnit v3 assembly fixture) and one database per test server, on the de
 - `SqlServerContainer` assembly fixture in `Server.IntegrationTests` and `EndToEnd.Tests`:
   `mcr.microsoft.com/mssql/server:2022-latest`, started once; without Docker it records a skip reason, or rethrows
   when `LINQTOREST_REQUIRE_DATABASES=1`. `PostgresContainer` reads the same variable.
-- Every abstract test class gets a `SqlServer…Tests` subclass (17 integration classes, one end-to-end), with
+- Every abstract test class gets a `SqlServer…Tests` subclass (15 integration classes, one end-to-end), with
   `SqlServerShopFixture` for the shared read-only ones.
 - `ShopDbContext` on SQL Server:
   - explicit decimal precisions (no EF warning, no silent truncation);
@@ -84,7 +84,8 @@ assembly (xUnit v3 assembly fixture) and one database per test server, on the de
   cursor walk over `Bin`'s composite `Guid` key proves no skips or repeats.
 - **Rejected values:** a decimal literal that overflows `decimal(18,2)` in a query → 400 `type_mismatch` (SqlClient
   throws `ArgumentException`, which `ProviderRejections` already treats as a rejection); an overflow on save → 409
-  `conflict`. If SqlClient throws something else, the safety net is widened to it, with a test.
+  `conflict` (implemented: 400 `type_mismatch`, see Implementation notes). If SqlClient throws something else, the
+  safety net is widened to it, with a test.
 - **Parameter limit:** a query at the default node limit with a 500-item `in` list runs on SQL Server.
 - Only tests asserting database-inherent differences (collation, trailing spaces) branch on
   `ShopDatabase.Provider`.
@@ -133,6 +134,32 @@ None. Contributors: `LINQTOREST_REQUIRE_POSTGRES` becomes `LINQTOREST_REQUIRE_DA
   query.
 - `NullSortTests` SQL assertions: no null key on SQL Server.
 - Catalog sample run manually on SQL Server; CI run on the PR.
+
+## Implementation notes
+
+- **One library gap, on every provider:** a cursor page after the first on a set with a `Guid` key (Shop's `bins`)
+  was a 500. .NET has no `Guid` comparison operators, so the keyset predicate had no term. The keyset now compares
+  `Guid`s through `CompareTo`, which EF Core translates to the database's own `>` / `<` (nullable keys get a
+  `!= null` guard, as lifted operators would). `Guid` is also a cursor sort type now. `QueryBinder.Comparison` is
+  unchanged, so `min` / `max` over `Guid` stay refused (PostgreSQL has no `max(uuid)`). A shared paging test walks
+  the seeded bins on all three providers, and the keyset unit tests cover nullable `Guid`s.
+- **A decimal that doesn't fit is a 400 in batches too**, not the 409 the design expected: SqlClient refuses the
+  parameter with an `ArgumentException` before the database sees it, which the existing provider-rejection check
+  turns into `type_mismatch`, as in queries.
+- **Key sequences are named explicitly** (`<Table>Sequence`, set with `UseSequence`): with `UseKeySequences()` EF
+  Core reports no sequence name for a property, so `ResetSequences` couldn't find them.
+- **Two shared tests assumed SQLite/PostgreSQL SQL:** string concatenation is `+` on SQL Server, not `||`, and SQL
+  Server prefixes inserts with `SET NOCOUNT ON;`, so the stand-in rejecting interceptor matches `INSERT` anywhere.
+  The null-sort SQL assertion now recognises both `"ReleasedOn"` and `[ReleasedOn]`, so SQL Server's native null
+  order is really checked.
+- **Vulnerable transitive package:** `Microsoft.Data.SqlClient` brings `System.Security.Cryptography.Pkcs` 9.0.11
+  (CVE-2026-84008). `Directory.Packages.props` turns on central transitive pinning and pins 10.0.14.
+- **Benchmarks** project links the shop files, so it references the SQL Server provider too.
+- **Catalog sample, run manually on SQL Server** (compose service, Rosetta on Apple Silicon): case-insensitive search
+  (`startsWith "laptops premium"`), cursor pages by price, an editor update and a stale-token 412, and an image link
+  to a new image all worked.
+- **Timing:** the full solution run (1,534 tests, nothing skipped) takes about a minute locally with both
+  containers; SQL Server starts in roughly 10 s under Rosetta, faster than estimated.
 
 ## Open questions
 
