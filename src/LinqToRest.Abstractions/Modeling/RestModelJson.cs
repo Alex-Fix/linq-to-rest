@@ -267,7 +267,7 @@ internal static class RestModelJson
 
     private static RestNavigationModel ReadNavigation(JsonElement element, string pointer)
     {
-        var properties = Object(element, pointer, "name", "target", "collection", "nullable", "foreignKey");
+        var properties = Object(element, pointer, "name", "target", "collection", "nullable", "foreignKey", "links", "onUnlink");
         return new RestNavigationModel
         {
             Name = String(Required(properties, pointer, "name"), pointer + "/name"),
@@ -275,6 +275,22 @@ internal static class RestModelJson
             IsCollection = Flag(properties, pointer, "collection", false),
             IsNullable = Flag(properties, pointer, "nullable", false),
             ForeignKey = properties.TryGetValue("foreignKey", out var foreignKey) ? Strings(foreignKey, pointer + "/foreignKey", MaxMembers) : [],
+            Links = properties.TryGetValue("links", out var links)
+                ? String(links, pointer + "/links") switch
+                {
+                    "oneToMany" => RestLinkKind.OneToMany,
+                    "manyToMany" => RestLinkKind.ManyToMany,
+                    _ => throw Invalid(pointer + "/links", "must be 'oneToMany' or 'manyToMany'"),
+                }
+                : null,
+            OnUnlink = properties.TryGetValue("onUnlink", out var onUnlink)
+                ? String(onUnlink, pointer + "/onUnlink") switch
+                {
+                    "delete" => RestUnlinkBehavior.Delete,
+                    "detach" => RestUnlinkBehavior.Detach,
+                    _ => throw Invalid(pointer + "/onUnlink", "must be 'delete' or 'detach'"),
+                }
+                : null,
         };
     }
 
@@ -378,6 +394,16 @@ internal static class RestModelJson
             if (navigation.ForeignKey.Count > 0)
             {
                 WriteStrings(writer, "foreignKey", navigation.ForeignKey);
+            }
+
+            if (navigation.Links is { } links)
+            {
+                writer.WriteString("links", links == RestLinkKind.OneToMany ? "oneToMany" : "manyToMany");
+            }
+
+            if (navigation.OnUnlink is { } onUnlink)
+            {
+                writer.WriteString("onUnlink", onUnlink == RestUnlinkBehavior.Delete ? "delete" : "detach");
             }
 
             writer.WriteEndObject();

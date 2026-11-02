@@ -20,6 +20,7 @@ public sealed class KeysetTests
             Text = (id % 3) switch { 0 => null, 1 => "a", _ => "b" },
             Level = (id % 5) switch { 0 => null, 1 => Grade.Low, _ => Grade.High },
             Required = id % 2 == 0 ? "x" : "y",
+            Token = (id % 3) switch { 0 => null, 1 => new Guid("00000000-0000-0000-0000-000000000002"), _ => new Guid("00000000-0000-0000-0000-000000000001") },
         }),
     ];
 
@@ -39,6 +40,8 @@ public sealed class KeysetTests
         { nameof(Row.Level), true },
         { nameof(Row.Required), false },
         { nameof(Row.Required), true },
+        { nameof(Row.Token), false },
+        { nameof(Row.Token), true },
     };
 
     [Theory]
@@ -136,5 +139,7 @@ public sealed class KeysetTests
         public Grade? Level { get; init; }
 
         public string Required { get; init; } = "";
+
+        public Guid? Token { get; init; }
     }
 }

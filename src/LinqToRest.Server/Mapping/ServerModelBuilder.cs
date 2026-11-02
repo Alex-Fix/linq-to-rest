@@ -90,7 +90,10 @@ internal static class ServerModelBuilder
                     Target = mappings[navigation.Target!],
                     IsCollection = navigation.Definition.IsCollection,
                     IsNullable = navigation.IsNullable,
-                    ForeignKey = navigation.ForeignKey is null ? null : properties[navigation.ForeignKey],
+                    ForeignKey = [.. navigation.ForeignKey.Select(property => properties[property])],
+                    EfNavigation = navigation.EfNavigation,
+                    Links = navigation.Links,
+                    OnUnlink = navigation.OnUnlink,
                 })],
                 [.. set.Definition.Rules.Select(rule => ResolveRule(set, rule, properties))],
                 [.. set.Definition.Validators]);
@@ -444,9 +447,18 @@ internal static class ServerModelBuilder
         foreach (var definition in set.Definition.Navigations)
         {
             var efNavigation = set.Entity.FindNavigation(definition.Property);
-            if (efNavigation is null || efNavigation.IsCollection != definition.IsCollection)
+            var efSkip = definition.IsCollection && efNavigation is null ? set.Entity.FindSkipNavigation(definition.Property) : null;
+            if ((efNavigation is null && efSkip is null) || (efNavigation is not null && efNavigation.IsCollection != definition.IsCollection))
             {
                 throw Invalid(set.Name, entityType, $"exposes '{definition.Property.Name}' with {(definition.IsCollection ? "HasMany" : "HasOne")}, but it isn't a {(definition.IsCollection ? "collection" : "reference")} navigation in the EF Core model");
+            }
+
+            // Many-to-many only over a pure join table: a join entity with columns of its own is a set of its own.
+            if (efSkip is not null
+                && (efSkip.JoinEntityType.GetProperties().Any(property => !property.IsForeignKey())
+                    || sets.Exists(candidate => candidate.Entity == efSkip.JoinEntityType)))
+            {
+                throw Invalid(set.Name, entityType, $"exposes the many-to-many '{definition.Property.Name}', but its join entity has columns of its own or a set; expose the join entity as a set with two HasOne navigations instead");
             }
 
             var targets = sets.Where(candidate => candidate.Definition.EntityType == definition.TargetEntity).ToList();
@@ -457,24 +469,61 @@ internal static class ServerModelBuilder
                     : $"exposes the navigation '{definition.Property.Name}' to {definition.TargetEntity.Name}, which has several sets");
             }
 
-            ResolvedProperty? foreignKey = null;
-            if (definition.ForeignKey is { } foreignKeyInfo)
+            var foreignKey = new List<ResolvedProperty>();
+            foreach (var foreignKeyInfo in definition.ForeignKey)
             {
-                foreignKey = set.Properties.Find(property => property.Member.Property == foreignKeyInfo)
-                    ?? throw Invalid(set.Name, entityType, $"uses '{foreignKeyInfo.Name}' as the foreign key of '{definition.Property.Name}', but it isn't exposed. Call Property(...)");
-                if (!efNavigation.IsOnDependent || efNavigation.ForeignKey.Properties is not [{ PropertyInfo: { } efForeignKey }] || efForeignKey != foreignKeyInfo)
-                {
-                    throw Invalid(set.Name, entityType, $"uses '{foreignKeyInfo.Name}' as the foreign key of '{definition.Property.Name}', but it isn't that navigation's foreign key in the EF Core model");
-                }
+                foreignKey.Add(set.Properties.Find(property => property.Member.Property == foreignKeyInfo)
+                    ?? throw Invalid(set.Name, entityType, $"uses '{foreignKeyInfo.Name}' in the foreign key of '{definition.Property.Name}', but it isn't exposed. Call Property(...)"));
+            }
+
+            // Every member of the EF foreign key, in its order (which follows the target's key).
+            if (foreignKey.Count > 0
+                && (efNavigation is null || !efNavigation.IsOnDependent || !efNavigation.ForeignKey.Properties.Select(property => property.PropertyInfo).SequenceEqual(definition.ForeignKey)))
+            {
+                throw Invalid(set.Name, entityType, $"uses {string.Join(", ", definition.ForeignKey.Select(property => $"'{property.Name}'"))} as the foreign key of '{definition.Property.Name}', but that isn't the navigation's foreign key in the EF Core model, in order");
+            }
+
+            RestLinkKind? links = null;
+            RestUnlinkBehavior? onUnlink = null;
+            if (definition.AllowLinks)
+            {
+                links = efSkip is null ? RestLinkKind.OneToMany : RestLinkKind.ManyToMany;
+                onUnlink = efSkip is null ? efNavigation!.ForeignKey.IsRequired ? RestUnlinkBehavior.Delete : RestUnlinkBehavior.Detach : null;
+                CheckLinkWrites(set, targets[0], definition, onUnlink);
             }
 
             set.Navigations.Add(new ResolvedNavigation(definition)
             {
                 Name = definition.WireName ?? JsonNamingPolicy.CamelCase.ConvertName(definition.Property.Name),
                 Target = targets[0],
-                IsNullable = !definition.IsCollection && (!efNavigation.IsOnDependent || !efNavigation.ForeignKey.IsRequired),
+                IsNullable = !definition.IsCollection && (!efNavigation!.IsOnDependent || !efNavigation.ForeignKey.IsRequired),
                 ForeignKey = foreignKey,
+                EfNavigation = (INavigationBase?)efNavigation ?? efSkip!,
+                Links = links,
+                OnUnlink = onUnlink,
             });
+        }
+    }
+
+    /// <summary>Links change rows of both sets (or a join row), so the sets must allow those writes.</summary>
+    private static void CheckLinkWrites(ResolvedSet set, ResolvedSet target, NavigationDefinition definition, RestUnlinkBehavior? onUnlink)
+    {
+        var name = definition.Property.Name;
+        if ((set.Definition.Writes & WriteOperations.Update) == 0)
+        {
+            throw Invalid(set.Name, set.Definition.EntityType, $"allows links on '{name}', but doesn't allow updates. Call AllowWrites(...)");
+        }
+
+        // One-to-many links rewrite the item's foreign key; unlinking a required one deletes the item.
+        var needed = onUnlink switch
+        {
+            RestUnlinkBehavior.Delete => WriteOperations.Update | WriteOperations.Delete,
+            RestUnlinkBehavior.Detach => WriteOperations.Update,
+            _ => WriteOperations.None,
+        };
+        if ((target.Definition.Writes & needed) != needed)
+        {
+            throw Invalid(set.Name, set.Definition.EntityType, $"allows links on '{name}', but the set '{target.Name}' doesn't allow {(needed.HasFlag(WriteOperations.Delete) ? "updates and deletes (unlinking deletes its rows)" : "updates")}");
         }
     }
 
@@ -493,7 +542,9 @@ internal static class ServerModelBuilder
             Target = navigation.Target!.Name,
             IsCollection = navigation.Definition.IsCollection,
             IsNullable = navigation.IsNullable,
-            ForeignKey = navigation.ForeignKey is null ? [] : [navigation.ForeignKey.Name],
+            ForeignKey = [.. navigation.ForeignKey.Select(property => property.Name)],
+            Links = navigation.Links,
+            OnUnlink = navigation.OnUnlink,
         })],
     };
 
@@ -610,6 +661,12 @@ internal static class ServerModelBuilder
 
         public bool IsNullable { get; init; }
 
-        public ResolvedProperty? ForeignKey { get; init; }
+        public IReadOnlyList<ResolvedProperty> ForeignKey { get; init; } = [];
+
+        public required INavigationBase EfNavigation { get; init; }
+
+        public RestLinkKind? Links { get; init; }
+
+        public RestUnlinkBehavior? OnUnlink { get; init; }
     }
 }

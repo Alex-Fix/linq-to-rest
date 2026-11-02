@@ -36,7 +36,19 @@ export interface WeightDto {
   readonly unit: string;
 }
 
+export interface BinDto {
+  readonly zone: string;
+  readonly slot: string;
+  code: string;
+}
+
 export interface CategoryDto {
+  readonly id: number;
+  name: string;
+  products: ProductDto[];
+}
+
+export interface LabelDto {
   readonly id: number;
   name: string;
 }
@@ -63,8 +75,12 @@ export interface ProductDto {
   size: DimensionsDto | null;
   readonly tags: string[];
   readonly categoryName: string | null;
+  binZone: string | null;
+  binSlot: string | null;
   category: CategoryDto | null;
+  bin: BinDto | null;
   lines: OrderLineDto[];
+  labels: LabelDto[];
 }
 
 export interface DimensionsProxy extends ValueProxy<DimensionsDto> {
@@ -77,9 +93,21 @@ export interface WeightProxy extends ValueProxy<WeightDto> {
   readonly unit: StringExpr;
 }
 
+export interface BinProxy extends EntityProxy<BinDto> {
+  readonly zone: Expr<string> & Sortable;
+  readonly slot: Expr<string> & Sortable;
+  readonly code: StringExpr;
+}
+
 export interface CategoryProxy extends EntityProxy<CategoryDto> {
   readonly id: NumberExpr & Sortable;
   readonly name: StringExpr & Groupable;
+  readonly products: CollectionExpr<ProductProxy>;
+}
+
+export interface LabelProxy extends EntityProxy<LabelDto> {
+  readonly id: NumberExpr & Sortable;
+  readonly name: StringExpr;
 }
 
 export interface OrderLineProxy extends EntityProxy<OrderLineDto> {
@@ -102,8 +130,12 @@ export interface ProductProxy extends EntityProxy<ProductDto> {
   readonly size: DimensionsProxy;
   readonly tags: PrimitiveCollectionExpr<StringExpr>;
   readonly categoryName: StringExpr<string | null>;
+  readonly binZone: Expr<string | null>;
+  readonly binSlot: Expr<string | null>;
   readonly category: CategoryProxy;
+  readonly bin: BinProxy;
   readonly lines: CollectionExpr<OrderLineProxy>;
+  readonly labels: CollectionExpr<LabelProxy>;
 }
 
 const weightDtoValue = {
@@ -124,6 +156,19 @@ const dimensionsDtoValue = {
 
 export const shopModel = {
   sets: {
+    bins: {
+      name: "bins",
+      key: ["zone", "slot"],
+      token: null,
+      writes: ["insert"],
+      members: [
+        { name: "zone", kind: "guid", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
+        { name: "slot", kind: "guid", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
+        { name: "code", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
+      ],
+      navigations: [],
+      pagination: { modes: ["offset", "cursor"], defaultPageSize: 50, maxPageSize: 200 },
+    },
     categories: {
       name: "categories",
       key: ["id"],
@@ -133,8 +178,22 @@ export const shopModel = {
         { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
         { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true, groupable: true },
       ],
-      navigations: [],
+      navigations: [
+        { name: "products", target: "products", collection: true, foreignKey: [], links: "oneToMany", onUnlink: "detach" },
+      ],
       pagination: { modes: ["cursor"], defaultPageSize: 2, maxPageSize: 200 },
+    },
+    labels: {
+      name: "labels",
+      key: ["id"],
+      token: null,
+      writes: ["insert"],
+      members: [
+        { name: "id", kind: "number", nullable: false, collection: false, filterable: true, sortable: true, writable: false },
+        { name: "name", kind: "string", nullable: false, collection: false, filterable: true, sortable: false, writable: true },
+      ],
+      navigations: [],
+      pagination: { modes: ["offset", "cursor"], defaultPageSize: 50, maxPageSize: 200 },
     },
     orderLines: {
       name: "orderLines",
@@ -168,10 +227,14 @@ export const shopModel = {
         { name: "size", kind: "value", nullable: true, collection: false, filterable: true, sortable: false, writable: true, value: dimensionsDtoValue },
         { name: "tags", kind: "string", nullable: false, collection: true, filterable: true, sortable: false, writable: false },
         { name: "categoryName", kind: "string", nullable: true, collection: false, filterable: true, sortable: false, writable: false },
+        { name: "binZone", kind: "guid", nullable: true, collection: false, filterable: true, sortable: false, writable: true },
+        { name: "binSlot", kind: "guid", nullable: true, collection: false, filterable: true, sortable: false, writable: true },
       ],
       navigations: [
-        { name: "category", target: "categories", collection: false, foreignKey: "categoryId" },
-        { name: "lines", target: "orderLines", collection: true, foreignKey: null },
+        { name: "category", target: "categories", collection: false, foreignKey: ["categoryId"], links: null, onUnlink: null },
+        { name: "bin", target: "bins", collection: false, foreignKey: ["binZone", "binSlot"], links: null, onUnlink: null },
+        { name: "lines", target: "orderLines", collection: true, foreignKey: [], links: "oneToMany", onUnlink: "delete" },
+        { name: "labels", target: "labels", collection: true, foreignKey: [], links: "manyToMany", onUnlink: null },
       ],
       pagination: { modes: ["offset", "cursor"], defaultPageSize: 50, maxPageSize: 200 },
     },
@@ -179,7 +242,9 @@ export const shopModel = {
 } as const satisfies Model;
 
 export interface ShopContext extends Context {
+  readonly bins: RestSet<BinDto, BinProxy, "insert">;
   readonly categories: RestSet<CategoryDto, CategoryProxy, "insert" | "update" | "delete">;
+  readonly labels: RestSet<LabelDto, LabelProxy, "insert">;
   readonly orderLines: RestSet<OrderLineDto, OrderLineProxy, "insert" | "update" | "delete">;
   readonly products: RestSet<ProductDto, ProductProxy, "insert" | "update" | "delete">;
 }

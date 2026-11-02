@@ -61,7 +61,7 @@ public sealed class ProductSet : IEntitySetConfiguration<Product>
         b.Property(p => p.CategoryId);
         b.Computed("tags", p => p.Tags.Select(t => t.Value).ToList());   // read-only, computed in SQL
         b.HasOne(p => p.Category).WithForeignKey(p => p.CategoryId);    // to another configured set
-        b.HasMany(p => p.Lines);
+        b.HasMany(p => p.Lines).AllowLinks();                           // membership changes from the parent
         b.HasPagination(p => p.DefaultPageSize(20).MaxPageSize(100));
     }
 }
@@ -243,6 +243,37 @@ await shop.SaveChangesAsync();
   starts as `null!` until you set it); TypeScript gets readonly interfaces and proxies with `eq(null)`/`ne(null)`.
 - Collections of value objects (`OwnsMany`, complex collections) aren't supported yet.
 
+## Collection links
+
+A collection's membership is read-only until `AllowLinks()`; then clients add and remove items from the parent side,
+saved as `link` / `unlink` operations in the same atomic batch:
+
+```csharp
+b.HasMany(p => p.Lines).AllowLinks();     // one-to-many: the line's foreign key needn't be exposed
+b.HasMany(p => p.Labels).AllowLinks();    // many-to-many over a pure join table (an EF Core skip navigation)
+b.HasOne(p => p.Bin).WithForeignKey(p => new { p.BinZone, p.BinSlot });   // composite foreign keys, in key order
+```
+
+```csharp
+var chess = await shop.Products.Include(p => p.Labels).SingleAsync(p => p.Id == 1);
+shop.OrderLines.Add(line);
+chess.Lines.Add(line);           // insert + link (by ref)
+chess.Labels.Remove(sale);       // unlink: deletes the join row
+await shop.SaveChangesAsync();   // TypeScript: product.lines.push(line), product.labels.splice(…), saveChanges()
+```
+
+- **What unlinking does** follows the EF Core relationship: a required foreign key deletes the item, an optional one
+  is set to null. The model document says which (`links`, `onUnlink`), so both clients behave the same.
+- **Startup checks:** the set needs updates; for one-to-many the item's set needs updates too, and deletes when
+  unlinking deletes. Many-to-many only changes the join table, so the item's set can stay read-only. A join entity with
+  columns of its own isn't a skip navigation: expose it as a set with two `HasOne`s.
+- **On the server,** parent and item load through their policies (hidden rows and non-members are 404), a one-to-many
+  item's token is checked, only the affected membership is loaded, and the item set's update hook runs when its row
+  changes. A foreign key set by a link is checked by the database, like one set through `refs`.
+- **In the clients,** items must be tracked (added or attached) first; links go after inserts and updates and before
+  deletes; afterwards a linked item points at its parent, a detached one at nothing and a deleted one is detached.
+  Changing a collection without links still throws.
+
 ## Validation
 
 Rules run on every insert and update of a batch, after all its values are applied and before anything is written;
@@ -334,8 +365,14 @@ The list is closed: anything else is rejected.
   {"id":"o0","op":"insert","set":"categories","values":{"name":"Puzzles"}},
   {"id":"o1","op":"insert","set":"products","values":{"name":"Cube","price":9.5},"refs":{"categoryId":"o0"}},
   {"id":"o2","op":"update","set":"products","key":{"id":7},"values":{"price":12},"token":"…"},
-  {"id":"o3","op":"delete","set":"products","key":{"id":9},"token":"…"}]}
+  {"id":"o3","op":"delete","set":"products","key":{"id":9},"token":"…"},
+  {"id":"o4","op":"link","set":"products","key":{"id":7},"navigation":"labels","item":{"key":{"id":3}}},
+  {"id":"o5","op":"unlink","set":"categories","ref":"o0","navigation":"products","item":{"ref":"o1"}}]}
 ```
+
+`link` / `unlink` name the parent by `key` or by `ref` to an earlier insert, a collection `navigation`, and an `item`
+(`key` or `ref`, plus `token` for a one-to-many item whose set has one). A composite foreign key's `refs` name every
+member, all pointing at the same insert.
 
 → `{"results":[{"id":"o0","value":{…}},…]}`, each value re-read through its set.
 
@@ -375,8 +412,14 @@ Before null cursors, PostgreSQL offset pages put `null` last ascending; they now
 
 ## Databases
 
-Every query and batch test runs on **SQLite** and **PostgreSQL**. LinqToRest only builds standard EF Core
-expressions, so other EF Core providers should work, but these two are the ones verified.
+Every query and batch test runs on **SQLite**, **PostgreSQL** and **SQL Server**. LinqToRest only builds standard EF
+Core expressions, so other EF Core providers should work, but these three are the ones verified.
+
+**Strings follow the database collation.** Equality, `Contains`/`StartsWith`/`EndsWith`, sorting and cursor pages
+compare strings the way the column's collation does. SQLite and PostgreSQL compare case-sensitively by default; SQL
+Server's default collation ignores case and trailing spaces, so `name == "books"` finds `Books` there. For the same
+result everywhere, compare case-insensitively on purpose (`string.Equals(a, b, StringComparison.OrdinalIgnoreCase)`,
+`equalsIgnoreCase` in TypeScript), or give the column the collation you want.
 
 **`DateTime` values:**
 
@@ -400,6 +443,10 @@ expressions, so other EF Core providers should work, but these two are the ones 
 
 **SQLite** stores `decimal` as text, which it can't compare, sort or sum. Convert those columns to `double` on SQLite
 only, as the tests and sample do.
+
+**SQL Server** needs a precision for `decimal` columns (`HasPrecision(10, 2)`); a value that doesn't fit is a 400
+`type_mismatch`, in queries and batches alike. `uniqueidentifier` sorts differently from .NET's `Guid.CompareTo`;
+pages and cursors over `Guid` keys follow the database's order.
 
 ## Deployment notes
 
@@ -460,7 +507,7 @@ app.MapLinqToRest("/api").RequireCors("linqtorest");
 ## Development
 
 ```sh
-dotnet test --solution LinqToRest.slnx                       # unit tests, plus integration and end-to-end tests on SQLite and PostgreSQL
+dotnet test --solution LinqToRest.slnx                       # unit tests, plus integration and end-to-end tests on SQLite, PostgreSQL and SQL Server
 dotnet format LinqToRest.slnx --verify-no-changes
 dotnet tool restore && dotnet jb inspectcode LinqToRest.slnx --format=Text --output=- --no-build
 
@@ -471,9 +518,10 @@ dotnet run --project samples/Catalog.Api -- --export-linqtorest-model model.json
 (cd clients/typescript && npm ci && npm run check && npm run test:e2e)   # TypeScript client (e2e starts the sample API)
 ```
 
-The PostgreSQL tests start a throwaway container with Testcontainers, so they need Docker. Without it they are
-reported as **skipped**, with the reason. `LINQTOREST_REQUIRE_POSTGRES=1` makes that a failure instead, which is how CI
-runs them. CI (`.github/workflows/ci.yml`) also checks formatting, ReSharper inspections and vulnerable packages on
+The PostgreSQL and SQL Server tests start throwaway containers with Testcontainers, so they need Docker. Without it
+they are reported as **skipped**, with the reason. `LINQTOREST_REQUIRE_DATABASES=1` makes that a failure instead, which
+is how CI runs them. The SQL Server image is x64 only: on Apple Silicon, turn on Docker Desktop's "Use Rosetta for
+x86_64/amd64 emulation". CI (`.github/workflows/ci.yml`) also checks formatting, ReSharper inspections and vulnerable packages on
 every push to `main` and every pull request.
 
 ## License

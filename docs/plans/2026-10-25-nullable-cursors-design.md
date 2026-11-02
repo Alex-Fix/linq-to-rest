@@ -154,7 +154,8 @@ change: PostgreSQL (and other non-native providers) now order nulls smallest in 
 
 ## Open questions
 
-- None blocking. If SQL Server joins the matrix later, its native-null assumption gets a test then.
+- None blocking. If SQL Server joins the matrix later, its native-null assumption gets a test then. (Tested since
+  [`2026-11-02-sqlserver-design.md`](2026-11-02-sqlserver-design.md): no null key in SQL Server's SQL.)
 
 ## Implementation steps
 

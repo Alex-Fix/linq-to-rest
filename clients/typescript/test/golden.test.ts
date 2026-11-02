@@ -132,6 +132,41 @@ const cases: Record<string, (context: ReturnType<typeof shop>) => Promise<unknow
       releasedOn: null,
       categoryId: null,
       size: { width: 5.7, weight: { amount: 0.1, unit: "kg" } },
+      binZone: null,
+      binSlot: null,
+    });
+    http.respond({ results: [] });
+    return shop.saveChanges();
+  },
+  "batch-link": async ({ shop, http }) => {
+    http.respond({ items: [{ ...chess, lines: [{ id: 11, sku: "C1", quantity: 2, unitPrice: 20 }] }] });
+    const [first] = await shop.products
+      .include((p) => p.lines)
+      .take(1)
+      .toList();
+    if (first === undefined) {
+      throw new Error("The stub returns a product.");
+    }
+
+    const sale = shop.labels.add({ name: "Sale" });
+    const eco = { id: 3, name: "Eco" };
+    shop.labels.attach(eco);
+    first.lines.splice(0, 1);
+    first.labels.push(sale, eco);
+    http.respond({ results: [] });
+    return shop.saveChanges();
+  },
+  "batch-composite-refs": async ({ shop, http }) => {
+    const bin = shop.bins.add({ code: "A9" });
+    shop.products.add({
+      name: "Crate",
+      description: null,
+      price: 5,
+      status: "Active",
+      releasedOn: null,
+      categoryId: null,
+      size: null,
+      bin,
     });
     http.respond({ results: [] });
     return shop.saveChanges();
@@ -152,6 +187,8 @@ const cases: Record<string, (context: ReturnType<typeof shop>) => Promise<unknow
       status: "Active",
       releasedOn: null,
       size: null,
+      binZone: null,
+      binSlot: null,
       category: puzzles,
     });
     shop.products.remove(second);

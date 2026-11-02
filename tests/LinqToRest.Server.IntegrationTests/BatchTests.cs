@@ -182,6 +182,64 @@ public abstract class BatchTests(ShopDatabase database) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Composite_foreign_keys_are_written_by_value_in_whole_or_in_part()
+    {
+        var moved = await BatchOkAsync("""
+            {"v":1,"operations":[
+              {"id":"a","op":"update","set":"products","key":{"id":2},"values":{"binZone":"0a000000-0000-0000-0000-000000000001","binSlot":"0b000000-0000-0000-0000-000000000002"},"token":"00000002-0000-0000-0000-000000000000"},
+              {"id":"b","op":"update","set":"products","key":{"id":1},"values":{"binSlot":"0b000000-0000-0000-0000-000000000002"},"token":"00000001-0000-0000-0000-000000000000"},
+              {"id":"c","op":"update","set":"products","key":{"id":3},"values":{"binZone":null,"binSlot":null},"token":"00000003-0000-0000-0000-000000000000"}]}
+            """);
+
+        var results = moved.GetProperty("results");
+        Assert.Equal("0b000000-0000-0000-0000-000000000002", results[0].GetProperty("value").GetProperty("binSlot").GetString());
+        Assert.Equal("0b000000-0000-0000-0000-000000000002", results[1].GetProperty("value").GetProperty("binSlot").GetString());
+        Assert.Equal(JsonValueKind.Null, results[2].GetProperty("value").GetProperty("binZone").ValueKind);
+    }
+
+    [Fact]
+    public async Task Composite_foreign_key_pointing_nowhere_is_not_found()
+    {
+        var problem = await BatchProblemAsync("""
+            {"v":1,"operations":[
+              {"id":"x","op":"update","set":"products","key":{"id":1},"values":{"binSlot":"0b000000-0000-0000-0000-000000000009"},"token":"00000001-0000-0000-0000-000000000000"}]}
+            """, HttpStatusCode.NotFound);
+
+        JsonAssert.Problem(problem, "not_found", "/operations/0/values/binSlot");
+    }
+
+    [Fact]
+    public async Task Composite_refs_point_every_member_at_one_insert()
+    {
+        var response = await BatchOkAsync("""
+            {"v":1,"operations":[
+              {"id":"b","op":"insert","set":"bins","values":{"label":"B9"}},
+              {"id":"p","op":"insert","set":"products","values":{"name":"Crate","price":5,"status":"Active","isFeatured":false},"refs":{"binZone":"b","binSlot":"b"}}]}
+            """);
+
+        var bin = response.GetProperty("results")[0].GetProperty("value");
+        var product = response.GetProperty("results")[1].GetProperty("value");
+        Assert.Equal(bin.GetProperty("zone").GetGuid(), product.GetProperty("binZone").GetGuid());
+        Assert.Equal(bin.GetProperty("slot").GetGuid(), product.GetProperty("binSlot").GetGuid());
+    }
+
+    [Theory]
+    [InlineData("""{"binZone":"b"}""")]
+    [InlineData("""{"binZone":"b","binSlot":"c"}""")]
+    [InlineData("""{"binZone":"b","binSlot":"b","categoryId":"b"}""")]
+    public async Task Composite_refs_must_name_every_member_of_one_insert(string refs)
+    {
+        var problem = await BatchProblemAsync($$$"""
+            {"v":1,"operations":[
+              {"id":"b","op":"insert","set":"bins","values":{"label":"B9"}},
+              {"id":"c","op":"insert","set":"bins","values":{"label":"C9"}},
+              {"id":"p","op":"insert","set":"products","values":{"name":"Crate"},"refs":{{{refs}}}}]}
+            """);
+
+        JsonAssert.Problem(problem, "invalid_batch", "/operations/2/refs");
+    }
+
+    [Fact]
     public async Task Denied_write_is_forbidden()
     {
         using var request = Request("""{"v":1,"operations":[{"id":"x","op":"insert","set":"products","values":{"name":"Saw"}}]}""");
@@ -258,3 +316,5 @@ public abstract class BatchTests(ShopDatabase database) : IAsyncLifetime
 public sealed class SqliteBatchTests() : BatchTests(new SqliteDatabase());
 
 public sealed class PostgresBatchTests(PostgresContainer postgres) : BatchTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerBatchTests(SqlServerContainer sqlServer) : BatchTests(new SqlServerDatabase(sqlServer));

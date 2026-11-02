@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using LinqToRest.Protocol;
 using LinqToRest.Server.IntegrationTests.Shop;
 
@@ -5,7 +6,7 @@ namespace LinqToRest.Server.IntegrationTests;
 
 /// <summary>
 /// Null sorts smallest on every provider (first ascending, last descending), in offset, cursor and grouped queries.
-/// SQLite already orders NULL that way; PostgreSQL gets an <c>IS NULL</c> sort key.
+/// SQLite and SQL Server already order NULL that way; PostgreSQL gets an <c>IS NULL</c> sort key.
 /// </summary>
 public abstract class NullSortTests(ShopFixture shop)
 {
@@ -61,7 +62,8 @@ public abstract class NullSortTests(ShopFixture shop)
         await shop.Server.QueryOkAsync("products", $$$"""{"v":1,"orderBy":[{"member":"releasedOn","desc":{{{Json(descending)}}}}],"page":{"mode":"offset"}}""");
 
         var sql = Assert.Single(shop.Server.Sql);
-        Assert.Equal(shop.Database.Provider == TestProvider.Postgres, sql.Contains("\"ReleasedOn\" IS NULL", StringComparison.Ordinal));
+        // PostgreSQL quotes "ReleasedOn", SQL Server [ReleasedOn].
+        Assert.Equal(shop.Database.Provider == TestProvider.Postgres, Regex.IsMatch(sql, @"[""\[]ReleasedOn[""\]] IS NULL"));
     }
 
     [Fact]
@@ -112,3 +114,5 @@ public abstract class NullSortTests(ShopFixture shop)
 public sealed class SqliteNullSortTests(SqliteShopFixture shop) : NullSortTests(shop), IClassFixture<SqliteShopFixture>;
 
 public sealed class PostgresNullSortTests(PostgresShopFixture shop) : NullSortTests(shop), IClassFixture<PostgresShopFixture>;
+
+public sealed class SqlServerNullSortTests(SqlServerShopFixture shop) : NullSortTests(shop), IClassFixture<SqlServerShopFixture>;

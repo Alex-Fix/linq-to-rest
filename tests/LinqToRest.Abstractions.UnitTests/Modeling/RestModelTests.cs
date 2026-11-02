@@ -151,6 +151,13 @@ public sealed class RestModelTests
     [InlineData("/sets/0/navigations/0/foreignKey", "[\"name\"]", "foreign key that doesn't match")]
     [InlineData("/sets/0/navigations/0/foreignKey", "[\"categoryId\",\"id\"]", "foreign key that doesn't match")]
     [InlineData("/sets/0/navigations/0/collection", "true", "can't be nullable or have a foreign key")]
+    [InlineData("/sets/0/navigations/0/links", "\"oneToMany\"", "links that don't fit it")]
+    [InlineData("/sets/0/navigations/0/onUnlink", "\"delete\"", "links that don't fit it")]
+    [InlineData("/sets/0/navigations/0/links", "\"many\"", "must be 'oneToMany' or 'manyToMany'")]
+    [InlineData("/sets/0/navigations/0/onUnlink", "\"remove\"", "must be 'delete' or 'detach'")]
+    [InlineData("/sets/1/navigations", "[{\"name\":\"products\",\"target\":\"products\",\"collection\":true,\"links\":\"oneToMany\"}]", "links that don't fit it")]
+    [InlineData("/sets/1/navigations", "[{\"name\":\"products\",\"target\":\"products\",\"collection\":true,\"links\":\"manyToMany\",\"onUnlink\":\"detach\"}]", "links that don't fit it")]
+    [InlineData("/sets/1/navigations", "[{\"name\":\"products\",\"target\":\"products\",\"collection\":true,\"onUnlink\":\"detach\"}]", "links that don't fit it")]
     [InlineData("/enums/Status", "[]", "has no members")]
     [InlineData("/enums/Status", "[\"A\",\"A\"]", "duplicate member 'A'")]
     [InlineData("/enums/Status", "[\"1A\"]", "invalid or duplicate member '1A'")]
@@ -183,6 +190,23 @@ public sealed class RestModelTests
         var exception = Assert.Throws<FormatException>(() => RestModel.Parse(json.ToJsonString()));
 
         Assert.Contains(message, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"name":"products","target":"products","collection":true,"links":"oneToMany","onUnlink":"delete"}""", RestLinkKind.OneToMany, RestUnlinkBehavior.Delete)]
+    [InlineData("""{"name":"products","target":"products","collection":true,"links":"oneToMany","onUnlink":"detach"}""", RestLinkKind.OneToMany, RestUnlinkBehavior.Detach)]
+    [InlineData("""{"name":"products","target":"products","collection":true,"links":"manyToMany"}""", RestLinkKind.ManyToMany, null)]
+    [InlineData("""{"name":"products","target":"products","collection":true}""", null, null)]
+    public void Collection_links_round_trip(string navigation, RestLinkKind? links, RestUnlinkBehavior? onUnlink)
+    {
+        var json = Minimal();
+        Set(json, "/sets/1/navigations", JsonNode.Parse($"[{navigation}]"));
+
+        var model = RestModel.Parse(json.ToJsonString());
+        var products = model.FindSet("categories")!.Navigations[0];
+
+        Assert.Equal((links, onUnlink), (products.Links, products.OnUnlink));
+        Assert.Equal(navigation, JsonNode.Parse(Encoding.UTF8.GetString(model.ToUtf8Json(indented: false)))!["sets"]![1]!["navigations"]![0]!.ToJsonString());
     }
 
     [Fact]

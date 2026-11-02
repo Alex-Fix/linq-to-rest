@@ -62,7 +62,12 @@ export interface NavigationModel {
   readonly name: string;
   readonly target: string;
   readonly collection: boolean;
-  readonly foreignKey: string | null;
+  /** The members holding the target's key, in its order; empty when none is exposed. */
+  readonly foreignKey: readonly string[];
+  /** How a collection's membership changes (`saveChanges` sends links), or null when it's read-only. */
+  readonly links: "oneToMany" | "manyToMany" | null;
+  /** What unlinking does to a one-to-many item: deletes it (required foreign key) or detaches it. */
+  readonly onUnlink: "delete" | "detach" | null;
 }
 
 export type PaginationMode = "offset" | "cursor";

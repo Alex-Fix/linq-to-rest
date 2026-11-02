@@ -138,3 +138,5 @@ public abstract class ValueTypeQueryTests(ShopFixture shop)
 public sealed class SqliteValueTypeQueryTests(SqliteShopFixture shop) : ValueTypeQueryTests(shop), IClassFixture<SqliteShopFixture>;
 
 public sealed class PostgresValueTypeQueryTests(PostgresShopFixture shop) : ValueTypeQueryTests(shop), IClassFixture<PostgresShopFixture>;
+
+public sealed class SqlServerValueTypeQueryTests(SqlServerShopFixture shop) : ValueTypeQueryTests(shop), IClassFixture<SqlServerShopFixture>;

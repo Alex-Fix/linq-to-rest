@@ -130,6 +130,8 @@ the database suffer. Design: `docs/plans/2026-10-18-linqtorest-v1-design.md` and
 - [ ] CORS: explicit origins, no origin reflection with credentials, scoped to the endpoints that need it?
 - [ ] Is every limit enforced before allocation and tested at and past its boundary?
 - [ ] Cursors: are decoded values checked against their sort members (count, type, nullability)?
+- [ ] Links: only on `AllowLinks()` navigations; both policies checked; hidden rows and non-members 404 (membership
+      never confirmed); only the affected membership loaded?
 - [ ] Any `Compile()`, reflection on client strings, string-built query or dynamic LINQ on the server? → reject.
 - [ ] Error responses and logs free of raw values, type names and member names as typed?
 - [ ] New dependency: free/OSS, and not in Abstractions/Client unless BCL? `dotnet list package --vulnerable` clean?

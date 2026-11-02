@@ -18,7 +18,9 @@
             "amount": 0.1,
             "unit": "kg"
           }
-        }
+        },
+        "binZone": null,
+        "binSlot": null
       }
     },
     {

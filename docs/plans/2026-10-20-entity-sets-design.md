@@ -305,7 +305,8 @@ Where the implementation differs from the sections above, this list wins.
 - Ship `linqtorest-gen` as a `dotnet tool` package?
 - Runtime drift check: compare the client's embedded model hash with `GET /$model`'s ETag.
 - Roslyn source generator for the .NET client (approach B) as an addition.
-- Composite foreign keys in `WithForeignKey` (the document allows a list; v1 only supports one member).
+- Composite foreign keys in `WithForeignKey` (the document allows a list; v1 only supports one member). *Done in
+  [`2026-10-25-collection-links-design.md`](2026-10-25-collection-links-design.md).*
 
 ## Implementation steps
 

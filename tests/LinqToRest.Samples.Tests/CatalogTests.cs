@@ -208,8 +208,10 @@ public sealed class CatalogWriteTests
         var (status, body) = await editor.BatchAsync("""
             {"v":1,"operations":[
               {"id":"p","op":"insert","set":"products","values":{"sku":"SKU-9001","name":"Cube","price":9.5,"status":"Draft","stock":3,"categoryId":4,"brandId":1}},
-              {"id":"i0","op":"insert","set":"productImages","values":{"url":"https://example.test/cube-0.png","sortOrder":0},"refs":{"productId":"p"}},
-              {"id":"i1","op":"insert","set":"productImages","values":{"url":"https://example.test/cube-1.png","sortOrder":1},"refs":{"productId":"p"}}]}
+              {"id":"i0","op":"insert","set":"productImages","values":{"url":"https://example.test/cube-0.png","sortOrder":0}},
+              {"id":"i1","op":"insert","set":"productImages","values":{"url":"https://example.test/cube-1.png","sortOrder":1}},
+              {"id":"l0","op":"link","set":"products","ref":"p","navigation":"images","item":{"ref":"i0"}},
+              {"id":"l1","op":"link","set":"products","ref":"p","navigation":"images","item":{"ref":"i1"}}]}
             """);
 
         Assert.True(status == HttpStatusCode.OK, $"{(int)status}: {body}");
@@ -217,6 +219,23 @@ public sealed class CatalogWriteTests
         Assert.Equal(2, product.GetProperty("imageCount").GetInt32());
         Assert.NotEqual(default, product.GetProperty("createdAt").GetDateTime());
         Assert.Equal(product.GetProperty("id").GetInt32(), body.GetProperty("results")[2].GetProperty("value").GetProperty("productId").GetInt32());
+    }
+
+    [Fact]
+    public async Task Editor_removes_an_image_by_unlinking_it()
+    {
+        await using var api = new CatalogApi();
+        var editor = await api.ClientAsync("editor");
+        var images = await editor.QueryOkAsync("productImages", """{"v":1,"filter":{"eq":[{"member":"productId"},1]},"orderBy":[{"member":"sortOrder"}],"select":{"member":"id"}}""");
+        var first = images.GetProperty("items")[0].GetInt32();
+
+        var (status, body) = await editor.BatchAsync($$$"""
+            {"v":1,"operations":[{"id":"u","op":"unlink","set":"products","key":{"id":1},"navigation":"images","item":{"key":{"id":{{{first}}}} } }]}
+            """);
+
+        Assert.True(status == HttpStatusCode.OK, $"{(int)status}: {body}");
+        var after = await editor.QueryOkAsync("productImages", """{"v":1,"filter":{"eq":[{"member":"productId"},1]},"page":{"mode":"offset","take":0},"count":true}""");
+        Assert.Equal(images.GetProperty("items").GetArrayLength() - 1, after.Total());
     }
 
     [Fact]

@@ -11,6 +11,9 @@ internal sealed class ChangeTracker
 
     public IEnumerable<Entry> Entries => _entries.Values;
 
+    /// <summary>Gets the collection items added and removed since the snapshots, as found by <see cref="DetectChanges()"/>.</summary>
+    public List<PendingLink> Links { get; } = [];
+
     public Entry? Find(object entity) => _entries.GetValueOrDefault(entity);
 
     /// <summary>Returns the tracked instance for a queried row, tracking it (and its loaded navigations) if it's new.</summary>
@@ -140,6 +143,12 @@ internal sealed class ChangeTracker
         {
             DetectChanges(entry);
         }
+
+        Links.Clear();
+        foreach (var entry in _entries.Values.ToList())
+        {
+            DetectLinks(entry);
+        }
     }
 
     public void DetectChanges(Entry entry)
@@ -158,9 +167,9 @@ internal sealed class ChangeTracker
         for (var index = 0; index < entry.Type.Navigations.Length; index++)
         {
             var navigation = entry.Type.Navigations[index];
-            if (navigation.IsCollection && !Entry.SameItems(navigation.Get(entry.Entity), entry.NavigationSnapshot[index]))
+            if (navigation is { IsCollection: true, Links: null } && !Entry.SameMembers(navigation.Get(entry.Entity), entry.NavigationSnapshot[index]))
             {
-                throw new NotSupportedException($"Items were added to or removed from {navigation}. Set the foreign key of the child entity instead.");
+                throw new NotSupportedException($"Items were added to or removed from {navigation}, which doesn't allow links. Set the foreign key of the child entity instead.");
             }
         }
 
@@ -177,45 +186,126 @@ internal sealed class ChangeTracker
         entry.State = entry.Modified.Count > 0 || entry.References.Count > 0 ? EntityState.Modified : EntityState.Unchanged;
     }
 
-    /// <summary>Copies the key of a referenced entity into the foreign key, or records a ref to an added one.</summary>
+    /// <summary>After a save: an item linked to a one-to-many collection points at its parent, a detached one at nothing, a deleted one is gone.</summary>
+    public void AcceptLinked(PendingLink link)
+    {
+        var (parent, navigation, item, unlink) = link;
+        if (navigation.Links == RestLinkKind.OneToMany)
+        {
+            if (unlink && navigation.OnUnlink == RestUnlinkBehavior.Delete)
+            {
+                Detach(item);
+                return;
+            }
+
+            // The item's own reference back to the parent, if its set exposes one with the foreign key.
+            if (item.Type.Navigations.SingleOrDefault(candidate => !candidate.IsCollection && candidate.Target == parent.Type && candidate.ForeignKey.Count > 0) is { } back)
+            {
+                for (var index = 0; index < back.ForeignKey.Count; index++)
+                {
+                    back.ForeignKey[index].Set(item.Entity, unlink ? null : parent.Key!.Value.Values[index]);
+                }
+
+                back.Set(item.Entity, unlink ? null : parent.Entity);
+            }
+
+            item.TakeSnapshot();
+        }
+
+        parent.TakeSnapshot();
+    }
+
+    /// <summary>Items added to or removed from linkable collections; unlinkable ones were checked by DetectChanges.</summary>
+    private void DetectLinks(Entry entry)
+    {
+        if (entry.State is EntityState.Deleted or EntityState.Detached)
+        {
+            return;
+        }
+
+        for (var index = 0; index < entry.Type.Navigations.Length; index++)
+        {
+            var navigation = entry.Type.Navigations[index];
+            if (navigation is not { IsCollection: true, Links: not null })
+            {
+                continue;
+            }
+
+            var before = Entry.Members(entry.NavigationSnapshot.Length > 0 ? entry.NavigationSnapshot[index] : null);
+            var now = Entry.Members(navigation.Get(entry.Entity));
+            foreach (var item in now.Where(item => !before.Contains(item)))
+            {
+                AddLink(entry, navigation, item, unlink: false);
+            }
+
+            foreach (var item in before.Where(item => !now.Contains(item)))
+            {
+                AddLink(entry, navigation, item, unlink: true);
+            }
+        }
+    }
+
+    private void AddLink(Entry parent, ClientNavigation navigation, object item, bool unlink)
+    {
+        var entry = Find(item);
+        if (entry is null && !unlink)
+        {
+            throw new InvalidOperationException($"{navigation} holds an entity this context doesn't track. Add or attach it first.");
+        }
+
+        // A deleted or detached item needs no link: deleting it (or not saving it) covers the collection too.
+        if (entry is { State: not (EntityState.Deleted or EntityState.Detached) })
+        {
+            Links.Add(new PendingLink(parent, navigation, entry, unlink));
+        }
+    }
+
+    /// <summary>Copies the key of a referenced entity into the foreign key, or records refs to an added one.</summary>
     private void SyncForeignKeys(Entry entry)
     {
         for (var index = 0; index < entry.Type.Navigations.Length; index++)
         {
             var navigation = entry.Type.Navigations[index];
-            if (navigation.IsCollection || navigation.ForeignKey is not { } foreignKey)
+            if (navigation.IsCollection || navigation.ForeignKey.Count == 0)
             {
                 continue;
             }
 
+            var foreignKey = navigation.ForeignKey;
             var target = navigation.Get(entry.Entity);
             var original = entry.NavigationSnapshot.Length > 0 ? entry.NavigationSnapshot[index] : null;
             if (target is null)
             {
-                entry.References.Remove(foreignKey);
-                if (original is not null && foreignKey.IsNullable)
+                foreach (var property in foreignKey)
                 {
-                    foreignKey.Set(entry.Entity, null);
+                    entry.References.Remove(property);
+                    if (original is not null && property.IsNullable)
+                    {
+                        property.Set(entry.Entity, null);
+                    }
                 }
 
                 continue;
             }
 
-            if (ReferenceEquals(target, original) && !entry.References.ContainsKey(foreignKey))
+            if (ReferenceEquals(target, original) && !entry.References.ContainsKey(foreignKey[0]))
             {
                 continue;
             }
 
             var targetEntry = Find(target)
                 ?? throw new InvalidOperationException($"{navigation} points at an entity this context doesn't track. Add or attach it first.");
-            if (targetEntry.State == EntityState.Added)
+            for (var member = 0; member < foreignKey.Count; member++)
             {
-                entry.References[foreignKey] = targetEntry;
-            }
-            else
-            {
-                entry.References.Remove(foreignKey);
-                foreignKey.Set(entry.Entity, targetEntry.Key!.Value.Values[0]);
+                if (targetEntry.State == EntityState.Added)
+                {
+                    entry.References[foreignKey[member]] = targetEntry;
+                }
+                else
+                {
+                    entry.References.Remove(foreignKey[member]);
+                    foreignKey[member].Set(entry.Entity, targetEntry.Key!.Value.Values[member]);
+                }
             }
         }
     }
@@ -273,6 +363,13 @@ internal sealed class Entry(object entity, ClientSet type)
             ? items.Cast<object?>().SequenceEqual(copy)
             : current is null && snapshot is null;
 
+    /// <summary>Whether a collection holds the same items as its snapshot, in any order.</summary>
+    public static bool SameMembers(object? current, object? snapshot) => Members(current).SetEquals(Members(snapshot));
+
+    /// <summary>The items of a collection (or its snapshot), by reference.</summary>
+    public static HashSet<object> Members(object? collection) =>
+        new(collection is IEnumerable items ? items.Cast<object?>().OfType<object>() : [], ReferenceEqualityComparer.Instance);
+
     private int IndexOf(ClientProperty property)
     {
         for (var index = 0; index < Type.Properties.Length; index++)
@@ -323,3 +420,6 @@ internal readonly struct EntityKey(ClientSet type, object?[] values) : IEquatabl
         return hash.ToHashCode();
     }
 }
+
+/// <summary>An item added to (or removed from) a linkable collection of a tracked parent.</summary>
+internal sealed record PendingLink(Entry Parent, ClientNavigation Navigation, Entry Item, bool Unlink);

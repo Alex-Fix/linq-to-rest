@@ -76,7 +76,8 @@ public abstract class RestDataContext
         }
 
         var ordered = Order([.. Tracker.Entries.Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)]);
-        if (ordered.Count == 0)
+        var links = Tracker.Links.ToList();
+        if (ordered.Count == 0 && links.Count == 0)
         {
             return 0;
         }
@@ -87,24 +88,46 @@ public abstract class RestDataContext
             throw new RestValidationException((int)HttpStatusCode.UnprocessableEntity, "/operations", errors, isLocal: true, isTruncated: false);
         }
 
+        // Inserts and updates, then links (their rows exist by then), then deletes.
+        var writes = ordered.Where(entry => entry.State != EntityState.Deleted).ToList();
+        var deletes = ordered.Where(entry => entry.State == EntityState.Deleted).ToList();
         var ids = new Dictionary<Entry, string>();
-        foreach (var entry in ordered)
+        foreach (var entry in writes)
         {
             ids.Add(entry, $"o{ids.Count}");
         }
 
-        var batch = new BatchRequest { Version = QueryJson.Version, Operations = [.. ordered.Select(entry => Operation(entry, ids))] };
+        var linkIds = links.Select((_, index) => $"o{ids.Count + index}").ToList();
+        foreach (var entry in deletes)
+        {
+            ids.Add(entry, $"o{ids.Count + links.Count}");
+        }
+
+        var batch = new BatchRequest
+        {
+            Version = QueryJson.Version,
+            Operations = [.. writes.Select(entry => Operation(entry, ids)), .. links.Select((link, index) => LinkOperation(link, linkIds[index], ids)), .. deletes.Select(entry => Operation(entry, ids))],
+        };
         using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("$batch", UriKind.Relative));
         request.Content = JsonContent(BatchJson.Write(batch));
         using var response = await Options.HttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var byId = ids.ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.Ordinal);
+        for (var index = 0; index < links.Count; index++)
+        {
+            // A failing link is reported on its parent.
+            byId[linkIds[index]] = links[index].Parent;
+        }
+
         if (!response.IsSuccessStatusCode)
         {
-            throw await Problems.SaveFailureAsync(response, ordered, byId, cancellationToken).ConfigureAwait(false);
+            // Pointers name operations by position, so the entries go in the order the operations were sent.
+            List<Entry> sent = [.. writes, .. links.Select(link => link.Parent), .. deletes];
+            throw await Problems.SaveFailureAsync(response, sent, byId, cancellationToken).ConfigureAwait(false);
         }
 
         var result = BatchJson.ReadResponse(await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false));
-        foreach (var item in result.Results)
+        var linkIdSet = linkIds.ToHashSet(StringComparer.Ordinal);
+        foreach (var item in result.Results.Where(item => !linkIdSet.Contains(item.Id)))
         {
             var entry = byId[item.Id];
             if (entry.State == EntityState.Deleted)
@@ -122,7 +145,13 @@ public abstract class RestDataContext
             Tracker.AcceptSaved(entry);
         }
 
-        return ordered.Count;
+        // Parents have their keys now, so linked items can point at them.
+        foreach (var link in links)
+        {
+            Tracker.AcceptLinked(link);
+        }
+
+        return ordered.Count + links.Count;
     }
 
     /// <summary>
@@ -180,6 +209,34 @@ public abstract class RestDataContext
         return ordered;
     }
 
+    /// <summary>A link or unlink: parent and item by key, or by the id of their insert in this batch.</summary>
+    private static BatchOperation LinkOperation(PendingLink link, string id, Dictionary<Entry, string> ids)
+    {
+        var (parent, navigation, item, unlink) = link;
+        JsonElement? token = navigation.Links == RestLinkKind.OneToMany && item.State != EntityState.Added && item.Type.ConcurrencyToken is { } tokenProperty
+            ? JsonValues.ToElement(item.Original(tokenProperty))
+            : null;
+        return new BatchOperation
+        {
+            Id = id,
+            Op = unlink ? BatchOperationKind.Unlink : BatchOperationKind.Link,
+            Set = parent.Type.SetName,
+            Key = parent.State == EntityState.Added ? null : KeyOf(parent),
+            Ref = parent.State == EntityState.Added ? ids[parent] : null,
+            Navigation = navigation.WireName,
+            Item = new BatchItem
+            {
+                Key = item.State == EntityState.Added ? null : KeyOf(item),
+                Ref = item.State == EntityState.Added ? ids[item] : null,
+                Token = token,
+            },
+        };
+    }
+
+    private static Dictionary<string, JsonElement> KeyOf(Entry entry) =>
+        entry.Type.Key.Select((property, index) => (property.WireName, Value: entry.Key!.Value.Values[index]))
+            .ToDictionary(pair => pair.WireName, pair => JsonValues.ToElement(pair.Value), StringComparer.Ordinal);
+
     private static BatchOperation Operation(Entry entry, Dictionary<Entry, string> ids)
     {
         var type = entry.Type;
@@ -189,10 +246,7 @@ public abstract class RestDataContext
             ? null
             : written.Where(property => !entry.References.ContainsKey(property))
                 .ToDictionary(property => property.WireName, property => property.ToElement(property.Get(entry.Entity)), StringComparer.Ordinal);
-        var key = entry.State == EntityState.Added
-            ? null
-            : type.Key.Select((property, index) => (property.WireName, Value: entry.Key!.Value.Values[index]))
-                .ToDictionary(pair => pair.WireName, pair => JsonValues.ToElement(pair.Value), StringComparer.Ordinal);
+        var key = entry.State == EntityState.Added ? null : KeyOf(entry);
         JsonElement? token = entry.State != EntityState.Added && type.ConcurrencyToken is { } tokenProperty ? JsonValues.ToElement(entry.Original(tokenProperty)) : null;
         return new BatchOperation
         {

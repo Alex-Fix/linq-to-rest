@@ -19,7 +19,9 @@
         "price": 9.5,
         "status": "Active",
         "releasedOn": null,
-        "size": null
+        "size": null,
+        "binZone": null,
+        "binSlot": null
       },
       "refs": {
         "categoryId": "o0"

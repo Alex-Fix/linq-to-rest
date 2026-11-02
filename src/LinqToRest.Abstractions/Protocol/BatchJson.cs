@@ -60,13 +60,63 @@ public static class BatchJson
                 throw new ProtocolException(ErrorCodes.InvalidBatch, $"/operations/{index}");
             }
 
-            if (!QueryJson.IsIdentifier(operation.Id) || !ids.Add(operation.Id))
+            if (!QueryJson.IsIdentifier(operation.Id) || ids.Contains(operation.Id))
             {
                 throw new ProtocolException(ErrorCodes.InvalidBatch, $"/operations/{index}/id");
             }
+
+            CheckShape(operation, $"/operations/{index}", ids);
+            ids.Add(operation.Id);
         }
 
         return batch;
+    }
+
+    /// <summary>
+    /// Link and unlink name a parent (key or an earlier insert), a navigation and an item, and nothing else; other
+    /// operations never carry those members.
+    /// </summary>
+    private static void CheckShape(BatchOperation operation, string location, HashSet<string> earlier)
+    {
+        if (operation.Op is not (BatchOperationKind.Link or BatchOperationKind.Unlink))
+        {
+            var extra = operation.Ref is not null ? "ref" : operation.Navigation is not null ? "navigation" : operation.Item is not null ? "item" : null;
+            if (extra is not null)
+            {
+                throw new ProtocolException(ErrorCodes.InvalidBatch, $"{location}/{extra}");
+            }
+
+            return;
+        }
+
+        var invalid = operation.Values is not null ? "values" : operation.Refs is not null ? "refs" : operation.Token is not null ? "token" : null;
+        if (invalid is not null)
+        {
+            throw new ProtocolException(ErrorCodes.InvalidBatch, $"{location}/{invalid}");
+        }
+
+        if (operation.Navigation is null || !QueryJson.IsIdentifier(operation.Navigation))
+        {
+            throw new ProtocolException(ErrorCodes.InvalidBatch, $"{location}/navigation");
+        }
+
+        CheckRow(operation.Key, operation.Ref, $"{location}/key", $"{location}/ref", earlier);
+        var item = operation.Item ?? throw new ProtocolException(ErrorCodes.InvalidBatch, $"{location}/item");
+        CheckRow(item.Key, item.Ref, $"{location}/item", $"{location}/item/ref", earlier);
+    }
+
+    /// <summary>Exactly one of a key or a ref, and a ref names an earlier operation.</summary>
+    private static void CheckRow(IReadOnlyDictionary<string, JsonElement>? key, string? reference, string location, string referenceLocation, HashSet<string> earlier)
+    {
+        if ((key is null) == (reference is null))
+        {
+            throw new ProtocolException(ErrorCodes.InvalidBatch, location);
+        }
+
+        if (reference is not null && !earlier.Contains(reference))
+        {
+            throw new ProtocolException(ErrorCodes.InvalidBatch, referenceLocation);
+        }
     }
 
     /// <summary>Writes a batch body.</summary>

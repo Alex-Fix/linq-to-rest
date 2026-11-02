@@ -81,6 +81,12 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
     private async Task ApplyAsync(BatchOperation operation, string location, CancellationToken cancellationToken)
     {
         var mapping = server.FindSet(operation.Set) ?? throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/set", operation);
+        if (operation.Op is BatchOperationKind.Link or BatchOperationKind.Unlink)
+        {
+            await ApplyLinkAsync(mapping, operation, location, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var (kind, write) = operation.Op switch
         {
             BatchOperationKind.Insert => (SetOperation.Insert, WriteOperations.Insert),
@@ -121,8 +127,8 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
                 throw Invalid(ErrorCodes.InvalidBatch, location, operation);
             }
 
-            entity = await LoadAsync(mapping, operation, location, cancellationToken).ConfigureAwait(false);
-            CheckToken(mapping, entity, operation, location);
+            entity = await LoadAsync(mapping, operation.Key, $"{location}/key", location, operation, cancellationToken).ConfigureAwait(false);
+            CheckToken(mapping, entity, operation.Token, $"{location}/token", operation);
             if (kind == SetOperation.Delete)
             {
                 db.Remove(entity);
@@ -138,6 +144,105 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         _applied.Add(operation.Id, new Applied(operation, mapping, entity));
     }
 
+    /// <summary>
+    /// Adds an item to, or removes it from, a collection the set allows links on. Parent and item are loaded through
+    /// their policies (or come from earlier inserts); only the affected membership is loaded; EF Core then sets the
+    /// item's foreign key or adds or removes the join row. Unlinking a required one-to-many item deletes it.
+    /// </summary>
+    private async Task ApplyLinkAsync(SetMapping mapping, BatchOperation operation, string location, CancellationToken cancellationToken)
+    {
+        var navigation = mapping.Navigations.FirstOrDefault(navigation => navigation.Name == operation.Navigation && navigation.IsCollection)
+            ?? throw Invalid(ErrorCodes.InvalidBatch, $"{location}/navigation", operation);
+        if (navigation.Links is not { } links)
+        {
+            throw Failure(StatusCodes.Status403Forbidden, ErrorCodes.OperationNotAllowed, $"{location}/navigation", operation);
+        }
+
+        var unlink = operation.Op == BatchOperationKind.Unlink;
+        var target = navigation.Target;
+
+        // A one-to-many link rewrites the item's row (or deletes it); a many-to-many one only a join row.
+        SetOperation? itemOperation = links == RestLinkKind.ManyToMany ? null
+            : unlink && navigation.OnUnlink == RestUnlinkBehavior.Delete ? SetOperation.Delete : SetOperation.Update;
+        if (!await policies.CanAsync(mapping, SetOperation.Update).ConfigureAwait(false)
+            || (itemOperation is { } operationOnItem && !await policies.CanAsync(target, operationOnItem).ConfigureAwait(false)))
+        {
+            throw Failure(StatusCodes.Status403Forbidden, ErrorCodes.Forbidden, location, operation);
+        }
+
+        var parent = operation.Ref is { } parentRef
+            ? Inserted(parentRef, mapping, $"{location}/ref", operation)
+            : await LoadAsync(mapping, operation.Key, $"{location}/key", $"{location}/key", operation, cancellationToken).ConfigureAwait(false);
+        var item = operation.Item!;
+        object entity;
+        if (item.Ref is { } itemRef)
+        {
+            entity = Inserted(itemRef, target, $"{location}/item/ref", operation);
+            if (item.Token is not null)
+            {
+                throw Invalid(ErrorCodes.InvalidBatch, $"{location}/item/token", operation);
+            }
+        }
+        else
+        {
+            entity = await LoadAsync(target, item.Key, $"{location}/item/key", $"{location}/item/key", operation, cancellationToken).ConfigureAwait(false);
+            if (links == RestLinkKind.OneToMany)
+            {
+                CheckToken(target, entity, item.Token, $"{location}/item/token", operation);
+            }
+            else if (item.Token is not null)
+            {
+                throw Invalid(ErrorCodes.InvalidBatch, $"{location}/item/token", operation);
+            }
+        }
+
+        // Only rows already in the database can already be members; load just that membership.
+        var collection = db.Entry(parent).Navigation(navigation.EfNavigation.Name);
+        if (db.Entry(parent).State != EntityState.Added && db.Entry(entity).State != EntityState.Added)
+        {
+            var itemKey = target.Key.Select(property => property.EntityProperty!.GetValue(entity)).ToList();
+            await target.LoadAsync(((Microsoft.EntityFrameworkCore.ChangeTracking.CollectionEntry)collection).Query(), target.KeyPredicate([itemKey]), cancellationToken).ConfigureAwait(false);
+        }
+
+        var accessor = navigation.EfNavigation.GetCollectionAccessor()!;
+        var member = accessor.Contains(parent, entity);
+        if (!unlink)
+        {
+            if (!member)
+            {
+                accessor.Add(parent, entity, forMaterialization: false);
+            }
+        }
+        else if (!member)
+        {
+            // Never confirms membership the caller can't change: not a member reads like a missing row.
+            throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/item", operation);
+        }
+        else
+        {
+            if (navigation.OnUnlink == RestUnlinkBehavior.Delete)
+            {
+                db.Remove(entity);
+            }
+
+            accessor.Remove(parent, entity);
+        }
+
+        // A one-to-many item's row changes like an update's, so its set's update hook runs too.
+        if (itemOperation == SetOperation.Update)
+        {
+            policies.Get(target)?.OnUpdate(entity, policies.Context);
+        }
+
+        _applied.Add(operation.Id, new Applied(operation, target, entity));
+    }
+
+    /// <summary>The row an earlier insert of <paramref name="mapping"/> added.</summary>
+    private object Inserted(string id, SetMapping mapping, string location, BatchOperation operation) =>
+        _applied.TryGetValue(id, out var referenced) && referenced.Operation.Op == BatchOperationKind.Insert && referenced.Mapping == mapping
+            ? referenced.Entity
+            : throw Invalid(ErrorCodes.InvalidBatch, location, operation);
+
     private async Task<List<ValidationIssue>> ValidateAsync(BatchRequest batch, CancellationToken cancellationToken)
     {
         var max = server.Limits.MaxValidationErrors;
@@ -145,7 +250,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         for (var index = 0; index < batch.Operations.Count && issues.Count <= max; index++)
         {
             var operation = batch.Operations[index];
-            if (operation.Op != BatchOperationKind.Delete)
+            if (operation.Op is BatchOperationKind.Insert or BatchOperationKind.Update)
             {
                 var (_, mapping, entity) = _applied[operation.Id];
                 var scope = new ValidationScope(operation, $"/operations/{index}", mapping, policies.Context, issues);
@@ -259,20 +364,22 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         return validator;
     }
 
-    private async Task<object> LoadAsync(SetMapping mapping, BatchOperation operation, string location, CancellationToken cancellationToken)
+    /// <summary>Loads the row with the given key through the set's policy filter: hidden or missing is a 404 at <paramref name="notFound"/>.</summary>
+    private async Task<object> LoadAsync(
+        SetMapping mapping, IReadOnlyDictionary<string, JsonElement>? keyValues, string keyLocation, string notFound, BatchOperation operation, CancellationToken cancellationToken)
     {
         var key = mapping.Key;
-        if (operation.Key is null || operation.Key.Count != key.Length)
+        if (keyValues is null || keyValues.Count != key.Length)
         {
-            throw Invalid(ErrorCodes.InvalidBatch, $"{location}/key", operation);
+            throw Invalid(ErrorCodes.InvalidBatch, keyLocation, operation);
         }
 
-        var values = key.Select(property => operation.Key.TryGetValue(property.Name, out var value)
-                ? JsonValues.Read(value, property.ClrType, $"{location}/key")
-                : throw Invalid(ErrorCodes.InvalidBatch, $"{location}/key", operation))
+        var values = key.Select(property => keyValues.TryGetValue(property.Name, out var value)
+                ? JsonValues.Read(value, property.ClrType, keyLocation)
+                : throw Invalid(ErrorCodes.InvalidBatch, keyLocation, operation))
             .ToList();
         var entity = await mapping.FindAsync(db, policies.Filter(mapping), values, cancellationToken).ConfigureAwait(false)
-            ?? throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, location, operation);
+            ?? throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, notFound, operation);
 
         // A FromSource with AsNoTracking returns detached rows; attaching makes the changes count.
         if (db.Entry(entity).State == EntityState.Detached)
@@ -283,24 +390,24 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
         return entity;
     }
 
-    private void CheckToken(SetMapping mapping, object entity, BatchOperation operation, string location)
+    private void CheckToken(SetMapping mapping, object entity, JsonElement? sent, string location, BatchOperation operation)
     {
         if (mapping.ConcurrencyToken is not { } token)
         {
-            if (operation.Token is not null)
+            if (sent is not null)
             {
-                throw Invalid(ErrorCodes.InvalidBatch, $"{location}/token", operation);
+                throw Invalid(ErrorCodes.InvalidBatch, location, operation);
             }
 
             return;
         }
 
-        if (operation.Token is not { } element)
+        if (sent is not { } element)
         {
-            throw Invalid(ErrorCodes.InvalidBatch, $"{location}/token", operation);
+            throw Invalid(ErrorCodes.InvalidBatch, location, operation);
         }
 
-        var expected = JsonValues.Read(element, token.ClrType, $"{location}/token");
+        var expected = JsonValues.Read(element, token.ClrType, location);
         var property = db.Entry(entity).Property(token.EntityProperty!.Name);
         if (!TokensEqual(property.CurrentValue, expected))
         {
@@ -396,11 +503,20 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
 
     private async Task ApplyReferencesAsync(SetMapping mapping, object entity, BatchOperation operation, string location, CancellationToken cancellationToken)
     {
-        foreach (var (name, target) in operation.Refs ?? new Dictionary<string, string>())
+        var refs = operation.Refs ?? new Dictionary<string, string>();
+        var used = 0;
+        foreach (var navigation in mapping.Navigations.Where(navigation => navigation.ForeignKey.Count > 0))
         {
-            var navigation = mapping.Navigations.FirstOrDefault(navigation => navigation.ForeignKey?.Name == name);
-            if (navigation is null || operation.Values?.ContainsKey(name) == true
-                || !_applied.TryGetValue(target, out var referenced) || referenced.Operation.Op != BatchOperationKind.Insert || referenced.Mapping != navigation.Target)
+            // A ref names every member of one foreign key, all pointing at the same earlier insert of the target set.
+            var targets = navigation.ForeignKey.Select(property => refs.GetValueOrDefault(property.Name)).ToList();
+            if (targets.TrueForAll(target => target is null))
+            {
+                continue;
+            }
+
+            used += targets.Count;
+            if (targets.Distinct().Count() != 1 || navigation.ForeignKey.Any(property => operation.Values?.ContainsKey(property.Name) == true)
+                || !_applied.TryGetValue(targets[0]!, out var referenced) || referenced.Operation.Op != BatchOperationKind.Insert || referenced.Mapping != navigation.Target)
             {
                 throw Invalid(ErrorCodes.InvalidBatch, $"{location}/refs", operation);
             }
@@ -408,19 +524,30 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
             navigation.EntityProperty.SetValue(entity, referenced.Entity);
         }
 
+        if (used != refs.Count)
+        {
+            throw Invalid(ErrorCodes.InvalidBatch, $"{location}/refs", operation);
+        }
+
         // A foreign key written by value must point at a row the caller can see.
         foreach (var navigation in mapping.Navigations)
         {
-            if (navigation.ForeignKey is not { } foreignKey || operation.Values?.TryGetValue(foreignKey.Name, out var element) != true
-                || JsonValues.Read(element, foreignKey.ClrType, $"{location}/values/{foreignKey.Name}") is not { } value)
+            if (navigation.ForeignKey.FirstOrDefault(property => operation.Values?.ContainsKey(property.Name) == true) is not { } sent)
+            {
+                continue;
+            }
+
+            // The whole key as the row now holds it: a composite key may be written in part.
+            var key = navigation.ForeignKey.Select(property => property.EntityProperty!.GetValue(entity)).ToList();
+            if (key.Contains(null))
             {
                 continue;
             }
 
             var target = navigation.Target;
-            if (await target.FindAsync(db, policies.Filter(target), [value], cancellationToken).ConfigureAwait(false) is null)
+            if (await target.FindAsync(db, policies.Filter(target), key, cancellationToken).ConfigureAwait(false) is null)
             {
-                throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values/{foreignKey.Name}", operation);
+                throw Failure(StatusCodes.Status404NotFound, ErrorCodes.NotFound, $"{location}/values/{sent.Name}", operation);
             }
         }
     }
@@ -429,7 +556,7 @@ internal sealed class BatchExecutor(ServerModel server, DbContext db, RequestPol
     private async Task<Dictionary<string, JsonElement>> ReadBackAsync(BatchRequest batch, CancellationToken cancellationToken)
     {
         var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        var written = batch.Operations.Where(operation => operation.Op != BatchOperationKind.Delete).Select(operation => _applied[operation.Id]);
+        var written = batch.Operations.Where(operation => operation.Op is BatchOperationKind.Insert or BatchOperationKind.Update).Select(operation => _applied[operation.Id]);
         foreach (var set in written.GroupBy(applied => applied.Mapping))
         {
             var mapping = set.Key;

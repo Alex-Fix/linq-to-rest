@@ -180,6 +180,7 @@ describe("query translation", () => {
     const categories = shopModel.sets.categories;
     const model = {
       sets: {
+        ...shopModel.sets,
         categories: {
           ...categories,
           members: categories.members.map((m) => (m.name === "name" ? { ...m, filterable: false } : m)),

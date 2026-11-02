@@ -56,6 +56,13 @@ public sealed class CatalogDbContext(DbContextOptions<CatalogDbContext> options)
             modelBuilder.Entity<Product>().Property(p => p.Price).HasConversion<double>();
             modelBuilder.Entity<Product>().Property(p => p.CostPrice).HasConversion<double>();
         }
+
+        if (Database.IsSqlServer())
+        {
+            // SQL Server's decimal needs a precision; without one EF Core warns and defaults to (18, 2).
+            modelBuilder.Entity<Product>().Property(p => p.Price).HasPrecision(10, 2);
+            modelBuilder.Entity<Product>().Property(p => p.CostPrice).HasPrecision(10, 2);
+        }
     }
 }
 

@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "operations": [
+    {
+      "id": "o0",
+      "op": "insert",
+      "set": "bins",
+      "values": {
+        "code": "A9"
+      }
+    },
+    {
+      "id": "o1",
+      "op": "insert",
+      "set": "products",
+      "values": {
+        "name": "Crate",
+        "description": null,
+        "price": 5,
+        "status": "Active",
+        "releasedOn": null,
+        "categoryId": null,
+        "size": null
+      },
+      "refs": {
+        "binZone": "o0",
+        "binSlot": "o0"
+      }
+    }
+  ]
+}

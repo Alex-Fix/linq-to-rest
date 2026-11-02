@@ -18,6 +18,14 @@ public enum BatchOperationKind
     /// <summary>Delete a row.</summary>
     [JsonStringEnumMemberName("delete")]
     Delete,
+
+    /// <summary>Add an item to a collection navigation of a row.</summary>
+    [JsonStringEnumMemberName("link")]
+    Link,
+
+    /// <summary>Remove an item from a collection navigation of a row.</summary>
+    [JsonStringEnumMemberName("unlink")]
+    Unlink,
 }
 
 /// <summary>A change set sent with <c>POST /$batch</c> and applied atomically.</summary>
@@ -43,8 +51,17 @@ public sealed class BatchOperation
     /// <summary>Gets the set name.</summary>
     public required string Set { get; init; }
 
-    /// <summary>Gets the key values by wire name (update and delete).</summary>
+    /// <summary>Gets the key values by wire name (update, delete, and the parent of link and unlink).</summary>
     public IReadOnlyDictionary<string, JsonElement>? Key { get; init; }
+
+    /// <summary>Gets the id of an earlier insert that is the parent of a link or unlink, instead of <see cref="Key"/>.</summary>
+    public string? Ref { get; init; }
+
+    /// <summary>Gets the collection navigation's wire name (link and unlink).</summary>
+    public string? Navigation { get; init; }
+
+    /// <summary>Gets the item added to or removed from the collection (link and unlink).</summary>
+    public BatchItem? Item { get; init; }
 
     /// <summary>Gets the written member values by wire name (insert and update).</summary>
     public IReadOnlyDictionary<string, JsonElement>? Values { get; init; }
@@ -53,6 +70,19 @@ public sealed class BatchOperation
     public IReadOnlyDictionary<string, string>? Refs { get; init; }
 
     /// <summary>Gets the concurrency token read with the row (update and delete).</summary>
+    public JsonElement? Token { get; init; }
+}
+
+/// <summary>The item of a link or unlink: a row of the navigation's target set, by key or by an earlier insert.</summary>
+public sealed class BatchItem
+{
+    /// <summary>Gets the item's key values by wire name.</summary>
+    public IReadOnlyDictionary<string, JsonElement>? Key { get; init; }
+
+    /// <summary>Gets the id of an earlier insert into the target set, instead of <see cref="Key"/>.</summary>
+    public string? Ref { get; init; }
+
+    /// <summary>Gets the item's concurrency token, when a one-to-many link or unlink changes its row.</summary>
     public JsonElement? Token { get; init; }
 }
 

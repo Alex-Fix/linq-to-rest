@@ -173,3 +173,5 @@ public abstract class ValueTypeProviderTests(ShopDatabase database)
 public sealed class SqliteValueTypeProviderTests() : ValueTypeProviderTests(new SqliteDatabase());
 
 public sealed class PostgresValueTypeProviderTests(PostgresContainer postgres) : ValueTypeProviderTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerValueTypeProviderTests(SqlServerContainer sqlServer) : ValueTypeProviderTests(new SqlServerDatabase(sqlServer));

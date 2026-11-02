@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Linq.Expressions;
+using System.Reflection;
 using LinqToRest.Modeling;
 using LinqToRest.Protocol;
 using LinqToRest.Server.Internal;
@@ -14,8 +15,10 @@ internal static class QueryCompiler
     private static readonly HashSet<Type> CursorTypes =
     [
         typeof(byte), typeof(short), typeof(int), typeof(long), typeof(float), typeof(double), typeof(decimal), typeof(string),
-        typeof(DateTime), typeof(DateTimeOffset), typeof(DateOnly), typeof(TimeOnly), typeof(TimeSpan),
+        typeof(DateTime), typeof(DateTimeOffset), typeof(DateOnly), typeof(TimeOnly), typeof(TimeSpan), typeof(Guid),
     ];
+
+    private static readonly MethodInfo GuidCompareTo = typeof(Guid).GetMethod(nameof(Guid.CompareTo), [typeof(Guid)])!;
 
     public static QueryPlan Compile(ServerModel server, SetMapping mapping, QueryRequest request, RequestPolicies policies)
     {
@@ -248,7 +251,7 @@ internal static class QueryCompiler
             else
             {
                 var value = ToComparable(ExpressionHelpers.Parameter(values[index], sort.Key.ReturnType));
-                after = QueryBinder.Comparison(sort.Descending ? ExpressionType.LessThan : ExpressionType.GreaterThan, key, value)!;
+                after = After(sort.Descending ? ExpressionType.LessThan : ExpressionType.GreaterThan, key, value);
                 if (sort is { Descending: true, IsNullable: true })
                 {
                     after = Expression.OrElse(after, Expression.Equal(key, Expression.Constant(null, key.Type)));
@@ -268,6 +271,24 @@ internal static class QueryCompiler
 
         // The key ends every cursor sort and is never null, so there's always a term.
         return result!;
+    }
+
+    /// <summary>
+    /// A keyset comparison. .NET has no <c>Guid</c> operators, so <c>Guid</c> compares through <c>CompareTo</c>, which EF
+    /// Core translates to the database's own order (SQL Server's differs from .NET's; pages follow the database).
+    /// </summary>
+    private static Expression After(ExpressionType kind, Expression key, Expression value)
+    {
+        if (ExpressionHelpers.Underlying(key.Type) != typeof(Guid))
+        {
+            return QueryBinder.Comparison(kind, key, value)!;
+        }
+
+        // The cursor value is never null here (Keyset handles that); a nullable key compares only when it has a value,
+        // like the lifted operators of the other types.
+        Expression Value(Expression side) => side.Type == typeof(Guid) ? side : Expression.Convert(side, typeof(Guid));
+        var comparison = Expression.MakeBinary(kind, Expression.Call(Value(key), GuidCompareTo, Value(value)), Expression.Constant(0));
+        return key.Type == typeof(Guid) ? comparison : Expression.AndAlso(Expression.NotEqual(key, Expression.Constant(null, key.Type)), comparison);
     }
 
     private static Expression ToComparable(Expression value)

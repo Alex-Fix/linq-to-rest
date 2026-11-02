@@ -25,7 +25,8 @@ entities — with DTOs, not entities, as the public contract.
 - `GroupBy`, joins across sets, top-level aggregates other than count.
 - Owned / complex DTO types without their own set.
 - Cursor pagination over nullable sort members.
-- Changing `HasMany` collection membership without a child FK.
+- Changing `HasMany` collection membership without a child FK. *Done in
+  [`2026-10-25-collection-links-design.md`](2026-10-25-collection-links-design.md).*
 - Non-.NET client SDKs (the JSON contract is documented, but only a .NET client ships).
 - Native AOT / trimming support for the client (anonymous-type materialization uses reflection).
 

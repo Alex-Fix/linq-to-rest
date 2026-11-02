@@ -198,16 +198,17 @@ public sealed class ReferenceNavigationBuilder<TEntity>
     internal ReferenceNavigationBuilder(NavigationDefinition navigation) => _navigation = navigation;
 
     /// <summary>
-    /// Names the exposed property holding the target's key, so clients can set the relationship. It must be the
-    /// foreign key of the EF Core navigation.
+    /// Names the exposed properties holding the target's key, so clients can set the relationship: one property
+    /// (<c>e =&gt; e.CategoryId</c>) or several, in the target's key order (<c>e =&gt; new { e.BinAisle, e.BinShelf }</c>).
+    /// Together they must be the foreign key of the EF Core navigation.
     /// </summary>
-    /// <param name="foreignKey">The foreign key property.</param>
+    /// <param name="foreignKey">The foreign key property, or an anonymous object of them.</param>
     /// <typeparam name="TKey">The key type.</typeparam>
     /// <returns>The same builder.</returns>
     public ReferenceNavigationBuilder<TEntity> WithForeignKey<TKey>(Expression<Func<TEntity, TKey>> foreignKey)
     {
         ArgumentNullException.ThrowIfNull(foreignKey);
-        _navigation.ForeignKey = MemberAccess.GetProperty(foreignKey, nameof(foreignKey));
+        _navigation.ForeignKey = MemberAccess.GetProperties(foreignKey, nameof(foreignKey));
         return this;
     }
 
@@ -236,6 +237,18 @@ public sealed class CollectionNavigationBuilder
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         _navigation.WireName = name;
+        return this;
+    }
+
+    /// <summary>
+    /// Lets batches add items to and remove items from the collection (<c>link</c> / <c>unlink</c>). Default: its
+    /// membership is read-only. The set must allow updates; for a one-to-many collection the item's set must allow
+    /// updates too, and deletes when its foreign key is required (unlinking deletes the item).
+    /// </summary>
+    /// <returns>The same builder.</returns>
+    public CollectionNavigationBuilder AllowLinks()
+    {
+        _navigation.AllowLinks = true;
         return this;
     }
 }

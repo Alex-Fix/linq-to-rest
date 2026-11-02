@@ -24,7 +24,11 @@ public sealed class ProductSet : IEntitySetConfiguration<Product>
         builder.Computed("tags", p => p.Tags.OrderBy(t => t.Value).Select(t => t.Value).ToList());
         builder.Computed("categoryName", p => p.Category != null ? p.Category.Name : null);
         builder.HasOne(p => p.Category).WithForeignKey(p => p.CategoryId);
-        builder.HasMany(p => p.Lines);
+        builder.Property(p => p.BinZone);
+        builder.Property(p => p.BinSlot);
+        builder.HasOne(p => p.Bin).WithForeignKey(p => new { p.BinZone, p.BinSlot });
+        builder.HasMany(p => p.Lines).AllowLinks();
+        builder.HasMany(p => p.Labels).AllowLinks();
         builder.HasPagination(p => p.DefaultPageSize(10).MaxPageSize(20).MaxSkip(100));
     }
 }
@@ -36,8 +40,26 @@ public sealed class CategorySet : IEntitySetConfiguration<Category>
         builder.ToSet("categories").AllowWrites(WriteOperations.Insert | WriteOperations.Update);
         builder.Property(c => c.Name).IsSortable().IsGroupable();
         builder.Value(c => c.Contact);
-        builder.HasMany(c => c.Products);
+        builder.HasMany(c => c.Products).AllowLinks();
         builder.HasPagination(p => p.Modes(PaginationModes.Cursor));
+    }
+}
+
+public sealed class LabelSet : IEntitySetConfiguration<Label>
+{
+    public void Configure(EntitySetBuilder<Label> builder)
+    {
+        builder.ToSet("labels").AllowWrites(WriteOperations.Insert);
+        builder.Property(l => l.Name).IsSortable().IsGroupable();
+    }
+}
+
+public sealed class BinSet : IEntitySetConfiguration<Bin>
+{
+    public void Configure(EntitySetBuilder<Bin> builder)
+    {
+        builder.ToSet("bins").AllowWrites(WriteOperations.Insert);
+        builder.Property(b => b.Label).HasMaxLength(20);
     }
 }
 
@@ -45,7 +67,7 @@ public sealed class OrderLineSet : IEntitySetConfiguration<OrderLine>
 {
     public void Configure(EntitySetBuilder<OrderLine> builder)
     {
-        builder.ToSet("orderLines");
+        builder.ToSet("orderLines").AllowWrites(WriteOperations.Update | WriteOperations.Delete);
         builder.Property(l => l.ProductId);
         builder.Property(l => l.Sku);
         builder.Property(l => l.Quantity);

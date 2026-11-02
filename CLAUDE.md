@@ -41,9 +41,10 @@ artifacts/                      gitignored: all build output (no per-project bin
 ## Commands
 
 - Test: `dotnet test --solution LinqToRest.slnx` (Microsoft Testing Platform via `global.json`, so pass
-  `--solution`/`--project` explicitly). Integration and end-to-end tests run on SQLite and PostgreSQL; PostgreSQL needs
-  Docker (Testcontainers) and is skipped without it, so check the `skipped` count. `LINQTOREST_REQUIRE_POSTGRES=1`
-  (set in CI) makes a missing PostgreSQL fail instead.
+  `--solution`/`--project` explicitly). Integration and end-to-end tests run on SQLite, PostgreSQL and SQL Server;
+  the last two need Docker (Testcontainers) and are skipped without it, so check the `skipped` count.
+  `LINQTOREST_REQUIRE_DATABASES=1` (set in CI) makes a missing database fail instead. SQL Server is x64 only: on
+  Apple Silicon it needs Docker Desktop's Rosetta emulation.
 - Format check: `dotnet format LinqToRest.slnx --verify-no-changes`
 - Rider/ReSharper inspections: `dotnet tool restore` once, then
   `dotnet jb inspectcode LinqToRest.slnx --format=Text --output=- --no-build` (~15s+; drop `--no-build` if not

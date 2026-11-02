@@ -18,7 +18,7 @@ public sealed class GoldenTests
     public static readonly TheoryData<string> Cases =
     [
         "query-filter-sort-page", "query-lambdas", "query-strings-dates", "query-in-enum-navigation", "query-select",
-        "query-include-cursor", "query-count", "query-group", "query-aggregate", "query-value-filter", "batch-unit-of-work", "batch-value",
+        "query-include-cursor", "query-count", "query-group", "query-aggregate", "query-value-filter", "batch-unit-of-work", "batch-value", "batch-link", "batch-composite-refs",
     ];
 
     [Theory]
@@ -116,6 +116,26 @@ public sealed class GoldenTests
                     CategoryId = null,
                     Size = new DimensionsDto { Width = 5.7, Weight = new WeightDto { Amount = 0.1m, Unit = "kg" } },
                 });
+                http.Respond("""{"results":[]}""");
+                await shop.SaveChangesAsync(Token);
+                break;
+            case "batch-link":
+                http.Respond($$"""{"items":[{{Chess[..^1]}},"lines":[{"id":11,"sku":"C1","quantity":2,"unitPrice":20}]}]}""");
+                var linked = Assert.Single(await shop.Products.Include(p => p.Lines).Take(1).ToListAsync(Token));
+                var sale = new LabelDto { Name = "Sale" };
+                var eco = new LabelDto { Id = 3, Name = "Eco" };
+                shop.Labels.Add(sale);
+                shop.Labels.Attach(eco);
+                linked.Lines.RemoveAt(0);
+                linked.Labels.Add(sale);
+                linked.Labels.Add(eco);
+                http.Respond("""{"results":[]}""");
+                await shop.SaveChangesAsync(Token);
+                break;
+            case "batch-composite-refs":
+                var bin = new BinDto { Code = "A9" };
+                shop.Bins.Add(bin);
+                shop.Products.Add(new ProductDto { Name = "Crate", Description = null, Price = 5m, Status = ProductStatus.Active, ReleasedOn = null, CategoryId = null, Size = null, Bin = bin });
                 http.Respond("""{"results":[]}""");
                 await shop.SaveChangesAsync(Token);
                 break;

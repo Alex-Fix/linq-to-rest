@@ -19,6 +19,19 @@
   ],
   "sets": [
     {
+      "name": "bins",
+      "type": "BinDto",
+      "key": ["zone", "slot"],
+      "writes": ["insert"],
+      "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "zone", "type": "guid", "sortable": true},
+        {"name": "slot", "type": "guid", "sortable": true},
+        {"name": "code", "type": "string", "writable": true}
+      ],
+      "navigations": []
+    },
+    {
       "name": "categories",
       "type": "CategoryDto",
       "key": ["id"],
@@ -27,6 +40,20 @@
       "properties": [
         {"name": "id", "type": "int32", "sortable": true},
         {"name": "name", "type": "string", "writable": true, "groupable": true}
+      ],
+      "navigations": [
+        {"name": "products", "target": "products", "collection": true, "links": "oneToMany", "onUnlink": "detach"}
+      ]
+    },
+    {
+      "name": "labels",
+      "type": "LabelDto",
+      "key": ["id"],
+      "writes": ["insert"],
+      "pagination": {"modes": ["offset", "cursor"], "defaultPageSize": 50, "maxPageSize": 200, "maxSkip": 10000},
+      "properties": [
+        {"name": "id", "type": "int32", "sortable": true},
+        {"name": "name", "type": "string", "writable": true}
       ],
       "navigations": []
     },
@@ -70,11 +97,15 @@
         {"name": "categoryId", "type": "int32", "nullable": true, "writable": true, "groupable": true},
         {"name": "size", "type": "DimensionsDto", "nullable": true, "writable": true},
         {"name": "tags", "type": "string", "collection": true},
-        {"name": "categoryName", "type": "string", "nullable": true}
+        {"name": "categoryName", "type": "string", "nullable": true},
+        {"name": "binZone", "type": "guid", "nullable": true, "writable": true},
+        {"name": "binSlot", "type": "guid", "nullable": true, "writable": true}
       ],
       "navigations": [
         {"name": "category", "target": "categories", "nullable": true, "foreignKey": ["categoryId"]},
-        {"name": "lines", "target": "orderLines", "collection": true}
+        {"name": "bin", "target": "bins", "nullable": true, "foreignKey": ["binZone", "binSlot"]},
+        {"name": "lines", "target": "orderLines", "collection": true, "links": "oneToMany", "onUnlink": "delete"},
+        {"name": "labels", "target": "labels", "collection": true, "links": "manyToMany"}
       ]
     }
   ]

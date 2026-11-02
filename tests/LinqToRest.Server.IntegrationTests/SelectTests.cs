@@ -1,3 +1,5 @@
+using LinqToRest.Server.IntegrationTests.Shop;
+
 namespace LinqToRest.Server.IntegrationTests;
 
 public abstract class SelectTests(ShopFixture shop)
@@ -11,7 +13,8 @@ public abstract class SelectTests(ShopFixture shop)
         JsonAssert.Equal("""
             {"id":1,"name":"Chess","description":"Wooden board","price":20,"status":"Active",
              "version":"00000001-0000-0000-0000-000000000000","createdAt":"2026-01-10T09:30:00Z","releasedOn":"2025-12-01",
-             "rating":4.5,"isFeatured":true,"categoryId":2,"size":{"width":40,"height":40,"weight":{"amount":1.2,"unit":"kg"}},
+             "rating":4.5,"isFeatured":true,"categoryId":2,"binZone":"0a000000-0000-0000-0000-000000000001",
+             "binSlot":"0b000000-0000-0000-0000-000000000001","size":{"width":40,"height":40,"weight":{"amount":1.2,"unit":"kg"}},
              "origin":{"country":"IN","city":null},"tags":["classic","sale"],"categoryName":"Games"}
             """, items[0]);
         Assert.Equal("Notebook", items[1].GetProperty("name").GetString());
@@ -86,7 +89,7 @@ public abstract class SelectTests(ShopFixture shop)
         var sql = Assert.Single(server.Sql);
         // Providers spell functions differently (SUM / sum), so only the function matters.
         Assert.Contains("SUM(", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("||", sql, StringComparison.Ordinal);
+        Assert.Contains(shop.Database.Provider == TestProvider.SqlServer ? " + " : "||", sql, StringComparison.Ordinal);
         Assert.Contains("upper(", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("COUNT(", sql, StringComparison.OrdinalIgnoreCase);
     }
@@ -132,3 +135,5 @@ public abstract class SelectTests(ShopFixture shop)
 public sealed class SqliteSelectTests(SqliteShopFixture shop) : SelectTests(shop), IClassFixture<SqliteShopFixture>;
 
 public sealed class PostgresSelectTests(PostgresShopFixture shop) : SelectTests(shop), IClassFixture<PostgresShopFixture>;
+
+public sealed class SqlServerSelectTests(SqlServerShopFixture shop) : SelectTests(shop), IClassFixture<SqlServerShopFixture>;

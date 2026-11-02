@@ -189,14 +189,14 @@ public sealed class TrackingTests
     }
 
     [Fact]
-    public async Task Changing_collection_membership_is_not_supported()
+    public async Task Adding_an_untracked_item_to_a_collection_needs_it_added_first()
     {
         var (shop, http) = Shop.Create();
         http.Respond($$"""{"items":[{{Chess}}]}""");
         var chess = await shop.Products.FirstAsync(Token);
         chess.Lines.Add(new OrderLineDto { Sku = "X" });
 
-        await Assert.ThrowsAsync<NotSupportedException>(() => shop.SaveChangesAsync(Token));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => shop.SaveChangesAsync(Token));
     }
 
     [Fact]

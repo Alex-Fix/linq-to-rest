@@ -216,3 +216,5 @@ public abstract class ValueTypeBatchTests(ShopDatabase database) : IAsyncLifetim
 public sealed class SqliteValueTypeBatchTests() : ValueTypeBatchTests(new SqliteDatabase());
 
 public sealed class PostgresValueTypeBatchTests(PostgresContainer postgres) : ValueTypeBatchTests(new PostgresDatabase(postgres));
+
+public sealed class SqlServerValueTypeBatchTests(SqlServerContainer sqlServer) : ValueTypeBatchTests(new SqlServerDatabase(sqlServer));

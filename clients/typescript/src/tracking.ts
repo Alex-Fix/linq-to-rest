@@ -105,6 +105,27 @@ function same(current: unknown, snapshot: unknown): boolean {
   return current === snapshot;
 }
 
+/** Whether a collection holds the same items as its snapshot, in any order. */
+function sameMembers(current: unknown, snapshot: unknown): boolean {
+  const now = members(current);
+  const before = members(snapshot);
+  return now.size === before.size && [...now].every((item) => before.has(item));
+}
+
+function members(collection: unknown): Set<unknown> {
+  return new Set(
+    Array.isArray(collection) ? (collection as unknown[]).filter((item) => item !== null && item !== undefined) : [],
+  );
+}
+
+/** An item added to (or removed from) a linkable collection of a tracked parent. */
+export interface PendingLink {
+  readonly parent: Entry;
+  readonly navigation: NavigationModel;
+  readonly item: Entry;
+  readonly unlink: boolean;
+}
+
 function keyOf(dto: Dto, set: SetModel): string {
   return `${set.name}:${JSON.stringify(set.key.map((member) => dto[member]))}`;
 }
@@ -113,6 +134,8 @@ function keyOf(dto: Dto, set: SetModel): string {
 export class ChangeTracker {
   private readonly entries = new Map<object, Entry>();
   private readonly identity = new Map<string, Entry>();
+  /** The collection items added and removed since the snapshots, as found by `detectChanges()`. */
+  links: PendingLink[] = [];
 
   constructor(private readonly model: Model) {}
 
@@ -153,7 +176,15 @@ export class ChangeTracker {
       throw new Error(`This ${set.name} DTO is already tracked as ${existing.state}.`);
     }
 
-    this.entries.set(entity, new Entry(entity as Dto, set, "added"));
+    // Collections start empty, as on queried rows, so items can be pushed onto a new parent.
+    const dto = entity as Dto;
+    for (const navigation of set.navigations) {
+      if (navigation.collection && dto[navigation.name] === undefined) {
+        dto[navigation.name] = [];
+      }
+    }
+
+    this.entries.set(entity, new Entry(dto, set, "added"));
   }
 
   attach(entity: object, set: SetModel): Entry {
@@ -226,6 +257,80 @@ export class ChangeTracker {
     for (const current of entry === undefined ? this.entries.values() : [entry]) {
       this.detect(current);
     }
+
+    if (entry === undefined) {
+      this.links = [];
+      for (const current of [...this.entries.values()]) {
+        this.detectLinks(current);
+      }
+    }
+  }
+
+  /** After a save: an item linked to a one-to-many collection points at its parent, a detached one at nothing, a deleted one is gone. */
+  acceptLinked({ parent, navigation, item, unlink }: PendingLink): void {
+    if (navigation.links === "oneToMany") {
+      if (unlink && navigation.onUnlink === "delete") {
+        this.detach(item);
+        return;
+      }
+
+      // The item's own reference back to the parent, if its set exposes one with the foreign key.
+      const back = item.set.navigations.filter(
+        (candidate) => !candidate.collection && candidate.target === parent.set.name && candidate.foreignKey.length > 0,
+      );
+      if (back.length === 1 && back[0] !== undefined) {
+        const reference = back[0];
+        reference.foreignKey.forEach((member, index) => {
+          item.entity[member] = unlink ? null : parent.key?.[index];
+        });
+        item.entity[reference.name] = unlink ? null : parent.entity;
+      }
+
+      item.takeSnapshot();
+    }
+
+    parent.takeSnapshot();
+  }
+
+  /** Items added to or removed from linkable collections; unlinkable ones were checked by `detect`. */
+  private detectLinks(entry: Entry): void {
+    if (entry.state === "deleted" || entry.state === "detached") {
+      return;
+    }
+
+    for (const navigation of entry.set.navigations) {
+      if (!navigation.collection || navigation.links === null) {
+        continue;
+      }
+
+      const before = members(entry.navigationSnapshot.get(navigation.name));
+      const now = members(entry.entity[navigation.name]);
+      for (const item of now) {
+        if (!before.has(item)) {
+          this.addLink(entry, navigation, item, false);
+        }
+      }
+
+      for (const item of before) {
+        if (!now.has(item)) {
+          this.addLink(entry, navigation, item, true);
+        }
+      }
+    }
+  }
+
+  private addLink(parent: Entry, navigation: NavigationModel, item: unknown, unlink: boolean): void {
+    const entry = this.find(item as object);
+    if (entry === undefined && !unlink) {
+      throw new Error(
+        `${parent.set.name}.${navigation.name} holds a DTO this context doesn't track. Add or attach it first.`,
+      );
+    }
+
+    // A deleted or detached item needs no link: deleting it (or not saving it) covers the collection too.
+    if (entry !== undefined && entry.state !== "deleted" && entry.state !== "detached") {
+      this.links.push({ parent, navigation, item: entry, unlink });
+    }
   }
 
   private detect(entry: Entry): void {
@@ -238,10 +343,14 @@ export class ChangeTracker {
       return;
     }
 
-    for (const navigation of entry.set.navigations.filter((candidate) => candidate.collection)) {
-      if (!same(entry.entity[navigation.name], entry.navigationSnapshot.get(navigation.name))) {
+    for (const navigation of entry.set.navigations) {
+      if (
+        navigation.collection &&
+        navigation.links === null &&
+        !sameMembers(entry.entity[navigation.name], entry.navigationSnapshot.get(navigation.name))
+      ) {
         throw new Error(
-          `Items were added to or removed from ${entry.set.name}.${navigation.name}. Set the foreign key of the child DTO instead.`,
+          `Items were added to or removed from ${entry.set.name}.${navigation.name}, which doesn't allow links. Set the foreign key of the child DTO instead.`,
         );
       }
     }
@@ -262,10 +371,10 @@ export class ChangeTracker {
     entry.state = entry.modified.size > 0 || entry.references.size > 0 ? "modified" : "unchanged";
   }
 
-  /** Copies the key of a referenced DTO into the foreign key, or records a ref to an added one. */
+  /** Copies the key of a referenced DTO into the foreign key, or records refs to an added one. */
   private syncForeignKeys(entry: Entry): void {
     for (const navigation of entry.set.navigations) {
-      if (navigation.collection || navigation.foreignKey === null) {
+      if (navigation.collection || navigation.foreignKey.length === 0) {
         continue;
       }
 
@@ -273,24 +382,30 @@ export class ChangeTracker {
     }
   }
 
-  private syncForeignKey(entry: Entry, navigation: NavigationModel, foreignKey: string): void {
+  private syncForeignKey(entry: Entry, navigation: NavigationModel, foreignKey: readonly string[]): void {
     const target = entry.entity[navigation.name];
     const original = entry.navigationSnapshot.get(navigation.name);
-    const member = entry.set.members.find((candidate) => candidate.name === foreignKey);
-    if (member === undefined) {
-      throw new Error(`${entry.set.name}.${foreignKey} is a foreign key but not a member of the model.`);
-    }
+    const keyMembers = foreignKey.map((name) => {
+      const member = entry.set.members.find((candidate) => candidate.name === name);
+      if (member === undefined) {
+        throw new Error(`${entry.set.name}.${name} is a foreign key but not a member of the model.`);
+      }
+
+      return member;
+    });
 
     if (target === null || target === undefined) {
-      entry.references.delete(foreignKey);
-      if (original !== null && original !== undefined && member.nullable) {
-        entry.entity[foreignKey] = null;
+      for (const member of keyMembers) {
+        entry.references.delete(member.name);
+        if (original !== null && original !== undefined && member.nullable) {
+          entry.entity[member.name] = null;
+        }
       }
 
       return;
     }
 
-    if (target === original && !entry.references.has(foreignKey)) {
+    if (target === original && !entry.references.has(foreignKey[0] ?? "")) {
       return;
     }
 
@@ -301,20 +416,25 @@ export class ChangeTracker {
       );
     }
 
-    if (targetEntry.state === "added") {
-      entry.references.set(foreignKey, targetEntry);
-    } else {
-      entry.references.delete(foreignKey);
-      entry.entity[foreignKey] = targetEntry.key?.[0];
-    }
+    foreignKey.forEach((member, index) => {
+      if (targetEntry.state === "added") {
+        entry.references.set(member, targetEntry);
+      } else {
+        entry.references.delete(member);
+        entry.entity[member] = targetEntry.key?.[index];
+      }
+    });
   }
 }
 
 interface Operation {
   id: string;
-  op: "insert" | "update" | "delete";
+  op: "insert" | "update" | "delete" | "link" | "unlink";
   set: string;
   key?: Record<string, unknown>;
+  ref?: string;
+  navigation?: string;
+  item?: { key?: Record<string, unknown>; ref?: string; token?: unknown };
   values?: Record<string, unknown>;
   refs?: Record<string, string>;
   token?: unknown;
@@ -334,7 +454,8 @@ export async function saveChanges(
   const ordered = order(
     tracker.all().filter((entry) => entry.state === "added" || entry.state === "modified" || entry.state === "deleted"),
   );
-  if (ordered.length === 0) {
+  const links = [...tracker.links];
+  if (ordered.length === 0 && links.length === 0) {
     return 0;
   }
 
@@ -353,10 +474,28 @@ export async function saveChanges(
     throw new RestValidationError(422, "/operations", local, true, false);
   }
 
-  const ids = new Map<Entry, string>(ordered.map((entry, index) => [entry, `o${String(index)}`]));
-  const body = { v: 1, operations: ordered.map((entry) => operation(entry, ids)) };
+  // Inserts and updates, then links (their rows exist by then), then deletes.
+  const writes = ordered.filter((entry) => entry.state !== "deleted");
+  const deletes = ordered.filter((entry) => entry.state === "deleted");
+  const ids = new Map<Entry, string>(writes.map((entry, index) => [entry, `o${String(index)}`]));
+  const linkIds = links.map((_, index) => `o${String(writes.length + index)}`);
+  deletes.forEach((entry, index) => ids.set(entry, `o${String(writes.length + links.length + index)}`));
+  const body = {
+    v: 1,
+    operations: [
+      ...writes.map((entry) => operation(entry, ids)),
+      ...links.map((link, index) => linkOperation(link, linkIds[index] ?? "", ids)),
+      ...deletes.map((entry) => operation(entry, ids)),
+    ],
+  };
   const response = await transport.send("$batch", "POST", body, signal);
-  const byId = new Map([...ids].map(([entry, id]) => [id, entry]));
+  // A failing link is reported on its parent.
+  const byId = new Map([
+    ...[...ids].map(([entry, id]) => [id, entry] as const),
+    ...links.map((link, index) => [linkIds[index] ?? "", link.parent] as const),
+  ]);
+  // Pointers name operations by position, so the entries go in the order the operations were sent.
+  const sent = [...writes, ...links.map((link) => link.parent), ...deletes];
   if (!response.ok) {
     const problem = await readProblem(response);
     if (problem === undefined) {
@@ -382,12 +521,13 @@ export async function saveChanges(
     const entities = problem.operationIds.map((id) => byId.get(id)?.entity).filter((entity) => entity !== undefined);
     throw response.status === 412
       ? new RestConcurrencyError(response.status, problem.code, problem.pointer, entities)
-      : new RestSaveError(response.status, problem.code, problem.pointer, entities, memberOf(problem.pointer, ordered));
+      : new RestSaveError(response.status, problem.code, problem.pointer, entities, memberOf(problem.pointer, sent));
   }
 
   const result = (await response.json()) as { results: { id: string; value?: Dto }[] };
+  const linkIdSet = new Set(linkIds);
   for (const item of result.results) {
-    const entry = byId.get(item.id);
+    const entry = linkIdSet.has(item.id) ? undefined : byId.get(item.id);
     if (entry === undefined) {
       continue;
     }
@@ -408,7 +548,39 @@ export async function saveChanges(
     tracker.acceptSaved(entry);
   }
 
-  return ordered.length;
+  // Parents have their keys now, so linked items can point at them.
+  for (const link of links) {
+    tracker.acceptLinked(link);
+  }
+
+  return ordered.length + links.length;
+}
+
+/** A link or unlink: parent and item by key, or by the id of their insert in this batch. */
+function linkOperation(
+  { parent, navigation, item, unlink }: PendingLink,
+  id: string,
+  ids: Map<Entry, string>,
+): Operation {
+  const token =
+    navigation.links === "oneToMany" && item.state !== "added" && item.set.token !== null
+      ? item.snapshot.get(item.set.token)
+      : undefined;
+  return {
+    id,
+    op: unlink ? "unlink" : "link",
+    set: parent.set.name,
+    ...(parent.state === "added" ? { ref: idOf(ids, parent) } : { key: keyBody(parent) }),
+    navigation: navigation.name,
+    item: {
+      ...(item.state === "added" ? { ref: idOf(ids, item) } : { key: keyBody(item) }),
+      ...(token === undefined ? {} : { token }),
+    },
+  };
+}
+
+function keyBody(entry: Entry): Record<string, unknown> {
+  return Object.fromEntries(entry.set.key.map((member, index) => [member, entry.key?.[index]]));
 }
 
 /**
@@ -472,7 +644,7 @@ function operation(entry: Entry, ids: Map<Entry, string>): Operation {
   };
 
   if (entry.state !== "added") {
-    result.key = Object.fromEntries(set.key.map((member, index) => [member, entry.key?.[index]]));
+    result.key = keyBody(entry);
   }
 
   if (entry.state !== "deleted") {
